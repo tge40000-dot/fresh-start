@@ -1,0 +1,44 @@
+name = "relentless-billionaire"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[env.production]
+name = "relentless-billionaire"
+vars = { ENVIRONMENT = "production", BRAND = "Relentless Billionaire" }
+
+[env.development]
+name = "relentless-billionaire-dev"
+vars = { ENVIRONMENT = "development", BRAND = "Relentless Billionaire Dev" }
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "relentless-billionaire-db"
+database_id = "YOUR_D1_DATABASE_ID"
+
+# R2 Bucket for agent models
+[[r2_buckets]]
+binding = "MODELS_BUCKET"
+bucket_name = "relentless-billionaire-models"
+
+# KV for cache
+[[kv_namespaces]]
+binding = "CACHE"
+id = "YOUR_KV_NAMESPACE_ID"
+
+[ai]
+binding = "AI"
+
+# Durable Objects for agent state
+[durable_objects]
+bindings = [
+  { name = "AGENT_STATE", class_name = "AgentState" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["AgentState"]
+
+[observability]
+enabled = true
