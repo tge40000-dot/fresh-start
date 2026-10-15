@@ -40,10 +40,18 @@ Every existing ad starts as `all`, so nothing changes on the site until a surfac
 
 ## Status (15 Oct 2026)
 
-- Done: `ALTER TABLE ads ADD COLUMN surface TEXT NOT NULL DEFAULT 'all'` on `waitlist-db`. All six ads are `all`. The live Worker doesn't read the column, so the site is unchanged by it.
-- Not done yet: uploading the patched artist-router. Run `./rb-surface/deploy.sh --deploy`.
+- Done: `ALTER TABLE ads ADD COLUMN surface TEXT NOT NULL DEFAULT 'all'` on `waitlist-db`. All six ads are `all`.
+- Deployed: artist-router version `54e08a43-e845-4d42-9976-36abdb05c958` is live at 100%. It replaced `37adc502-5550-4243-8453-98fc760393b9`.
+- Checked live after the deploy:
+  - `/api/ads?slot=rail` returns ads 2 and 4 with `?s=rail` and `surface: "all"`.
+  - `surface=radio` gives `?s=radio-rail`.
+  - `surface=nope` returns 400, and an unauthenticated POST returns 401.
+  - `/go/ad/2?s=radio-rail` redirects with `utm_content=radio-rail`.
+  - `/`, `/home`, `/api/signal`, `/radio` and `/tv` return 200.
 
-After deploying, check:
+`deploy.sh` now stops at its version check, because `37adc502` is no longer live. That's on purpose, so the patch can't be applied twice.
+
+To check again:
 
 ```bash
 curl -s 'https://relentlessbillionaire.com/api/ads?slot=rail' | grep -c '"surface": "all"'      # every ad, now with surface
