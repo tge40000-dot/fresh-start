@@ -52,7 +52,8 @@ The ad code shared by the main site's pages (the home hub, artist pages and the 
   - `/go/ad/2?s=radio-rail` redirects with `utm_content=radio-rail`.
   - `/`, `/home`, `/api/signal`, `/radio` and `/tv` return 200.
 
-- Not deployed yet: the home-surface change (main site requests `surface=home`). Run `./rb-surface/deploy.sh --deploy`. It applies only the two changed request lines on top of `54e08a43`.
+- Deployed (15 Oct 2026): the home-surface change. artist-router `e2e799e6-1dea-430d-83bb-533e77592fa3` is live at 100%, replacing `54e08a43`. Checked live: `/` and `/home` request `slot=rail&surface=home` and `slot=spotlight&surface=home`, the home rail returns ads 2 and 4 with `?s=home-rail`, and `/radio`, `/tv` and `/api/signal` return 200.
+- To roll back only the home change, redeploy `54e08a43`. To roll back everything, redeploy `37adc502`.
 
 To check again:
 

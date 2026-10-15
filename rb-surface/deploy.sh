@@ -8,7 +8,7 @@ set -euo pipefail
 ACCOUNT=0a7be075f32d9d615349825b83ab8fcb
 SCRIPT=artist-router
 # Versions the patch applies to: the original, and the first surface deploy (patch.py skips edits already in place).
-EXPECT_VERSIONS="37adc502-5550-4243-8453-98fc760393b9 54e08a43-e845-4d42-9976-36abdb05c958"
+EXPECT_VERSIONS="37adc502-5550-4243-8453-98fc760393b9 54e08a43-e845-4d42-9976-36abdb05c958 e2e799e6-1dea-430d-83bb-533e77592fa3"
 HERE=$(cd "$(dirname "$0")" && pwd)
 WORK=$(mktemp -d)
 API="https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/scripts/$SCRIPT"
