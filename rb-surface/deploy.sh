@@ -7,7 +7,8 @@ set -euo pipefail
 : "${CLOUDFLARE_API_TOKEN:?set CLOUDFLARE_API_TOKEN}"
 ACCOUNT=0a7be075f32d9d615349825b83ab8fcb
 SCRIPT=artist-router
-EXPECT_VERSION=37adc502-5550-4243-8453-98fc760393b9
+# Versions the patch applies to: the original, and the first surface deploy (patch.py skips edits already in place).
+EXPECT_VERSIONS="37adc502-5550-4243-8453-98fc760393b9 54e08a43-e845-4d42-9976-36abdb05c958"
 HERE=$(cd "$(dirname "$0")" && pwd)
 WORK=$(mktemp -d)
 API="https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/scripts/$SCRIPT"
@@ -15,10 +16,10 @@ AUTH=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
 
 live=$(curl -fsS "${AUTH[@]}" "$API/deployments" \
   | python3 -I -c 'import sys,json; print(json.load(sys.stdin)["result"]["deployments"][0]["versions"][0]["version_id"])')
-if [ "$live" != "$EXPECT_VERSION" ]; then
-  echo "artist-router is on $live, not $EXPECT_VERSION. The patch was written against $EXPECT_VERSION; check it still applies."
-  exit 1
-fi
+case " $EXPECT_VERSIONS " in
+  *" $live "*) ;;
+  *) echo "artist-router is on $live, not one of: $EXPECT_VERSIONS. Check the patch still applies."; exit 1 ;;
+esac
 
 curl -fsS "${AUTH[@]}" -D "$WORK/headers" -o "$WORK/body" "$API/content/v2"
 python3 -I "$HERE/tools/split_multipart.py" "$WORK/headers" "$WORK/body" "$WORK/live" >/dev/null
@@ -42,4 +43,4 @@ curl -fsS "${AUTH[@]}" -X PUT "$API/content" \
   | python3 -I -c 'import sys,json; d=json.load(sys.stdin); print("upload ok" if d.get("success") else d.get("errors"))'
 curl -fsS "${AUTH[@]}" "$API/deployments" \
   | python3 -I -c 'import sys,json; v=json.load(sys.stdin)["result"]["deployments"][0]["versions"][0]; print("now live:", v["version_id"], v["percentage"], "%")'
-echo "Previous version: $EXPECT_VERSION (roll back from Workers > artist-router > Deployments)."
+echo "Previous version: $live (roll back from Workers > artist-router > Deployments)."

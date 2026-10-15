@@ -103,4 +103,13 @@ assert.equal(r.status, 200);
 r = await call("/api/signal");
 assert.equal(r.status, 200); assert.equal(r.body.metrics.liveAds, 4, "liveAds counts every live ad");
 
+// The main site's rails and spotlight ask for the home surface.
+for (const page of ["/", "/home"]) {
+  const html = (await call(page, { headers: { Accept: "text/html" } })).body;
+  assert.ok(html.includes("fetch('/api/ads?slot=rail&surface=home&skip='"), page + " rail asks for surface=home");
+  assert.ok(html.includes("fetch('/api/ads?slot=spotlight&surface=home&skip='"), page + " spotlight asks for surface=home");
+  assert.ok(!/\/api\/ads\?slot=(rail|spotlight)&skip=/.test(html), page + " has no request without a surface");
+}
+assert.deepEqual(ids(await call("/api/ads?slot=rail&surface=home")), [2], "radio-only ad 4 stays off the home rails");
+
 console.log("patched ok: all surface checks passed");

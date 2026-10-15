@@ -2,7 +2,10 @@ import sys
 src, dst = sys.argv[1], sys.argv[2]
 s = open(src, encoding="utf-8").read()
 def rep(old, new):
+    """Replace old with new once. An edit already in place is skipped, so the script runs on a bundle that has some of them."""
     global s
+    if s.count(new) == 1 and (old not in new or s.count(old) == 1):
+        return
     n = s.count(old)
     if n != 1: raise SystemExit(f"anchor found {n} times: {old[:80]!r}")
     s = s.replace(old, new)
@@ -54,5 +57,9 @@ rep('''        return json({ ads }, 200, { "Cache-Control": "no-store" });
         if (!res.meta?.changes) return json({ ok: false, error: "No ad with that id" }, 404);
         return json({ ok: true, id, surface });
       }''')
+# 5. The main site's ad rails and spotlight ask for the home surface, so radio-only and TV-only ads stay off them.
+rep("""fetch('/api/ads?slot=spotlight&skip=' + adSkip())""", """fetch('/api/ads?slot=spotlight&surface=home&skip=' + adSkip())""")
+rep("""fetch('/api/ads?slot=rail&skip=' + adSkip())""", """fetch('/api/ads?slot=rail&surface=home&skip=' + adSkip())""")
+
 open(dst, "w", encoding="utf-8").write(s)
 print("patched ok")

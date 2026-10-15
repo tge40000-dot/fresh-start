@@ -1,5 +1,5 @@
 --- a/artist-router-v14.js (live version 37adc502)
-+++ b/artist-router-v14.js (surface targeting)
++++ b/artist-router-v14.js (surface targeting, home rails ask for surface=home)
 @@ -155,6 +155,12 @@
  // An ad counts as a view when it is drawn in a slot that is on the page, and as viewable once half of it has been on
  // screen for 1 continuous second (2 for video) -- the Media Rating Council's standard. Bots and link previews don't count.
@@ -30,6 +30,24 @@
  async function ensureSchemaOnce(env) {
    try {
      const row = await env.DB.prepare("SELECT version FROM router_schema WHERE id = 'artist-router'").first();
+@@ -985,7 +992,7 @@
+   function loadSpotlight(){
+     var box = document.querySelector('.ad-spotlight');
+     if (!box || box.__adsp) return; box.__adsp = true;
+-    fetch('/api/ads?slot=spotlight&skip=' + adSkip()).then(function(r){ return r.json(); }).then(function(d){
++    fetch('/api/ads?slot=spotlight&surface=home&skip=' + adSkip()).then(function(r){ return r.json(); }).then(function(d){
+       var a = (d.ads || [])[0]; if (!a) return;
+       var href = a.click ? adEsc(a.click) : '';
+       box.classList.add('is-sponsor'); box.removeAttribute('aria-labelledby'); box.setAttribute('aria-label', 'Sponsored: ' + (a.headline || a.advertiser));
+@@ -1014,7 +1021,7 @@
+   }
+   function loadAds(){
+     adPauseAll();
+-    fetch('/api/ads?slot=rail&skip=' + adSkip()).then(function(r){ return r.json(); }).then(function(d){ renderRails(d.ads || []); }).catch(function(){});
++    fetch('/api/ads?slot=rail&surface=home&skip=' + adSkip()).then(function(r){ return r.json(); }).then(function(d){ renderRails(d.ads || []); }).catch(function(){});
+     loadSpotlight();
+   }
+ 
 @@ -4627,7 +4634,7 @@
        if (!dest) return new Response(null, { status: 302, headers: { Location: url.origin + "/home", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
        const prefetch = /prefetch|prerender/i.test(request.headers.get("Sec-Purpose") || request.headers.get("Purpose") || "");

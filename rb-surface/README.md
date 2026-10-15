@@ -12,7 +12,7 @@ The original package proposed a separate `rb-ads` Worker on the route `relentles
 
 `GET /api/ads?slot=rail|spotlight&surface=home|radio|tv|all`
 
-- No `surface`, or `surface=all`: every live ad, exactly as before. Clicks stay `/go/ad/<id>?s=rail` (or `?s=spotlight`), so the home page does not change.
+- No `surface`, or `surface=all`: every live ad, exactly as before. Clicks stay `/go/ad/<id>?s=rail` (or `?s=spotlight`).
 - `home`, `radio`, `tv`: ads whose surface is that value or `all`. The click becomes `/go/ad/<id>?s=<surface>-<slot>`, for example `?s=radio-rail`, and `/go/ad` now keeps the hyphen in `utm_content`.
 - Any other value: `400 {"ok":false,"error":"surface must be home, radio, tv, or all"}`.
 - Each ad keeps its existing fields and adds `surface`. The response also echoes the `surface` it used.
@@ -23,20 +23,23 @@ The original package proposed a separate `rb-ads` Worker on the route `relentles
 
 Every existing ad starts as `all`, so nothing changes on the site until a surface is set.
 
+## The main site asks for `surface=home`
+
+The ad code shared by the main site's pages (the home hub, artist pages and the agency page) requests `/api/ads?slot=rail&surface=home` and `/api/ads?slot=spotlight&surface=home`. So an ad set to `radio` or `tv` stays off the main site. Its clicks read `?s=home-rail` and `?s=home-spotlight`, so `utm_content` on the advertiser's side changes from `rail` to `home-rail`.
+
 ## What it doesn't do yet
 
-- The home page still calls `/api/ads` without `surface`, so it shows every ad, including ones set to `radio` or `tv`. That keeps the home page unchanged, as the package asked. To keep radio-only and TV-only ads off home, the home rails would need to request `surface=home` (their clicks would then read `?s=home-rail`).
 - The RB Radio (`rb-radio`) and RB TV (`rb-tv`) Workers don't call `/api/ads` at all today. `surface=radio` and `surface=tv` have no visible effect until those pages get an ad rail.
 - Not caused by this change: the admin form's Placement list has no "spotlight" option, so editing ad 1 or ad 6 there moves it to the sidebar rail.
 
 ## Files
 
 - `artist-router-surface.patch`: the change, as a diff against the live bundle (version `37adc502`).
-- `tools/patch.py`: applies the change to a downloaded bundle. Each anchor must match exactly once, or it stops.
+- `tools/patch.py`: applies the change to a downloaded bundle. It skips edits that are already in place, and stops if an anchor isn't found exactly once.
 - `tools/split_multipart.py`: splits a downloaded Worker bundle into its module files.
 - `test/test.mjs`: runs the real Worker against an in-memory copy of the ads table. With `--expect-surface` it checks the new behaviour. Without it, it checks the old behaviour still holds.
 - `test/fresh.mjs`: checks that the schema bump (`artist-router-v14.3`) adds the column on a database that doesn't have it yet.
-- `deploy.sh`: downloads the live bundle, checks it is still `37adc502`, patches it, and runs all the tests. With `--deploy` it then uploads code only, so bindings, secrets and routes stay as they are.
+- `deploy.sh`: downloads the live bundle, checks it is `37adc502` or `54e08a43`, patches it, and runs all the tests. With `--deploy` it then uploads code only, so bindings, secrets and routes stay as they are.
 
 ## Status (15 Oct 2026)
 
@@ -49,7 +52,7 @@ Every existing ad starts as `all`, so nothing changes on the site until a surfac
   - `/go/ad/2?s=radio-rail` redirects with `utm_content=radio-rail`.
   - `/`, `/home`, `/api/signal`, `/radio` and `/tv` return 200.
 
-`deploy.sh` now stops at its version check, because `37adc502` is no longer live. That's on purpose, so the patch can't be applied twice.
+- Not deployed yet: the home-surface change (main site requests `surface=home`). Run `./rb-surface/deploy.sh --deploy`. It applies only the two changed request lines on top of `54e08a43`.
 
 To check again:
 
