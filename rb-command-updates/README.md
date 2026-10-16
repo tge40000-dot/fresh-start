@@ -51,8 +51,61 @@ The **Ads** editor also gets a **Shows on** field, so the surface can be changed
 - RB Radio and RB TV pages don't show ads yet. An ad set to them waits until those pages get an ad rail.
 - Pages that block automated readers come back empty. Type the words and use your own picture or a card.
 
+## Show planner
+
+A new **Show planner** screen in RB Command, in the nav for anyone with Events access. It plans RB shows from the **Talent** section and puts all the work for each show on a calendar.
+
+**What it suggests.** Each suggestion has:
+- **A lineup.** A headliner and two supports from the same genre family (hip-hop/R&B, house/electronic or other). Artists are ranked by the scout's score, plus extra weight for:
+  - being in the Bay Area (or, less, in California)
+  - having come to RB directly
+  - being signed, shortlisted or already in touch
+  - having an email
+- **Who's left out.** Passed artists, and anyone already on an open plan or on a plan from the last 30 days.
+- **A venue.** A live venue from Events > Venues, taking turns so the least-used one goes first.
+- **A date.** The first Friday or Saturday 3 to 13 weeks out that:
+  - doesn't clash with a live RB event or show
+  - is at least 6 days from another planned show.
+- **The reasons** for each artist, and a fit score.
+
+The planner keeps **three suggestions waiting** on its own. It checks when anyone opens the Overview or the planner, at most once a day. **Suggest a show** adds one now, with an optional date and venue.
+
+**What each plan includes:**
+- **Booking emails** for the venue (date hold, terms, capacity, curfew, sound), each artist (slot, set length, set time, what they need on stage), and a local promoter from Talent if there is one.
+  - Each email is edited in place. *Open in my email* starts it in your email app; *Copy* copies it.
+  - Fees are left as `[fee or door split]` for you to fill in.
+- **The full scope:**
+  - The night itself: run of show (load-in 6 PM, doors 8 PM, sets 9:00 / 9:45 / 10:30, done at midnight), roles and production needs.
+  - The money: ticket details and budget lines. Both stay blank until you fill them in, and the budget adds up its total.
+  - Risks and backups.
+- **A to-do list**: 12 dated tasks from the venue hold (6 weeks out) to settling up (the day after).
+- **A content calendar** with a caption for each post: announcement, lineup flyer, a spotlight for each artist, ticket push, countdown, show day and recap.
+
+**The calendar.**
+- A month view of planned shows (suggestions dashed), RB's live events and shows, and every dated email, task and post. On a phone it's a day-by-day list.
+- *Download for Google or Apple Calendar* gives an `.ics` file: shows at their Pacific times, work as all-day entries, suggestions left out.
+- The Overview's **Coming up** includes planned shows. **Needs you** shows what's due and how many suggestions are waiting.
+
+**Working a plan:**
+- **Plan it** or **Drop** a suggestion.
+- **Mark sent** on an artist's email also marks them *contacted* in Talent. This only happens for people who can edit Talent, and only if the artist was *new* or *shortlisted*.
+- **Move the date**: open emails, tasks and posts move with the show.
+- **Swap** an act who can't make it. The next best free artist takes the slot and gets a booking email, and their name replaces the old one in every email and post not yet sent.
+- **Confirm** the show, then **Add to Events as a draft**. It goes to `/events` as a **draft** with the lineup and set times. A person adds the flyer and ticket link and sets it live.
+
+**What it never does:**
+- Send an email.
+- Publish an event.
+- Invent prices, fees, capacities or claims.
+
+**Storage.** On first use, RB Command creates two new tables in `waitlist-db`: `show_plans` and `show_plan_items`. It does this with `CREATE TABLE IF NOT EXISTS`, so no existing table changes. Every change is written to the activity log.
+
 ## Files
 
+- `src/showplanner.js`: the Show planner module (suggesting, the plan, calendar and `.ics`, changes).
+- `patch_show_planner.py`: adds the module, the `/api/shows/*` routes (viewing needs Events view, changes need Events edit), the Overview additions, the screen and its styles to a pulled `rb-command`.
+- `test/showplanner.test.mjs`: runs the planner through RB Command's own request handler against an in-memory copy of the tables, and checks the page script parses.
+- `deploy-show-planner.sh`: pulls `rb-command`, applies all the patches, runs every test, and with `--deploy` uploads the code only.
 - `src/affiliate.js`: the new RB Command module (reading the page, the card, publishing).
 - `patch_rb_command.py`: adds the module, three routes (`/api/affiliate/preview`, `/card`, `/create`, all needing edit rights on Ads), the screen, its styles, and the Ads table's **Shows on** field to a pulled `rb-command`.
 - `../rb-tools/palettes.py`: adds the 13 palettes to any pulled Worker that has the list.
