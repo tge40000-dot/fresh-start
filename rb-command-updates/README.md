@@ -105,6 +105,45 @@ The planner keeps **three suggestions waiting** on its own. It checks when anyon
 
 **Storage.** On first use, RB Command creates two new tables in `waitlist-db`: `show_plans` and `show_plan_items`. It does this with `CREATE TABLE IF NOT EXISTS`, so no existing table changes. Every change is written to the activity log.
 
+## Crash alerts, outside files, nav and the daily run (16 Oct 2026)
+
+- **Crash alerts.** The Overview's *Needs you* lists any Worker that crashed in the last 24 hours. A crash is an exception or a hit limit; visitors leaving early don't count. A Worker is flagged at 5 or more crashes, or at 2 or more when that's at least 1% of its requests. The data comes from Cloudflare Workers analytics, with the same token as Analytics.
+- **Daily run.** A cron trigger fires at 14:52 UTC every day. It tops up the Show planner, and writes any crashing Worker to Activity (`worker.crashes`), so there's a record after the 24-hour window moves on.
+- **Move outside files.** The Overview item about files.manuscdn.com opens this new screen.
+  - It copies each file into RB media (`admin/rehosted/…`) and points every row that used it at the copy: tracks, homepage slides, shop products, and links inside site settings.
+  - It works a few files at a time. Each changed row is a normal logged edit, so Activity's Undo puts the old link back.
+  - Files that fail are listed with the reason, and are retried up to 3 times.
+- **Post links.** Each post in a plan shows its counted link (see `../rb-site-updates`), a *Copy link* button and its click count. Clicks are stored in `show_plan_items.clicks`, a column added on first use.
+- **Nav.** The nav now has a top part and two sections:
+  - Top: Overview, Analytics and Inbox.
+  - *Shows & sites* and *Growth*: the tools.
+  - Table groups fold away. A group opens by itself when it holds the current page or has something waiting, and remembers if you left it open.
+- **Patch scripts fixed.** Every patch inserted its block before the same marker line, so a later patch's block could split an earlier one off its marker. The next run then didn't recognise the earlier block and added it again. As a result, live `rb-command` carried two copies of the Affiliate ads and Show planner screens, their styles and the affiliate routes. Each script now:
+  - recognises its own block wherever it sits;
+  - removes extra copies;
+  - is checked by `test/no-duplicates.mjs` on every deploy.
+
+  A build from the original `72afeff1` and a patched live copy came out identical, apart from the order of three route lines.
+
+| Worker | Now live | Previous (roll back to) |
+| --- | --- | --- |
+| `rb-command` | `e7396dfa` | `6d80463f` |
+| `artist-router` | `f62b9a7e` | `cbd9da43` |
+| `rb-radio` | `7ff6e5ae` | `5904e5fc` |
+| `rb-tv` | `6a7f3234` | `d42c5be0` |
+| `rb-email` | `41329d2a` | `1c367bc9` |
+| Pages `relentless-billionaire` | `7a5e056e` (redirect) | `c43f9ecc` |
+
+All of these were deployed by `../deploy-all.sh --deploy` after every test passed on freshly pulled code. RB Radio was checked first: no live show. Checked live afterwards:
+- The main site, `/home`, `/radio`, `/tv`, `/events`, studio and shop all return 200.
+- `/api/ads/slot.js` and `.css` serve.
+- RB Radio and RB TV each show 2 real ads in a browser, with no errors and no sideways scrolling on a phone.
+- `/go/post/<unknown>` redirects to `/events`.
+- `pages.dev` returns a 301 to the same path on the main site.
+- Signed-out requests to the new RB Command endpoints are refused.
+
+The daily cron is a trigger on the Worker. To remove it, go to Workers → rb-command → Settings → Triggers.
+
 ## Analytics
 
 A new **Analytics** screen in RB Command, in the nav for every team member, the same people who see the Overview. It shows Cloudflare's numbers for every RB site. Cloudflare already collects them: Web Analytics is on for the RB sites, and Workers analytics covers every Worker.
