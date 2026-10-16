@@ -137,7 +137,7 @@ The Overview's **Visitors** tile now links here. It and this screen both use the
 - the sign-in page loads
 - signed-out requests to `/api/analytics` and the planner are refused (401)
 - the main site and `/events` return 200
-- `CF_ANALYTICS_TOKEN` hadn't been added yet, so the screen shows the setup steps until it is.
+- `CF_ANALYTICS_TOKEN` was then added in the dashboard (version `6d80463f`, same code). It went in as a plain-text variable; switching it to the Secret type keeps the value hidden in the dashboard and API.
 
 **One step only the owner can do: add the read-only token.** RB Command reads analytics with its own Cloudflare token, which has never been added (so the Visitors tile has always shown "—"). Until it is, the screen shows these steps:
 1. In Cloudflare, go to **My Profile → API Tokens → Create Token → Create Custom Token**. Name it *RB Command analytics*.
