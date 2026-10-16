@@ -98,6 +98,11 @@ The planner keeps **three suggestions waiting** on its own. It checks when anyon
 - Publish an event.
 - Invent prices, fees, capacities or claims.
 
+**Status: deployed 16 Oct 2026.** `rb-command` is now `2c5c5b92`; roll back to `f816a3f8`. The deploy script pulled the live code, applied every patch and passed every test before uploading. Afterwards:
+- the sign-in page loads
+- signed-out requests to the planner and its `.ics` are refused (401)
+- the main site and `/events` return 200.
+
 **Storage.** On first use, RB Command creates two new tables in `waitlist-db`: `show_plans` and `show_plan_items`. It does this with `CREATE TABLE IF NOT EXISTS`, so no existing table changes. Every change is written to the activity log.
 
 ## Files
@@ -122,7 +127,7 @@ All the patch scripts skip edits that are already in place, so running them twic
 | `rb-public-content` | `2cb45aa9` | `bb391305` |
 | `rb-radio` | `5904e5fc` | `0f0a3556` |
 | `artist-router` | `cbd9da43` | `e2e799e6` |
-| `rb-command` | `f816a3f8` | `72afeff1` |
+| `rb-command` | `f816a3f8` (since replaced by the Show planner's `2c5c5b92`) | `72afeff1` |
 
 All four were deployed in that order, after every test passed on freshly pulled code.
 
