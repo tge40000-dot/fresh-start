@@ -105,8 +105,48 @@ The planner keeps **three suggestions waiting** on its own. It checks when anyon
 
 **Storage.** On first use, RB Command creates two new tables in `waitlist-db`: `show_plans` and `show_plan_items`. It does this with `CREATE TABLE IF NOT EXISTS`, so no existing table changes. Every change is written to the activity log.
 
+## Analytics
+
+A new **Analytics** screen in RB Command, in the nav for every team member, the same people who see the Overview. It shows Cloudflare's numbers for every RB site. Cloudflare already collects them: Web Analytics is on for the RB sites, and Workers analytics covers every Worker.
+
+**What it shows**, for the last 24 hours, 7 days or 30 days, for all sites or one:
+- **Headline numbers:**
+  - visits and page views, each compared with the period before
+  - pages per visit and the share of views on phones
+  - the 75th-percentile "largest paint", with its Core Web Vitals band
+  - Worker errors and the error rate
+- **Visits by day** (or by hour for 24 hours). It's a bar chart: hover or tab to a bar for its numbers, or open it as a table. Quiet days show as zero.
+- **Worth knowing**: plain notes taken straight from the numbers:
+  - the change in visits
+  - the top page and the biggest outside source
+  - any site that's slow, has a jumpy layout or responds slowly to taps
+  - the Worker with the most errors
+- **Sites**: visits, views and real-visitor speed for each site.
+  - Speed covers largest paint, response to taps (INP), layout shift (CLS) and median load time.
+  - Each comes with a Good, Needs work or Poor label.
+  - Pick a site to see only its numbers.
+- **Top pages**, and **where visitors come from**. Links from one RB site to another are counted separately, so outside sources like Facebook and Instagram stand out.
+- **Countries, devices, browsers and systems.**
+- **Workers**: requests, errors, error rate and CPU time (median and p99) for every Worker on the account.
+
+The numbers leave out RB Command's own pages, and headless browsers (site checks and bots) unless you tick *Include automated browsers*. Answers are cached for 10 minutes. Cloudflare samples busy periods, so counts are close estimates.
+
+The Overview's **Visitors** tile now links here. It and this screen both use the same token.
+
+**One step only the owner can do: add the read-only token.** RB Command reads analytics with its own Cloudflare token, which has never been added (so the Visitors tile has always shown "—"). Until it is, the screen shows these steps:
+1. In Cloudflare, go to **My Profile → API Tokens → Create Token → Create Custom Token**. Name it *RB Command analytics*.
+2. Give it one permission, **Account → Account Analytics → Read**, and set Account Resources to the RB account.
+3. Create it and copy the token.
+4. Go to **Workers & Pages → rb-command → Settings → Variables and Secrets → Add**. Choose type **Secret**, name it **`CF_ANALYTICS_TOKEN`**, paste the token and deploy.
+
+The token can only read analytics; it can't change anything.
+
 ## Files
 
+- `src/analytics.js`: the Analytics module (the GraphQL query, shaping the answer, caching).
+- `patch_analytics.py`: adds the module, `GET /api/analytics`, the screen, its styles and the Overview link to a pulled `rb-command`.
+- `test/analytics.test.mjs`: runs the module against a fake Cloudflare API, the route through RB Command's handler (owner, support and store roles), and checks the page script parses.
+- `deploy-analytics.sh`: pulls `rb-command`, applies every patch, runs every test, and with `--deploy` uploads the code only.
 - `src/showplanner.js`: the Show planner module (suggesting, the plan, calendar and `.ics`, changes).
 - `patch_show_planner.py`: adds the module, the `/api/shows/*` routes (viewing needs Events view, changes need Events edit), the Overview additions, the screen and its styles to a pulled `rb-command`.
 - `test/showplanner.test.mjs`: runs the planner through RB Command's own request handler against an in-memory copy of the tables, and checks the page script parses.
