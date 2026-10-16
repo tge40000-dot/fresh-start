@@ -133,6 +133,12 @@ The numbers leave out RB Command's own pages, and headless browsers (site checks
 
 The Overview's **Visitors** tile now links here. It and this screen both use the same token.
 
+**Status: deployed 16 Oct 2026.** `rb-command` is now `8343f386`; roll back to `2c5c5b92`. The deploy script pulled the live code, applied every patch and passed every test before uploading. Afterwards:
+- the sign-in page loads
+- signed-out requests to `/api/analytics` and the planner are refused (401)
+- the main site and `/events` return 200
+- `CF_ANALYTICS_TOKEN` hadn't been added yet, so the screen shows the setup steps until it is.
+
 **One step only the owner can do: add the read-only token.** RB Command reads analytics with its own Cloudflare token, which has never been added (so the Visitors tile has always shown "—"). Until it is, the screen shows these steps:
 1. In Cloudflare, go to **My Profile → API Tokens → Create Token → Create Custom Token**. Name it *RB Command analytics*.
 2. Give it one permission, **Account → Account Analytics → Read**, and set Account Resources to the RB account.
