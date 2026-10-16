@@ -62,17 +62,20 @@ The **Ads** editor also gets a **Shows on** field, so the surface can be changed
 
 All the patch scripts skip edits that are already in place, so running them twice changes nothing.
 
-## Status (16 Oct 2026)
+## Status: deployed 16 Oct 2026
 
-Built and tested against the live code, but not deployed yet. These are the versions it was built on, which are also the rollback points:
+| Worker | Now live | Previous (roll back to) |
+| --- | --- | --- |
+| `rb-public-content` | `2cb45aa9` | `bb391305` |
+| `rb-radio` | `5904e5fc` | `0f0a3556` |
+| `artist-router` | `cbd9da43` | `e2e799e6` |
+| `rb-command` | `f816a3f8` | `72afeff1` |
 
-| Worker | Version |
-| --- | --- |
-| `rb-public-content` | `bb391305` |
-| `rb-radio` | `0f0a3556` |
-| `artist-router` | `e2e799e6` |
-| `rb-command` | `72afeff1` |
+All four were deployed in that order, after every test passed on freshly pulled code.
 
-To deploy, run `./rb-command-updates/deploy.sh --deploy`.
+Checked live afterwards:
+- `/`, `/home`, `/radio`, `/tv`, `/studio/`, `/fund`, `/api/signal`, the ad rail and the beat store return 200.
+- `theme.css` serves for TV, the beat store and Radio.
+- RB Command is behind Cloudflare Access, and a signed-out request to the new affiliate endpoint is refused.
 
-To undo, go to Cloudflare → Workers → each Worker → Deployments, and redeploy the version above.
+To undo, go to Cloudflare → Workers → each Worker → Deployments, and redeploy the previous version.
