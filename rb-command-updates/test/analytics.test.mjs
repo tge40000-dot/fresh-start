@@ -81,6 +81,19 @@ assert.deepEqual(r, { ok: true, connected: true, error: "Authentication error" }
 r = await an.report(env, ctx, new URLSearchParams(), async () => { throw new TypeError("network"); });
 assert.match(r.error, /didn't answer/);
 
+// ---------------------------------------------------------------- crash alerts
+assert.equal(await an.crashes({}), null, "no token, no check");
+const crashFetch = async (url, init) => { sent.push({ url, body: JSON.parse(init.body) }); return new Response(JSON.stringify({ data: { viewer: { accounts: [{ w: [
+  { sum: { requests: 220, errors: 220 }, dimensions: { scriptName: "rb-email" } },
+  { sum: { requests: 36000, errors: 8 }, dimensions: { scriptName: "artist-router" } },
+  { sum: { requests: 100, errors: 2 }, dimensions: { scriptName: "rb-small" } },
+  { sum: { requests: 5000, errors: 3 }, dimensions: { scriptName: "rb-busy" } },
+  { sum: { requests: 900, errors: 0 }, dimensions: { scriptName: "rb-fine" } } ] }] } } })); };
+const cr = await an.crashes(env, crashFetch);
+assert.deepEqual(cr.scripts.map((s) => s.name), ["rb-email", "artist-router", "rb-small"], "5+ crashes, or 2+ that are at least 1% of requests");
+assert.ok(Math.abs(Date.parse(sent.at(-1).body.variables.e) - Date.parse(sent.at(-1).body.variables.s) - 864e5) < 5000, "the last 24 hours");
+await assert.rejects(an.crashes(env, async () => new Response(JSON.stringify({ errors: [{ message: "no" }] }))), /no/);
+
 // ---------------------------------------------------------------- the route
 const call2 = async (role, e = {}) => {
   try { const res = await handle(new Request("https://team.relentlessbillionaire.com/api/analytics?range=30d", { headers: { Accept: "application/json" } }), e, ctx, { email: "o@x", name: "O", role }); return { status: res.status, data: await res.json() }; }
@@ -103,5 +116,7 @@ execFileSync(process.execPath, ["--check", f]);
 assert.ok(html.includes('NAV_TOP.push(["analytics", "Analytics"])') && html.includes("function viewAnalytics(params)") && html.includes("function drawChart(box, series, hourly)"));
 assert.ok(html.includes('href="#/analytics">Connect Cloudflare analytics</a>'), "the Overview tile points at the screen");
 assert.ok(html.includes(".achart{"), "styles are in the stylesheet");
+const idx = (await import("node:fs")).readFileSync(join(dir, "index.js"), "utf8");
+assert.ok(idx.includes('need("act", "worker_errors"') && idx.includes("await analytics.crashes(env).catch(() => null)"), "crashes reach the Overview, and a failed check never breaks it");
 assert.ok(!/style="/.test(script[1].replace(/\\"/g, '"').match(/function viewAnalytics[\s\S]*?\n  }\n/)[0]), "no inline styles (the CSP blocks them)");
 console.log("analytics ok: query, filters, units, sources, vitals, Workers, ranges, bad input, errors, route permissions, page script parses");

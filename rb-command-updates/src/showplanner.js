@@ -42,7 +42,10 @@ export function ensure(env) {
     env.DB.prepare("CREATE INDEX IF NOT EXISTS show_plan_items_plan ON show_plan_items (plan_id, kind, sort)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS show_plan_items_due ON show_plan_items (due_on)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS show_plans_start ON show_plans (status, starts_at)"),
-  ]).catch((e) => { ready = null; throw e; }));
+  ])
+    // Clicks on each post's link (relentlessbillionaire.com/go/post/<id>, counted by the main site). Already there: fine.
+    .then(() => env.DB.prepare("ALTER TABLE show_plan_items ADD COLUMN clicks INTEGER NOT NULL DEFAULT 0").run().catch(() => {}))
+    .catch((e) => { ready = null; throw e; }));
 }
 
 const log = (env, actor, action, target, detail) =>

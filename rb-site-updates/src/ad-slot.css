@@ -1,0 +1,18 @@
+/* RB ad slot (see /api/ads/slot.js). Uses the page's own colours where it has them, with RB's defaults otherwise. */
+.rb-ad-slot{box-sizing:border-box;max-width:100%;overflow:hidden;margin:22px 0;padding:16px;border:1px solid var(--line,rgba(255,255,255,.12));border-radius:16px;background:var(--panel,rgba(255,255,255,.03))}
+.rb-ad-slot[hidden]{display:none}
+.rbad-kick{margin:0 0 10px;font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted,#a79e8c)}
+.rbad-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:14px}
+.rbad-card{display:flex;gap:12px;align-items:flex-start;min-width:0}
+.rbad-card>a{display:block;flex:0 0 96px;min-width:0}.rbad-card>a .rbad-media{width:100%}
+.rbad-media{flex:0 0 96px;aspect-ratio:1;border-radius:10px;overflow:hidden;background:#000}
+.rbad-media img,.rbad-media video{display:block;width:100%;height:100%;object-fit:cover}
+.rbad-body{min-width:0;flex:1}
+.rbad-head{overflow-wrap:anywhere;margin:0 0 4px;font-size:.98rem;line-height:1.3;font-weight:600}
+.rbad-head a{color:inherit;text-decoration:none}.rbad-head a:hover{text-decoration:underline}
+.rbad-text{margin:0 0 6px;font-size:.86rem;line-height:1.4;color:var(--muted,#a79e8c);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.rbad-cta{display:inline-block;font-size:.84rem;font-weight:600;color:var(--gold,var(--brass,#c9a227));text-decoration:none}
+.rbad-cta:hover{text-decoration:underline}
+.rbad-tag{margin:6px 0 0;font-size:.7rem;color:var(--muted,#a79e8c)}
+.secondary .rb-ad-slot .rbad-row{grid-template-columns:1fr}
+@media (max-width:480px){.rbad-media,.rbad-card>a{flex-basis:76px}}

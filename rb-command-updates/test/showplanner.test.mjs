@@ -125,6 +125,7 @@ assert.equal(posts.length, 9, "announcement, flyer, three spotlights, ticket pus
 assert.ok(posts.every((i) => i.channel && i.body));
 assert.ok(items.every((i) => i.due_on >= today), "nothing is due in the past");
 assert.equal(posts.find((i) => i.title === "Show day").due_on, p1.starts_at.slice(0, 10));
+assert.ok(posts.every((i) => i.clicks === 0), "every post starts with a click count of 0 (counted by the main site's /go/post links)");
 
 // ---------------------------------------------------------------- calendar and .ics
 r = await call("GET", "/api/shows/calendar");
@@ -245,4 +246,5 @@ execFileSync(process.execPath, ["--check", f]);
 assert.ok(html.includes('NAV_TOP.push(["shows", "Show planner"])') && html.includes("function viewShows(params)") && html.includes("function viewShowPlan(id, focus)"));
 assert.ok(html.includes('e.kind === "plan" ? "#/shows?id="'), "Overview links planned shows to their plan");
 assert.ok(html.includes(".calgrid{"), "styles are in the stylesheet");
+if (html.includes("function postLink(")) assert.ok(html.includes("data-copy-link") && html.includes('"https://relentlessbillionaire.com/go/post/" + i.id'), "each post shows its counted link");
 console.log(`show planner ok: suggestions (${plans.length}, dates, venues, lineups), emails, tasks, posts, calendar, .ics, Talent sync, moving, budget, swap (${incoming}), Events draft, permissions, page script parses`);

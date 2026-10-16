@@ -20,7 +20,19 @@ folder = pathlib.Path(sys.argv[1])
 def edit(name, old, new):
     p = folder / name
     s = p.read_text(encoding="utf-8")
-    if new in s:
+    # Already done? For an insertion, look for the inserted text on its own: another patch may have added its own
+    # block next to the same anchor since, so "anchor + block" isn't side by side any more.
+    added = new[len(old):] if new.startswith(old) else new[: len(new) - len(old)] if new.endswith(old) else None
+    if added and s.count(added) > 1:
+        # An earlier version of these scripts could add a block twice. Keep the first copy, drop the rest.
+        first = s.index(added) + len(added)
+        s = s[:first] + s[first:].replace(added, "")
+        p.write_text(s, encoding="utf-8")
+        print(f"{name}: removed a duplicate copy")
+    # A later patch may have edited the block since (see patch_planner_links.py): its first line still marks it as done.
+    # The whole first line, indentation included, so one block's first line can't match a look-alike line elsewhere.
+    mark = next((ln for ln in added.split("\n") if ln.strip()), "") if added else ""
+    if new in s or (added and added in s) or (len(mark.strip()) >= 25 and ("\n" + mark + "\n") in ("\n" + s)):
         return
     if s.count(old) != 1:
         raise SystemExit(f"{name}: anchor found {s.count(old)} times: {old[:70]!r}")
@@ -37,6 +49,13 @@ edit("index.js", 'import * as sitetheme from "./sitetheme.js";\n',
 edit("index.js", '    if (path === "/api/traffic") return json(await traffic(env, ctx));\n',
      '    if (path === "/api/traffic") return json(await traffic(env, ctx));\n'
      '    if (path === "/api/analytics") return json(await analytics.report(env, ctx, url.searchParams));\n')
+
+edit("index.js",
+     '  if (funnelNow === null) need("watch", "funnel", 1,',
+     '  // Workers that crashed in the last 24 hours (Cloudflare Workers analytics), so a broken Worker never goes unnoticed.\n'
+     '  const crash = await analytics.crashes(env).catch(() => null);\n'
+     '  if (crash?.scripts.length) need("act", "worker_errors", crash.scripts.length, crash.scripts.length === 1 ? "A Worker is crashing" : "Workers are crashing", crash.scripts.slice(0, 4).map((s) => `${s.name}: ${s.errors} of ${s.requests} requests failed in the last 24 hours`).join(" · ") + ". Open Analytics for the details, then check that Worker\'s logs in Cloudflare.", "#/analytics?range=1d");\n'
+     '  if (funnelNow === null) need("watch", "funnel", 1,')
 
 # ---- ui.js: styles, nav, route, Overview tile, screen
 CSS = r""".achart{display:block;width:100%;height:auto;overflow:visible}

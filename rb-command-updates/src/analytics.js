@@ -106,3 +106,34 @@ export async function report(env, ctx, params, fetcher = fetch) {
   if (cache) ctx.waitUntil(cache.put(key, new Response(JSON.stringify(out), { headers: { "Content-Type": "application/json", "Cache-Control": "max-age=600" } })));
   return out;
 }
+
+/**
+ * Workers that crashed in the last 24 hours, for the Overview's "Needs you". A crash is a request the Worker didn't
+ * finish (an exception or a limit); visitors leaving early don't count. Flags a Worker at 5 or more crashes, or at 2 or
+ * more when that's at least 1% of its requests. Cached for 10 minutes. Returns null without the token.
+ */
+export async function crashes(env, fetcher = fetch) {
+  if (!env.CF_ANALYTICS_TOKEN) return null;
+  const key = new Request("https://rb-command.internal/analytics/crashes/v1");
+  const cache = globalThis.caches?.default;
+  const hit = cache && (await cache.match(key));
+  if (hit) return hit.json();
+  const now = Date.now();
+  const r = await fetcher("https://api.cloudflare.com/client/v4/graphql", {
+    method: "POST", signal: AbortSignal.timeout(8000),
+    headers: { Authorization: `Bearer ${env.CF_ANALYTICS_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query: "query($a:String!,$s:Time!,$e:Time!){viewer{accounts(filter:{accountTag:$a}){w:workersInvocationsAdaptive(limit:200,filter:{datetime_geq:$s,datetime_leq:$e},orderBy:[sum_errors_DESC]){sum{requests errors} dimensions{scriptName}}}}}",
+      variables: { a: env.CF_ACCOUNT_ID || "0a7be075f32d9d615349825b83ab8fcb", s: iso(now - 864e5), e: iso(now) },
+    }),
+  });
+  const d = await r.json();
+  if (d.errors?.length || !d.data) throw new Error(String(d.errors?.[0]?.message || "Cloudflare analytics refused the token."));
+  const scripts = (d.data.viewer.accounts[0]?.w || [])
+    .map((x) => ({ name: x.dimensions.scriptName, errors: n(x.sum.errors), requests: n(x.sum.requests) }))
+    .filter((x) => x.errors >= 5 || (x.errors >= 2 && x.errors / Math.max(x.requests, 1) >= 0.01))
+    .sort((a, b) => b.errors - a.errors);
+  const out = { ok: true, checked_at: new Date(now).toISOString(), scripts };
+  if (cache) await cache.put(key, new Response(JSON.stringify(out), { headers: { "Content-Type": "application/json", "Cache-Control": "max-age=600" } }));
+  return out;
+}
