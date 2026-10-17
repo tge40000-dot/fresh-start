@@ -233,3 +233,14 @@ To undo, go to Cloudflare → Workers → each Worker → Deployments, and redep
 - Pulse, the calendar, the studio funnel and beats to record on, all from the existing `/api/overview` and `/api/loop`.
 
 `GET /api/signal` caches for two minutes, and the screen refreshes every two minutes while open. Nothing else in RB Command changes. Test: `test/signal.test.mjs`.
+
+### Deployed 17 Oct 2026
+
+| Worker | Live | Roll back to |
+| --- | --- | --- |
+| `rb-command` (Live signal) | `84915205` | `e7396dfa` |
+| `rb-radio` (RB Flow in embed.js) | `05cf663f` | `7ff6e5ae` |
+| `artist-router` (homepage Live watch line) | `610de438` | `f62b9a7e` |
+| `rb-mastering-studio` (suggested settings) | `9943faef` | `6cdb66f7` |
+
+Code only: bindings, secrets, routes and schedules unchanged. RB TV was not redeployed.
