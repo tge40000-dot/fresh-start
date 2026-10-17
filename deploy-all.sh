@@ -19,6 +19,7 @@ py "$ROOT/rb-tools/palettes.py" "$W/artist-router"; py "$ROOT/rb-site-updates/pa
 py "$ROOT/rb-site-updates/patch_artist_router_create.py" "$W/artist-router"
 for s in rb-daw rb-mastering-studio; do py "$ROOT/rb-site-updates/patch_embed_create.py" "$W/$s"; done
 py "$ROOT/rb-site-updates/patch_ai_speech.py" "$W/relentless-billionaire-api"
+py "$ROOT/rb-site-updates/patch_ai_image.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_radio.py" "$W/rb-radio"; py "$ROOT/rb-site-updates/patch_radio_flow.py" "$W/rb-radio"
 py "$ROOT/rb-site-updates/patch_tv.py" "$W/rb-tv"
 py "$ROOT/rb-site-updates/patch_studio.py" "$W/rb-mastering-studio"
