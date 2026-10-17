@@ -14,7 +14,7 @@ py() { python3 -I "$@"; }
 
 for s in artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
 # artist-router: colours (no-op once live), post links and the ad slot
-py "$ROOT/rb-tools/palettes.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_artist_router.py" "$W/artist-router"
+py "$ROOT/rb-tools/palettes.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_artist_router.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_home_status.py" "$W/artist-router"
 py "$ROOT/rb-site-updates/patch_radio.py" "$W/rb-radio"; py "$ROOT/rb-site-updates/patch_radio_flow.py" "$W/rb-radio"
 py "$ROOT/rb-site-updates/patch_tv.py" "$W/rb-tv"
 py "$ROOT/rb-site-updates/patch_studio.py" "$W/rb-mastering-studio"

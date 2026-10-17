@@ -47,3 +47,7 @@ Test: `test/flow.test.mjs`.
 - peaks above -0.5 dBTP with the streaming-safe ceiling switched off → switch it on, and re-export with headroom.
 
 These are fixed rules on the numbers shown, and the box says "not AI". Apply only moves a control; mastering still runs on the visitor's device when they press Master it. Test: `test/studio.test.mjs`.
+
+## Homepage "Live watch" line
+
+`patch_home_status.py` (artist-router). On days ESPN has no featured games, the homepage line said "Loading today's games and forecasts…" all day, because the scoreboard script returned before updating it. It now says "No featured games today. Forecasts update on their own."

@@ -27,15 +27,27 @@ Only the main account takes payments. The other three have no Stripe secrets.
 | `beatstore` | beatstore.relentlessbillionaire.com | `STRIPE_SECRET_KEY` (unused in code) and others | Catalog page. Its checkout calls `rb-store-payments` through the `PAYMENTS` binding, then sends the buyer there in the same tab (`location.assign`). Exclusive goes to `/store?license=exclusive`. | none | n/a |
 | `artist-router` | `relentlessbillionaire.com/*`, `www.…/*`, `*.relentlessbillionaire.com/*` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `DONOR_WEBHOOK_SECRET` | Homepage, `/store` (catalog plus BUY NOW) and most pages. Its own `/api/checkout` and `/api/stripe/webhook` are **shadowed**: `rb-store-payments` has the more specific routes, so these never run on the main host. Also has `/api/studio/checkout` and `/api/studio/stripe/webhook` (subscriptions), and `/api/donors/webhook`. | 3 handlers (see left); live use *unknown* | stores `evt.id`: safe |
 | `rb-mastering-studio` | `relentlessbillionaire.com/studio*` | `STRIPE_SECRET_KEY` | RB Studio mastering: single unlocks (credits), Artist/Pro subscriptions, vault. Price IDs live in R2 `billing/config.json`, not in code. **Has a Customer Portal** (`/api/portal`, `/cancel`). Success page `/studio/welcome?session_id=…`, same tab. A `live` flag gates charging; before launch everything is free. | `/studio/api/stripe/webhook`: checkout completed or async succeeded, subscription created/updated/deleted, `charge.refunded` | per-session record in R2: safe |
-| `rb-fund-campaign` | `relentlessbillionaire.com/fund*` | `STRIPE_SECRET_KEY` | Donations and monthly support tiers. **8 hardcoded price IDs** (`price_1U99…`, `price_1U9B…`); one-off amounts are inline. | `/fund/webhook` returns **503 "not configured"** | none: nothing is fulfilled after payment |
+| `rb-fund-campaign` | `relentlessbillionaire.com/fund*` | `STRIPE_SECRET_KEY` | Donations and monthly support tiers. **8 hardcoded price IDs** (`price_1U99…`, `price_1U9B…`); one-off amounts are inline. | its own `/fund/webhook` returns 503; Stripe sends these events to the donor-ledger webhook instead | through the donor ledger (`processed_stripe_events`) |
 | `relentless-billionaire-api` | media.relentlessbillionaire.com, `/references*`, plus hub.* domains | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | An older store checkout (inline prices) and webhook. hub.relentlessbillionaire.com returns 404 at `/`. | `/api/stripe/webhook` on its own hosts | `INSERT OR IGNORE INTO store_orders` |
 | `rb-studio` (main and RB accounts) | no route (reached through bindings) | `STRIPE_DONOR_WEBHOOK_SECRET` | Donor ledger. | donor webhook: `checkout.session.completed`, `invoice.paid` / `payment_failed`, subscription updated/deleted | `processed_stripe_events` table: safe |
 | `rb-memberships` | `/memberships*`, `/book*` | none | **No checkout.** "Just Starting" $5/mo and "Put Me In Coach" $2,500/yr are **waitlists** ("Opening soon"). Business tiers and booking are requests ("Nothing is charged before the call"). | none | n/a |
 | `rb-autopilot` | cron only | none (uses tokens) | Creates invoices through `rb-store-payments` (`InvoiceApi`). | none | n/a |
 
-**How many Stripe accounts?** It can't be confirmed without Stripe access. The fund's price IDs all share one account fragment (`…B7eDnuwXUA…`). Seven Workers hold their own `STRIPE_SECRET_KEY`; whether they are the same key is *unknown*.
+**Stripe (read-only check, 17 Oct, through the Stripe connector).** There is **one live account**, "Relentless Billionaire" (`acct_1SjTtWB7eDnuwXUA`). Seven Workers each hold their own copy of its secret key.
 
-**Which webhooks Stripe actually calls** is *unknown*, because that list is in the Stripe dashboard. Five handlers exist: store, legacy API, studio, artist-router studio and donors. The fund webhook isn't set up.
+Webhook endpoints registered in Stripe:
+
+| Endpoint | Status | Events |
+| --- | --- | --- |
+| `relentlessbillionaire.com/api/webhooks/stripe` → `rb-store-payments` | enabled | checkout completed, invoice paid/failed, subscription deleted |
+| `relentlessbillionaire.com/api/donors/webhook` → `artist-router` (donor ledger) | enabled | checkout completed, invoice paid/failed, subscription updated/deleted |
+| `studio.relentlessbillionaire.vip/api/donors/webhook` | disabled 22 Sep (it returned 404) | — |
+
+So:
+- `/fund` donations **are** recorded, through the donor-ledger webhook. Its own `/fund/webhook` (503) is unused.
+- **RB Studio has no webhook in Stripe**, and its Artist/Pro prices aren't among the active prices. Studio billing hasn't been set up yet, which matches its "free before launch" mode. The `artist-router` and `relentless-billionaire-api` `/api/stripe/webhook` handlers aren't registered either.
+
+Active prices (23): 8 fundraiser prices (one-off $50 to $1,000, monthly $10 to $100, and an adjustable donation of $5 or more), STARTER/PRO/ELITE memberships at $49/$199/$499 a month, and services: consulting $2,000, outreach $1,000, lead generation $500, flyer $200. **The memberships and services each appear twice** (created 10 Apr and again 16 Apr), plus two "Built by Community" adjustable-amount donations. None of the beat licenses are Stripe prices; the store sends amounts inline.
 
 ## 3. Public money entry points (live, 17 Oct)
 
@@ -90,7 +102,7 @@ The earlier review flagged 11 of these as deletable. That still waits on the own
 ## 7. Real problems found
 
 1. **Seven copies of the Stripe secret, and five webhook handlers in four Workers.** Two of them, `artist-router`'s `/api/checkout` and `/api/stripe/webhook`, are dead code shadowed by `rb-store-payments`. More keys means more to rotate and more ways to drift.
-2. **`/fund` has no webhook.** Payments go through, but nothing records them through Stripe events. It is the only flow with hardcoded price IDs.
+2. **`/fund` hardcodes 8 price IDs** and has a dead `/fund/webhook` (503). Donations are recorded by the donor-ledger webhook.
 3. **Prices live in three places**: inline in `rb-store-payments`, in R2 `billing/config.json` for the studio, and as hardcoded IDs in the fund.
 4. **No `/pricing` page.** Plans are spread over `/memberships`, `/studio/pricing`, beatstore and `/fund`.
 5. **shop.relentlessbillionaire.com** shows the homepage instead of the store.
@@ -99,7 +111,7 @@ The earlier review flagged 11 of these as deletable. That still waits on the own
 
 ## 8. Needed from the owner before Phase 2 and 3
 
-- **Stripe access** (the Stripe connector or a restricted read key) to list the account(s), products, prices and webhook endpoints. The current rule is "nothing in Stripe without the owner's OK", so changes need explicit approval.
+- Stripe is now connected (read-only use so far). Any change, such as archiving the duplicate products or adding the studio webhook, still needs the owner's explicit OK.
 - **Prices and terms** for anything new to sell, such as the $5/mo and $2,500/yr memberships, which are waitlists now. The sites must not show invented prices.
 - **D1 read access** on the token, to audit the `store_orders`, membership and license tables.
 - **Zone WAF and Rate Limiting** permission, if those rules are wanted.
