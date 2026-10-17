@@ -8,8 +8,15 @@
 - Until `FORWARD_TO` is set, senders get a clear bounce instead of the message vanishing.
 - Optional **`BLOCK`**: comma-separated addresses or `@domains` to refuse.
 
-To use it:
-1. In Cloudflare, go to **Workers & Pages → rb-email → Settings → Variables**. Add `FORWARD_TO` with the inbox to forward to, as a plain-text variable.
-2. Under **Email → Email Routing → Routing rules** for relentlessbillionaire.com, point the address(es) you want at **Send to a Worker → rb-email**.
+## Status
+
+`FORWARD_TO` is set to `relentlessbillionaire@outlook.com` as a plain-text variable. It went live as version `97aac504` on 17 Oct 2026. The code is the same as `41329d2a`; only the variable is new. To undo, remove the variable, or roll back to `41329d2a`.
+
+Mail won't reach the Worker until the owner finishes these steps in the Cloudflare dashboard. The API token used here can't change Email Routing or DNS.
+1. **Email → Email Routing** for relentlessbillionaire.com: turn it on and accept Cloudflare's MX records. They replace the current MX, `inbound-smtp.us-east-1.amazonaws.com` (Amazon SES). Anything still reading mail through SES stops getting it.
+2. **Destination addresses**: add `relentlessbillionaire@outlook.com`. Then open Cloudflare's verification email in that Outlook inbox and confirm it. Forwarding to an unverified address fails.
+3. **Routing rules**: set Catch-all, or just `hello@` and `advertise@`, to **Send to a Worker → rb-email**.
+
+To change the inbox later, edit `FORWARD_TO` under **Workers & Pages → rb-email → Settings → Variables**. Separate several addresses with commas; each one must be verified as in step 2.
 
 `test/test.mjs` runs it against fake messages.
