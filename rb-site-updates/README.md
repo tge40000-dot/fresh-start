@@ -27,3 +27,13 @@ Every post in a Show planner plan gets a link such as `relentlessbillionaire.com
 - `test/post-link.test.mjs`: runs the real artist-router bundle (redirects, counting, bots, the slot files).
 - `test/radio-tv.test.mjs`: checks each page has exactly one slot, script and stylesheet.
 - `../deploy-all.sh`: runs these with everything else.
+
+## RB Flow: Create → Own → Elevate, and the houses switcher
+
+`src/rb-flow.js` is added to the end of `/radio/embed.js` by `patch_radio_flow.py`. Every RB site already loads that script, so only **rb-radio** needs a deploy.
+- **The steps**: Record (studio.) → License (beatstore) → Master (/studio/) → Release (/release). The current page's step says "You are here", and the header links the next step.
+- **Houses**: Radio, TV, Beats, Record, Master, Release, Events, Jobs, Game and Memberships, with the current one marked.
+- **Where it shows**: above the footer on /store, beatstore, /studio/ and /release; the houses alone on /memberships. A page can place it itself with `<div data-rb-flow="license"></div>`, which then takes over from the automatic spot.
+- **Never on RB TV**, and nowhere else unless listed. It's drawn in a shadow root, so it can't restyle or be restyled by the page.
+
+Test: `test/flow.test.mjs`.

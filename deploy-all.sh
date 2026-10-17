@@ -15,7 +15,7 @@ py() { python3 -I "$@"; }
 for s in artist-router rb-radio rb-tv rb-command rb-email; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
 # artist-router: colours (no-op once live), post links and the ad slot
 py "$ROOT/rb-tools/palettes.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_artist_router.py" "$W/artist-router"
-py "$ROOT/rb-site-updates/patch_radio.py" "$W/rb-radio"
+py "$ROOT/rb-site-updates/patch_radio.py" "$W/rb-radio"; py "$ROOT/rb-site-updates/patch_radio_flow.py" "$W/rb-radio"
 py "$ROOT/rb-site-updates/patch_tv.py" "$W/rb-tv"
 # rb-command: every patch, in order; each skips what's already there and drops copies an older script added twice
 py "$ROOT/rb-tools/palettes.py" "$W/rb-command"
@@ -32,6 +32,7 @@ node --no-warnings "$ROOT/rb-surface/test/test.mjs" "$W/artist-router/artist-rou
 node --no-warnings "$ROOT/rb-surface/test/fresh.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$ROOT/rb-site-updates/test/post-link.test.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$ROOT/rb-site-updates/test/radio-tv.test.mjs" "$W/rb-radio" "$W/rb-tv"
+node "$ROOT/rb-site-updates/test/flow.test.mjs" "$W/rb-radio"
 node "$ROOT/rb-email/test/test.mjs"
 
 if [ "${1:-}" != "--deploy" ]; then echo "Checks passed. Patched Workers: $W. Run with --deploy to upload them."; exit 0; fi
