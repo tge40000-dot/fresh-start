@@ -30,6 +30,9 @@ for s in rb-radio rb-radio-hub rb-public-content rb-command artist-router; do py
 py "$ROOT/rb-site-updates/patch_beat_publish.py" "$W/rb-studio"; py "$ROOT/rb-site-updates/patch_beat_publish.py" "$W/rb-autopilot"
 py "$ROOT/rb-site-updates/patch_tv.py" "$W/rb-tv"
 py "$ROOT/rb-site-updates/patch_studio.py" "$W/rb-mastering-studio"
+# studio plug-ins: the test compares against the unpatched engine (bit-identical when no plug-in is ticked), then the patch
+node "$ROOT/rb-site-updates/test/studio-plugins.test.mjs" "$W/rb-mastering-studio" | tail -1
+py "$ROOT/rb-site-updates/patch_studio_plugins.py" "$W/rb-mastering-studio"
 # custom palettes from the builder: every copy of theme.js learns them (consumers are deployed before rb-command)
 for s in rb-public-content artist-router rb-radio rb-command; do py "$ROOT/rb-tools/patch_theme_custom.py" "$W/$s"; done
 # rb-command: every patch, in order; each skips what's already there and drops copies an older script added twice
