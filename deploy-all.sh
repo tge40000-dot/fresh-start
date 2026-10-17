@@ -19,7 +19,7 @@ py "$ROOT/rb-site-updates/patch_radio.py" "$W/rb-radio"
 py "$ROOT/rb-site-updates/patch_tv.py" "$W/rb-tv"
 # rb-command: every patch, in order; each skips what's already there and drops copies an older script added twice
 py "$ROOT/rb-tools/palettes.py" "$W/rb-command"
-for p in patch_rb_command patch_show_planner patch_planner_links patch_analytics patch_rehost patch_nav patch_scheduled; do py "$ROOT/rb-command-updates/$p.py" "$W/rb-command"; done
+for p in patch_rb_command patch_show_planner patch_planner_links patch_analytics patch_rehost patch_nav patch_scheduled patch_signal; do py "$ROOT/rb-command-updates/$p.py" "$W/rb-command"; done
 # rb-email: the forwarder replaces Cloudflare's sample
 cp "$ROOT/rb-email/src/index.js" "$W/rb-email/index.js"
 
@@ -27,7 +27,7 @@ for s in artist-router rb-radio rb-tv rb-command rb-email; do for f in "$W/$s"/*
 T="$ROOT/rb-command-updates/test"
 node "$T/no-duplicates.mjs" "$W/rb-command"
 node --no-warnings "$T/palettes.mjs" "$W/rb-command/theme.js" | tail -1
-for t in affiliate showplanner analytics rehost scheduled; do node --no-warnings "$T/$t.test.mjs" "$W/rb-command"; done
+for t in affiliate showplanner analytics rehost scheduled signal; do node --no-warnings "$T/$t.test.mjs" "$W/rb-command"; done
 node --no-warnings "$ROOT/rb-surface/test/test.mjs" "$W/artist-router/artist-router-v14.js" --expect-surface
 node --no-warnings "$ROOT/rb-surface/test/fresh.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$ROOT/rb-site-updates/test/post-link.test.mjs" "$W/artist-router/artist-router-v14.js"

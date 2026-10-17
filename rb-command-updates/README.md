@@ -222,3 +222,14 @@ Checked live afterwards:
 - RB Command is behind Cloudflare Access, and a signed-out request to the new affiliate endpoint is refused.
 
 To undo, go to Cloudflare → Workers → each Worker → Deployments, and redeploy the previous version.
+
+## Live signal
+
+`patch_signal.py` adds a **Live signal** screen under Overview (every role except store staff). It shows only real data:
+- **Every Cloudflare Worker that ran in the last 24 hours**, grouped Money / Sites / Music and media / Operations / Partner sites: requests, errors, CPU, and each scheduled job's last run and failures. The list comes from Cloudflare analytics (`CF_ANALYTICS_TOKEN`), so a new Worker appears by itself. `ROLES` in `src/signal.js` only gives known Workers a plain name.
+  - A card is marked **Errors** at 5+ errors, or 2+ at a 1% rate or higher; **A scheduled job failed** if any cron run failed today.
+  - "Workers AI" marks the Workers bound to Cloudflare's AI models.
+- RB Radio on air and next (the public `/radio/api/now`).
+- Pulse, the calendar, the studio funnel and beats to record on, all from the existing `/api/overview` and `/api/loop`.
+
+`GET /api/signal` caches for two minutes, and the screen refreshes every two minutes while open. Nothing else in RB Command changes. Test: `test/signal.test.mjs`.
