@@ -37,3 +37,13 @@ Every post in a Show planner plan gets a link such as `relentlessbillionaire.com
 - **Never on RB TV**, and nowhere else unless listed. It's drawn in a shadow root, so it can't restyle or be restyled by the page.
 
 Test: `test/flow.test.mjs`.
+
+## RB Studio: suggested settings
+
+`patch_studio.py` (rb-mastering-studio). The studio already measured each mix: loudness, true peak, dynamics, stereo, top end, and tonal balance against the target. Under its notes it now lists **suggested settings**, each with **Apply** and **Undo**:
+- near-mono mix → widen the upper range to 140%;
+- already louder than -10 LUFS → Low intensity;
+- very dynamic (more than 14 dB peak to loudness) → the Punchy character;
+- peaks above -0.5 dBTP with the streaming-safe ceiling switched off → switch it on, and re-export with headroom.
+
+These are fixed rules on the numbers shown, and the box says "not AI". Apply only moves a control; mastering still runs on the visitor's device when they press Master it. Test: `test/studio.test.mjs`.
