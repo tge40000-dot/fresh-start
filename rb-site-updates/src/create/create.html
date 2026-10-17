@@ -181,23 +181,24 @@ function envelope(buf){
 /* ------------------------------------------------------------ RB's free AI tools (Workers AI on media.relentlessbillionaire.com), always labelled */
 function aiImage(prompt){
   return fetch(MEDIA + "/ai/platform/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: prompt }) })
-    .then(function(r){ return r.json().then(function(d){ if (!r.ok || !d.ok) throw new Error(r.status === 429 ? "Wait a few seconds, then try again." : (d.error && d.error.message) || "The image service is busy. Try again."); return d; }); })
+    .then(function(r){ return r.json().then(function(d){ if (!r.ok || !d.ok) throw new Error((d.error && d.error.message) || (r.status === 429 ? "Wait a little, then try again." : "The image service is busy. Try again.")); return d; }); })
     .then(function(d){ return fetch(d.asset.url).then(function(r){ return r.blob(); }); })
     .then(function(b){ return Assets.add(b, "image", "AI · " + prompt.slice(0, 40), { ai: true, prompt: prompt }); });
 }
 function aiSpeech(text, lang){
   var go = function(tries){
     return fetch(MEDIA + "/ai/platform/speech", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: text, lang: lang || "en" }) }).then(function(r){
-      if (r.status === 429 && tries > 0) return new Promise(function(res){ setTimeout(res, 2500); }).then(function(){ return go(tries - 1); });
+      var wait = Number(r.headers.get("Retry-After")) || 0;
+      if (r.status === 429 && tries > 0 && wait > 0 && wait <= 15) return new Promise(function(res){ setTimeout(res, wait * 1000 + 250); }).then(function(){ return go(tries - 1); });
       if (!r.ok) return r.json().catch(function(){ return {}; }).then(function(d){ throw new Error((d.error && d.error.message) || "The voice service is busy. Try again."); });
       return r.blob();
     });
   };
-  return go(6).then(function(b){ return Assets.add(b, "audio", "AI voice · " + text.slice(0, 40), { ai: true, text: text }); });
+  return go(2).then(function(b){ return Assets.add(b, "audio", "AI voice · " + text.slice(0, 40), { ai: true, text: text }); });
 }
 function transcribe(blob){
   var fd = new FormData(); fd.append("audio", blob, "audio.webm");
-  return fetch(MEDIA + "/ai/platform/transcribe", { method: "POST", body: fd }).then(function(r){ return r.json().then(function(d){ if (!r.ok || !d.ok) throw new Error(r.status === 429 ? "Wait a few seconds, then try again." : "Captions couldn't be made right now."); return d.result || {}; }); });
+  return fetch(MEDIA + "/ai/platform/transcribe", { method: "POST", body: fd }).then(function(r){ return r.json().then(function(d){ if (!r.ok || !d.ok) throw new Error(r.status === 429 ? ((d.error && d.error.message) || "Wait a little, then try again.") : "Captions couldn't be made right now."); return d.result || {}; }); });
 }
 
 /* ------------------------------------------------------------ export: records the canvas and the mixed audio in real time */
