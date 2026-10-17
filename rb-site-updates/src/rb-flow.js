@@ -21,8 +21,8 @@
     ["Events", MAIN + "/events"], ["Jobs", MAIN + "/jobs"], ["Game", MAIN + "/game"], ["Memberships", MAIN + "/memberships"],
   ];
   var CSS = ":host{all:initial;display:block}\n" +
-    ".f{--g:#D6AD65;--g2:#E9C687;--t:#F3EDE2;--d:#B9AE9C;--l:rgba(214,173,101,.28);font:500 14px/1.4 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Inter,Roboto,sans-serif;color:var(--t);box-sizing:border-box;" +
-    "border:1px solid var(--l);border-radius:16px;padding:14px;background:linear-gradient(160deg,rgba(214,173,101,.08),rgba(0,0,0,.25));-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}\n" +
+    ".f{--g:#D6AD65;--g2:#E9C687;--t:#F3EDE2;--d:#B9AE9C;--l:rgba(214,173,101,.28);--a08:rgba(214,173,101,.08);--a22:rgba(214,173,101,.22);--a06:rgba(214,173,101,.06);font:500 14px/1.4 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Inter,Roboto,sans-serif;color:var(--t);box-sizing:border-box;" +
+    "border:1px solid var(--l);border-radius:16px;padding:14px;background:linear-gradient(160deg,var(--a08),rgba(0,0,0,.25));-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}\n" +
     ".f *{box-sizing:border-box}a{color:inherit;text-decoration:none}a:focus-visible{outline:2px solid var(--g2);outline-offset:3px;border-radius:10px}\n" +
     ".hd{display:flex;align-items:baseline;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;margin:0 0 10px}\n" +
     ".k{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--g)}.k b{color:var(--g2)}\n" +
@@ -32,7 +32,7 @@
     "li a:hover{border-color:var(--g)}\n" +
     ".n{font-size:10px;font-weight:700;letter-spacing:.14em;color:var(--d);text-transform:uppercase}\n" +
     ".s{font-weight:700;font-size:15px}.ln{font-size:12px;color:var(--d)}\n" +
-    "li.here a{border-color:var(--g);background:linear-gradient(145deg,rgba(214,173,101,.22),rgba(214,173,101,.06))}\n" +
+    "li.here a{border-color:var(--g);background:linear-gradient(145deg,var(--a22),var(--a06))}\n" +
     "li.here .n{color:var(--g2)}\n" +
     ".hs{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.hs.solo{margin-top:0}\n" +
     ".hs a{display:inline-flex;align-items:center;min-height:36px;padding:0 12px;border:1px solid var(--l);border-radius:999px;font-size:13px;color:var(--d)}\n" +
@@ -79,6 +79,27 @@
     HOUSES.forEach(function (h) { hs.appendChild(el("a", { href: h[1], "aria-current": sameHouse(h[1]) ? "page" : null }, h[0])); });
     box.appendChild(hs);
     root.appendChild(box);
+    follow(box);
+  }
+  /* The box takes the site colours RB Radio publishes (RB Command > Site colours > RB Radio), so it changes with
+     every palette, custom ones included. Gold stays as the fallback until the station's first update arrives. */
+  function rgbaOf(hex, a) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "")); if (!m) return null;
+    var n = parseInt(m[1], 16); return "rgba(" + (n >> 16) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+  }
+  function paint(box, th) {
+    if (!th || !rgbaOf(th.accent, 1)) return;
+    var set = function (k, v) { if (v) box.style.setProperty(k, v); };
+    set("--g", th.accent); set("--g2", th.accent2 || th.accent); set("--t", th.text); set("--d", th.muted);
+    set("--l", rgbaOf(th.accent, 0.28)); set("--a08", rgbaOf(th.accent, 0.08)); set("--a22", rgbaOf(th.accent, 0.22)); set("--a06", rgbaOf(th.accent, 0.06));
+  }
+  function follow(box) {
+    var hook = function () {
+      var r = window.RBRadio; if (!r || typeof r.subscribe !== "function") return false;
+      var last = ""; r.subscribe(function (st) { var th = st && st.theme, k = th ? JSON.stringify(th) : ""; if (k !== last) { last = k; paint(box, th); } });
+      return true;
+    };
+    if (!hook()) setTimeout(hook, 1200);
   }
   /* Pages that don't carry a placeholder yet get one here, near the end of the page and above its footer, so no
      other Worker needs a deploy. A page that adds its own data-rb-flow placeholder takes over from this list. */
