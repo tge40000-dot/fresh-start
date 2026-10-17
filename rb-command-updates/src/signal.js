@@ -60,18 +60,25 @@ export const GROUPS = ["Money", "Sites", "Music and media", "Operations", "Partn
 const ACCOUNT = "0a7be075f32d9d615349825b83ab8fcb";
 const QUERY = `query($a:String!,$s:Time!,$e:Time!){viewer{accounts(filter:{accountTag:$a}){
 inv:workersInvocationsAdaptive(limit:1000,filter:{datetime_geq:$s,datetime_leq:$e}){sum{requests errors}quantiles{cpuTimeP50}dimensions{scriptName}}
-cron:workersInvocationsScheduled(limit:2000,filter:{datetime_geq:$s,datetime_leq:$e},orderBy:[datetime_DESC]){scriptName cron status datetime}}}}`;
+cron:workersInvocationsScheduled(limit:2000,filter:{datetime_geq:$s,datetime_leq:$e},orderBy:[datetime_DESC]){scriptName cron status datetime}
+hours:workersInvocationsAdaptive(limit:5000,filter:{datetime_geq:$s,datetime_leq:$e}){sum{requests errors}dimensions{scriptName datetimeHour}}}}}`;
 
 /** Turns the raw analytics into one row per Worker. Pure, so the tests can feed it sample data. */
 export function shape(raw, now = Date.now()) {
   const acc = raw?.data?.viewer?.accounts?.[0] || {};
   const by = {};
-  const row = (name) => (by[name] ||= { name, requests: 0, errors: 0, cpu_ms: null, jobs: [] });
+  const row = (name) => (by[name] ||= { name, requests: 0, errors: 0, cpu_ms: null, jobs: [], hourly: new Array(24).fill(0) });
+  // One slot per hour for the last 24 hours, oldest first, so each card can draw its own traffic line.
+  const hour0 = Math.floor(now / 36e5) * 36e5 - 23 * 36e5;
   for (const x of acc.inv || []) {
     const r = row(x.dimensions.scriptName);
     r.requests += x.sum.requests || 0;
     r.errors += x.sum.errors || 0;
     if (x.quantiles?.cpuTimeP50 > 0) r.cpu_ms = Math.round(x.quantiles.cpuTimeP50 / 100) / 10;
+  }
+  for (const h of acc.hours || []) {
+    const i = Math.round((Date.parse(h.dimensions.datetimeHour) - hour0) / 36e5);
+    if (i >= 0 && i < 24) row(h.dimensions.scriptName).hourly[i] += h.sum.requests || 0;
   }
   for (const c of acc.cron || []) {
     const r = row(c.scriptName);
