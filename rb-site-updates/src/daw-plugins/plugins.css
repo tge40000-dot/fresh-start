@@ -1,9 +1,14 @@
 /* RB plugins (patch_daw_plugins.py): mixer-strip Plugins section and Editor clip tools */
+.strip{grid-template-columns:minmax(0,1fr)}
 .strip:has(details.plug[open]){width:170px}
 .plug{border-top:1px solid var(--line);padding-top:4px;min-width:0}
 .plug summary{cursor:pointer;font-size:11px;font-weight:700;color:var(--gold2);letter-spacing:.04em;padding:4px 0}
-.plug .plgm{display:grid;gap:3px;margin-top:5px}
-.plug .mini.plg{width:100%;text-align:left;height:24px;font-size:10.5px}
+.plug summary{list-style:none}.plug summary::-webkit-details-marker{display:none}
+.plug summary::before{content:"\25B8\00A0"}.plug[open] summary::before{content:"\25BE\00A0"}
+.plug .plgm{display:grid;gap:3px;margin-top:5px;min-width:0}
+.plug label{grid-template-columns:38px minmax(0,1fr)}
+.plug input[type=range]{min-width:0}
+.plug .mini.plg{width:100%;box-sizing:border-box;text-align:left;height:24px;font-size:10.5px}
 .plug select{width:100%;min-width:0;font-size:11px;padding:2px 4px}
 .plug .fine{font-size:10.5px;margin:6px 0 0}
 .cliptools{margin:0 0 8px}
@@ -12,5 +17,6 @@
   .cliptools .btn{min-height:40px;padding:8px 12px;font-size:13px}
   .plug summary{min-height:36px;display:flex;align-items:center}
   .plug .mini.plg{height:36px}
-  .head .l2 .mini.x{min-width:28px}
 }
+/* small screens: the five track buttons (M S R monitor x) share the narrow track header instead of overflowing it */
+@media (max-width:560px){.row .head .l2 .mini{min-width:0;flex:1 1 0;padding:0}.row .head .l2 .mini.x{margin-left:0}}

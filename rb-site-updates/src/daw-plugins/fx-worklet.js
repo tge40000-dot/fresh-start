@@ -7,8 +7,8 @@ const coef = (seconds) => 1 - Math.exp(-1 / (Math.max(1e-5, seconds) * sampleRat
 
 function silence(outputs) { for (const o of outputs[0] || []) o.fill(0); return true; }
 
-// Noise gate: peak detector with hysteresis (closes 6 dB under the threshold) and a 40 ms hold, 1 ms open, 80 ms close,
-// down to -70 dB (not full mute, so breaths fade instead of chopping).
+// Noise gate: peak detector with hysteresis (closes 6 dB under the threshold) and a 40 ms hold, 1 ms open, fast close
+// (a 35 ms time constant) down to -70 dB (not full mute, so breaths fade instead of chopping).
 class RBGate extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [{ name: "threshold", defaultValue: -50, minValue: -100, maxValue: 0, automationRate: "k-rate" }];
@@ -18,7 +18,7 @@ class RBGate extends AudioWorkletProcessor {
     const inp = inputs[0], out = outputs[0];
     if (!inp || !inp.length) return silence(outputs);
     const n = inp[0].length, open = toGain(p.threshold[0]), close = open * 0.5, floor = toGain(-70);
-    const ea = coef(0.0005), er = coef(0.05), ga = coef(0.001), gr = coef(0.08), holdN = Math.round(0.04 * sampleRate);
+    const ea = coef(0.0005), er = coef(0.05), ga = coef(0.001), gr = coef(0.035), holdN = Math.round(0.04 * sampleRate);
     for (let i = 0; i < n; i++) {
       let pk = 0;
       for (let c = 0; c < inp.length; c++) { const v = Math.abs(inp[c][i]); if (v > pk) pk = v; }
@@ -33,8 +33,9 @@ class RBGate extends AudioWorkletProcessor {
   }
 }
 
-// Sibilance: split-band de-esser. hi = 2nd-order high-pass at `freq`, lo = x - hi (so lo + hi is exactly x).
-// The hi band is its own sidechain; above `threshold` it is turned down at 5:1, at most 15 dB. Only hi is reduced.
+// Sibilance: split-band de-esser. band = 0 dB-peak band-pass around `freq` (Q 1.2), the rest = x - band, so the two
+// add back to exactly x. The band is its own sidechain; above `threshold` only the band is turned down (about 5:1,
+// at most 15 dB): y = x - (1 - g) * band. At the centre the band-pass has no phase shift, so the cut is exact there.
 class RBDeEss extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [
@@ -44,8 +45,8 @@ class RBDeEss extends AudioWorkletProcessor {
   }
   constructor() { super(); this.f = 0; this.z = [[0, 0, 0, 0], [0, 0, 0, 0]]; this.e2 = 0; this.g = 1; }
   design(f) {
-    const w = 2 * Math.PI * Math.min(f, sampleRate * 0.45) / sampleRate, cs = Math.cos(w), al = Math.sin(w) / (2 * Math.SQRT1_2), a0 = 1 + al;
-    this.b = [(1 + cs) / 2 / a0, -(1 + cs) / a0, (1 + cs) / 2 / a0]; this.a = [-2 * cs / a0, (1 - al) / a0]; this.f = f;
+    const w = 2 * Math.PI * Math.min(f, sampleRate * 0.45) / sampleRate, cs = Math.cos(w), al = Math.sin(w) / (2 * 1.2), a0 = 1 + al;
+    this.b = [al / a0, 0, -al / a0]; this.a = [-2 * cs / a0, (1 - al) / a0]; this.f = f;
   }
   process(inputs, outputs, p) {
     const inp = inputs[0], out = outputs[0];

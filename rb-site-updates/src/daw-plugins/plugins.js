@@ -173,13 +173,18 @@ function rbApply(h, a, e, n) {
     (on = on && !!q.p), on && q.p.set(e);
     if (on !== q.on || !q.init) (q.on = on), (q.init = 1), rbP(q.b.gain, on ? 0 : 1, c), rbP(q.w.gain, on ? 1 : 0, c);
   }
-  let i = O(e.fx.comp, 0, 1), m = rbV(e, "compMode");
+  let i = O(e.fx.comp, 0, 1), m = rbV(e, "compMode"), mk = .8;
   if (i > 0 && (m === "punch" || m === "smooth")) {
     let P = m === "punch", t = c.currentTime;
-    a.comp.ratio.setValueAtTime(P ? 4 + 4 * i : 2.5 + i, t), (a.comp.knee.value = P ? 2 : 14),
+    (mk = P ? .9 : .7), a.comp.ratio.setValueAtTime(P ? 4 + 4 * i : 2.5 + i, t), (a.comp.knee.value = P ? 2 : 14),
       (a.comp.attack.value = P ? .0015 : .01), (a.comp.release.value = P ? .08 : .45),
-      a.vol.gain.setTargetAtTime(n ? e.volume * (1 + i * (P ? .9 : .7)) : 0, t, .015);
+      a.vol.gain.setTargetAtTime(n ? e.volume * (1 + i * mk) : 0, t, .015);
   }
+  // At time 0 (a fresh export render) start every level where it belongs instead of gliding there from 1, which
+  // briefly sent the first 50 ms of each track to the (random) reverb and echo at full level.
+  if (c.currentTime <= 0)
+    for (let [q, v] of [[a.low.gain, e.fx.low], [a.mid.gain, e.fx.mid], [a.high.gain, e.fx.high], [a.vol.gain, n ? e.volume * (1 + i * mk) : 0],
+      [a.pan.pan, O(e.pan, -1, 1)], [a.rev.gain, e.fx.reverb], [a.del.gain, e.fx.delay * .8]]) rbP(q, v, c);
   let rv = rbV(e, "revMode"), dl = rbV(e, "delSync");
   a.rvTo !== rv && (a.rev.disconnect(), a.rev.connect(rbRev(h, rv)), (a.rvTo = rv));
   a.dlTo !== dl && (a.del.disconnect(), a.del.connect(rbDel(h, dl)), (a.dlTo = dl));

@@ -361,8 +361,8 @@ const rbcScriptJson = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(
 
 async function rbcBoardPage(request, env, url) {
   const g = await rbcLoad(env), nonce = rbcNonce(), state = rbcPublicState(g);
-  const html = RB_COLLECT_HTML.replaceAll("__NONCE__", nonce).replace("__STATUS__", rbcEsc(g.status))
-    .replace("__STATE__", rbcScriptJson(state)).replace("__CLERK_KEY__", rbcScriptJson(String(env.CLERK_PUBLISHABLE_KEY || "")));
+  const html = RB_COLLECT_HTML.replaceAll("__NONCE__", nonce).replace("__STATUS__", () => rbcEsc(g.status))
+    .replace("__CLERK_KEY__", () => rbcScriptJson(String(env.CLERK_PUBLISHABLE_KEY || ""))).replace("__STATE__", () => rbcScriptJson(state));
   const extra = {};
   const ref = String(url.searchParams.get("ref") || "").toUpperCase();
   if (/^[A-Z0-9]{6,12}$/.test(ref)) extra["Set-Cookie"] = `rb_ref=${ref}; Path=/; Max-Age=2592000; SameSite=Lax; Secure`;

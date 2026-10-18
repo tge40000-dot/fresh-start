@@ -51,3 +51,12 @@ These are fixed rules on the numbers shown, and the box says "not AI". Apply onl
 ## Homepage "Live watch" line
 
 `patch_home_status.py` (artist-router). On days ESPN has no featured games, the homepage line said "Loading today's games and forecasts…" all day, because the scoreboard script returned before updating it. It now says "No featured games today. Forecasts update on their own."
+
+## RB Studio /record: mobile delete and plugins
+
+`patch_daw_plugins.py` (rb-daw), code in `src/daw-plugins/`.
+- **Delete on phones**: a selected clip shows Duplicate, Split at playhead, Delete clip, Delete track (with the usual confirm) and Plugins, 40 px tall on touch. All of them can be undone. The track × now shows on small screens too.
+- **Plugins** in each mixer strip, all off by default: Noise gate, Low cut, Air, Sibilance, Comp mode (Standard / Punch / Smooth), Drive (Tape / Tube / Console), Phone/Radio, Crunch, Double, plus Verb (Classic / Plate / Room / Hall) and Echo timing (1/8 dotted / 1/4 / 1/8 / 1/16). They play live and are in Export WAV, stems and share renders. Gate, Sibilance and Crunch run in `fx-worklet.js`. If that file doesn't load, Gate and Sibilance are skipped, and Crunch only reduces bit depth.
+- **Presets**: Hard Trap Lead, Melodic Hook, Boom-bap Rap, R&B Silk, Ad-lib Spice, Phone/Radio. Picking any preset turns the plugins off first.
+
+Test: `test/daw-plugins.test.mjs <freshly pulled rb-daw dir>`.
