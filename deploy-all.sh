@@ -12,13 +12,15 @@ W=$(mktemp -d)
 ACCOUNT=0a7be075f32d9d615349825b83ab8fcb
 py() { python3 -I "$@"; }
 
-for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio rb-daw relentless-billionaire-api rb-radio-hub rb-autopilot; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
+for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio rb-daw relentless-billionaire-api rb-radio-hub rb-autopilot rb-memberships; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
 # the AI Forge lives in the RB account
 CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" pull rb-studio "$W/rb-studio"
 # artist-router: colours (no-op once live), post links and the ad slot
 py "$ROOT/rb-tools/palettes.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_artist_router.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_home_status.py" "$W/artist-router"
 # RB Create at /create; /record and /studio may be framed by their own site; the free AI voice it uses
 py "$ROOT/rb-site-updates/patch_artist_router_create.py" "$W/artist-router"
+# /memberships: free houses, three ways in, what each plan includes; business plans on their own page
+py "$ROOT/rb-site-updates/patch_memberships.py" "$W/rb-memberships"
 # RB Collect (/rewards): ships switched off with draft prizes; the owner turns it on in RB Command > Rewards
 py "$ROOT/rb-site-updates/patch_rewards.py" "$W/artist-router"
 for s in rb-daw rb-mastering-studio; do py "$ROOT/rb-site-updates/patch_embed_create.py" "$W/$s"; done
@@ -67,6 +69,7 @@ node "$ROOT/rb-site-updates/test/flow.test.mjs" "$W/rb-radio"
 node "$ROOT/rb-site-updates/test/studio.test.mjs" "$W/rb-mastering-studio"
 node "$ROOT/rb-tools/test/custom-palettes.mjs" "$W/rb-command" "$W/rb-public-content" "$W/rb-radio" "$W/artist-router"
 node "$ROOT/rb-email/test/test.mjs"
+node --no-warnings "$ROOT/rb-site-updates/test/memberships.test.mjs" "$W/rb-memberships/index.js"
 
 if [ "${1:-}" != "--deploy" ]; then echo "Checks passed. Patched Workers: $W. Run with --deploy to upload them."; exit 0; fi
 
@@ -78,6 +81,7 @@ py "$ROOT/rb-tools/cfworker.py" push rb-mastering-studio "$W/rb-mastering-studio
 py "$ROOT/rb-tools/cfworker.py" push rb-autopilot "$W/rb-autopilot"
 CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" push rb-studio "$W/rb-studio"
 py "$ROOT/rb-tools/cfworker.py" push rb-radio-hub "$W/rb-radio-hub"
+py "$ROOT/rb-tools/cfworker.py" push rb-memberships "$W/rb-memberships"
 py "$ROOT/rb-tools/cfworker.py" push artist-router "$W/artist-router"
 if curl -fsS -m 20 https://relentlessbillionaire.com/radio/api/now | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("live") else 1)'; then
   echo "rb-radio: a live show is on air, so it's skipped. Run this again after the show."
