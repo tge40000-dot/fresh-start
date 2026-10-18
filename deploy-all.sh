@@ -19,9 +19,12 @@ CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" p
 py "$ROOT/rb-tools/palettes.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_artist_router.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_home_status.py" "$W/artist-router"
 # RB Create at /create; /record and /studio may be framed by their own site; the free AI voice it uses
 py "$ROOT/rb-site-updates/patch_artist_router_create.py" "$W/artist-router"
+# RB Collect (/rewards): ships switched off with draft prizes; the owner turns it on in RB Command > Rewards
+py "$ROOT/rb-site-updates/patch_rewards.py" "$W/artist-router"
 for s in rb-daw rb-mastering-studio; do py "$ROOT/rb-site-updates/patch_embed_create.py" "$W/$s"; done
 # /record plugins and mobile clip tools: test on the unpatched app, then the patch (bumps BUILD)
-node "$ROOT/rb-site-updates/test/daw-plugins.test.mjs" "$W/rb-daw" | tail -1
+# (the test needs the app as it was before the patch; once live has it, the patch re-run is a no-op and is checked below)
+if grep -q "fx-worklet.js" "$W/rb-daw/assets.js"; then echo "rb-daw: plugins already live"; else node "$ROOT/rb-site-updates/test/daw-plugins.test.mjs" "$W/rb-daw" | tail -1; fi
 py "$ROOT/rb-site-updates/patch_daw_plugins.py" "$W/rb-daw"
 py "$ROOT/rb-site-updates/patch_ai_speech.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_ai_image.py" "$W/relentless-billionaire-api"
@@ -40,7 +43,7 @@ py "$ROOT/rb-site-updates/patch_studio_plugins.py" "$W/rb-mastering-studio"
 for s in rb-public-content artist-router rb-radio rb-command; do py "$ROOT/rb-tools/patch_theme_custom.py" "$W/$s"; done
 # rb-command: every patch, in order; each skips what's already there and drops copies an older script added twice
 py "$ROOT/rb-tools/palettes.py" "$W/rb-command"
-for p in patch_rb_command patch_show_planner patch_planner_links patch_analytics patch_rehost patch_nav patch_scheduled patch_signal patch_lux_ui patch_palette_builder patch_video patch_create_upload; do py "$ROOT/rb-command-updates/$p.py" "$W/rb-command"; done
+for p in patch_rb_command patch_show_planner patch_planner_links patch_analytics patch_rehost patch_nav patch_scheduled patch_signal patch_lux_ui patch_palette_builder patch_video patch_create_upload patch_rewards_admin; do py "$ROOT/rb-command-updates/$p.py" "$W/rb-command"; done
 # rb-email: the forwarder replaces Cloudflare's sample
 cp "$ROOT/rb-email/src/index.js" "$W/rb-email/index.js"
 
@@ -50,10 +53,12 @@ node "$T/no-duplicates.mjs" "$W/rb-command"
 node --no-warnings "$T/palettes.mjs" "$W/rb-command/theme.js" | tail -1
 for t in affiliate showplanner analytics rehost scheduled signal; do node --no-warnings "$T/$t.test.mjs" "$W/rb-command"; done
 node "$T/create-upload.test.mjs" "$W/rb-command"
+node --no-warnings "$T/rewards-admin.test.mjs" "$W/rb-command"
 node --no-warnings "$ROOT/rb-surface/test/test.mjs" "$W/artist-router/artist-router-v14.js" --expect-surface
 node --no-warnings "$ROOT/rb-surface/test/fresh.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$ROOT/rb-site-updates/test/post-link.test.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$ROOT/rb-site-updates/test/create.test.mjs" "$W/artist-router/artist-router-v14.js"
+node --no-warnings "$ROOT/rb-site-updates/test/rewards.test.mjs" "$W/artist-router/artist-router-v14.js" | tail -c 120
 node --no-warnings "$ROOT/rb-site-updates/test/ai-limit.test.mjs" "$W/relentless-billionaire-api/script.js"
 node --no-warnings "$ROOT/rb-site-updates/test/radio-tv.test.mjs" "$W/rb-radio" "$W/rb-tv"
 node "$ROOT/rb-site-updates/test/flow.test.mjs" "$W/rb-radio"
