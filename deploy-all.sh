@@ -20,6 +20,9 @@ py "$ROOT/rb-tools/palettes.py" "$W/artist-router"; py "$ROOT/rb-site-updates/pa
 # RB Create at /create; /record and /studio may be framed by their own site; the free AI voice it uses
 py "$ROOT/rb-site-updates/patch_artist_router_create.py" "$W/artist-router"
 for s in rb-daw rb-mastering-studio; do py "$ROOT/rb-site-updates/patch_embed_create.py" "$W/$s"; done
+# /record plugins and mobile clip tools: test on the unpatched app, then the patch (bumps BUILD)
+node "$ROOT/rb-site-updates/test/daw-plugins.test.mjs" "$W/rb-daw" | tail -1
+py "$ROOT/rb-site-updates/patch_daw_plugins.py" "$W/rb-daw"
 py "$ROOT/rb-site-updates/patch_ai_speech.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_ai_image.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_ai_limit.py" "$W/relentless-billionaire-api"
