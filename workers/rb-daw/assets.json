@@ -1,0 +1,22 @@
+[
+  {
+    "name": "main.js",
+    "type": "text/javascript; charset=utf-8"
+  },
+  {
+    "name": "rec-worklet.js",
+    "type": "text/javascript; charset=utf-8"
+  },
+  {
+    "name": "daw.css",
+    "type": "text/css; charset=utf-8"
+  },
+  {
+    "name": "icon.svg",
+    "type": "image/svg+xml"
+  },
+  {
+    "name": "fx-worklet.js",
+    "type": "text/javascript; charset=utf-8"
+  }
+]
