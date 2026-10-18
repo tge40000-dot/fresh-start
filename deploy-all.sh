@@ -12,7 +12,7 @@ W=$(mktemp -d)
 ACCOUNT=0a7be075f32d9d615349825b83ab8fcb
 py() { python3 -I "$@"; }
 
-for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio rb-daw relentless-billionaire-api rb-radio-hub rb-autopilot rb-memberships; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
+for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-memberships; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
 # the AI Forge lives in the RB account
 CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" pull rb-studio "$W/rb-studio"
 # artist-router: colours (no-op once live), post links and the ad slot
@@ -23,17 +23,11 @@ py "$ROOT/rb-site-updates/patch_artist_router_create.py" "$W/artist-router"
 py "$ROOT/rb-site-updates/patch_memberships.py" "$W/rb-memberships"
 # RB Collect (/rewards): ships switched off with draft prizes; the owner turns it on in RB Command > Rewards
 py "$ROOT/rb-site-updates/patch_rewards.py" "$W/artist-router"
-for s in rb-daw rb-mastering-studio; do py "$ROOT/rb-site-updates/patch_embed_create.py" "$W/$s"; done
-# /record plugins and mobile clip tools: test on the unpatched app, then the patch (bumps BUILD)
-# (the test needs the app as it was before the patch; once live has it, the patch re-run is a no-op and is checked below)
-if grep -q "fx-worklet.js" "$W/rb-daw/assets.js"; then echo "rb-daw: plugins already live"; else node "$ROOT/rb-site-updates/test/daw-plugins.test.mjs" "$W/rb-daw" | tail -1; fi
-py "$ROOT/rb-site-updates/patch_daw_plugins.py" "$W/rb-daw"
-# /record and the studio: Stop always clears the recording marker, the mic monitor turns off if recording fails, resizable track area
-node --no-warnings "$ROOT/rb-site-updates/test/daw-record-fix.test.mjs" "$W/rb-daw"
-py "$ROOT/rb-site-updates/patch_daw_record_fix.py" "$W/rb-daw"
-# the studio look: value boxes at the end of every slider (type, arrows, drag, fine Shift-drag, double-click reset), RB type and finish
-node --no-warnings "$ROOT/rb-site-updates/test/daw-luxe.test.mjs" "$W/rb-daw"
-py "$ROOT/rb-site-updates/patch_daw_luxe.py" "$W/rb-daw"
+py "$ROOT/rb-site-updates/patch_embed_create.py" "$W/rb-mastering-studio"
+# RB Studio (rb-daw) is built from workers/rb-daw/src (its source since 18 Oct 2026; the old rb-daw patches are all in it).
+# --check builds it and compares with live: exit 1 just means src/ has changes that are not deployed yet.
+node "$ROOT/workers/rb-daw/test.mjs"
+"$ROOT/workers/rb-daw/deploy.sh" --check || echo "rb-daw: src/ differs from live (deployed below)"
 py "$ROOT/rb-site-updates/patch_ai_speech.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_ai_image.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_ai_limit.py" "$W/relentless-billionaire-api"
@@ -57,7 +51,7 @@ for p in patch_rb_command patch_show_planner patch_planner_links patch_analytics
 # rb-email: the forwarder replaces Cloudflare's sample
 cp "$ROOT/rb-email/src/index.js" "$W/rb-email/index.js"
 
-for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio rb-daw relentless-billionaire-api rb-radio-hub rb-autopilot rb-studio; do for f in "$W/$s"/*.js; do node --check "$f"; done; done
+for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-studio; do for f in "$W/$s"/*.js; do node --check "$f"; done; done
 T="$ROOT/rb-command-updates/test"
 node "$T/no-duplicates.mjs" "$W/rb-command"
 node --no-warnings "$T/palettes.mjs" "$W/rb-command/theme.js" | tail -1
@@ -82,7 +76,7 @@ if [ "${1:-}" != "--deploy" ]; then echo "Checks passed. Patched Workers: $W. Ru
 py "$ROOT/rb-tools/cfworker.py" push rb-public-content "$W/rb-public-content"
 # what /create calls or frames goes first
 py "$ROOT/rb-tools/cfworker.py" push relentless-billionaire-api "$W/relentless-billionaire-api"
-py "$ROOT/rb-tools/cfworker.py" push rb-daw "$W/rb-daw"
+"$ROOT/workers/rb-daw/deploy.sh"
 py "$ROOT/rb-tools/cfworker.py" push rb-mastering-studio "$W/rb-mastering-studio"
 py "$ROOT/rb-tools/cfworker.py" push rb-autopilot "$W/rb-autopilot"
 CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" push rb-studio "$W/rb-studio"
