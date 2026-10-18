@@ -28,6 +28,9 @@ for s in rb-daw rb-mastering-studio; do py "$ROOT/rb-site-updates/patch_embed_cr
 # (the test needs the app as it was before the patch; once live has it, the patch re-run is a no-op and is checked below)
 if grep -q "fx-worklet.js" "$W/rb-daw/assets.js"; then echo "rb-daw: plugins already live"; else node "$ROOT/rb-site-updates/test/daw-plugins.test.mjs" "$W/rb-daw" | tail -1; fi
 py "$ROOT/rb-site-updates/patch_daw_plugins.py" "$W/rb-daw"
+# /record and the studio: Stop always clears the recording marker, the mic monitor turns off if recording fails, resizable track area
+node --no-warnings "$ROOT/rb-site-updates/test/daw-record-fix.test.mjs" "$W/rb-daw"
+py "$ROOT/rb-site-updates/patch_daw_record_fix.py" "$W/rb-daw"
 py "$ROOT/rb-site-updates/patch_ai_speech.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_ai_image.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_ai_limit.py" "$W/relentless-billionaire-api"
