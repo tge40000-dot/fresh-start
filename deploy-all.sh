@@ -34,7 +34,9 @@ py "$ROOT/rb-site-updates/patch_radio.py" "$W/rb-radio"; py "$ROOT/rb-site-updat
 for s in rb-radio rb-radio-hub rb-public-content rb-command artist-router; do py "$ROOT/rb-site-updates/patch_radio_colours.py" "$W/$s"; done
 # AI Forge beats reach the player and RB Radio
 py "$ROOT/rb-site-updates/patch_beat_publish.py" "$W/rb-studio"; py "$ROOT/rb-site-updates/patch_beat_publish.py" "$W/rb-autopilot"
+node --no-warnings "$ROOT/rb-site-updates/test/beat-publish.test.mjs" "$W/rb-autopilot"
 py "$ROOT/rb-site-updates/patch_tv.py" "$W/rb-tv"
+py "$ROOT/rb-site-updates/patch_tv_a11y.py" "$W/rb-tv"
 py "$ROOT/rb-site-updates/patch_studio.py" "$W/rb-mastering-studio"
 # studio plug-ins: the test compares against the unpatched engine (bit-identical when no plug-in is ticked), then the patch
 node "$ROOT/rb-site-updates/test/studio-plugins.test.mjs" "$W/rb-mastering-studio" | tail -1

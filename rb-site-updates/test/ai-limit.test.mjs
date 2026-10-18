@@ -26,6 +26,9 @@ assert.match(r.headers.get("Access-Control-Expose-Headers") || "", /Retry-After/
 const body = await r.json();
 assert.equal(body.error.code, "rate_limited"); assert.match(body.error.message, /Try again in \d+ seconds/);
 assert.equal(aiCalls, 20, "a refused request never reaches the AI");
+const allBefore = DB.raw.prepare("SELECT n FROM rb_ai_usage WHERE k LIKE 'speech:all:%'").get().n;
+for (let i = 0; i < 30; i++) assert.equal((await speak("203.0.113.5")).status, 429);
+assert.equal(DB.raw.prepare("SELECT n FROM rb_ai_usage WHERE k LIKE 'speech:all:%'").get().n, allBefore, "refused requests don't count toward the site-wide cap");
 r = await speak("198.51.100.7");
 assert.equal(r.status, 200, "another visitor isn't affected");
 const rows = DB.raw.prepare("SELECT k FROM rb_ai_usage").all().map((x) => x.k);
@@ -39,4 +42,4 @@ assert.match((await r.json()).error.message, /whole site/);
 const broken = { ...env, DB: { prepare() { throw new Error("D1 down"); }, batch() { throw new Error("D1 down"); } } };
 r = await worker.fetch(new Request("https://media.relentlessbillionaire.com/ai/platform/speech", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://relentlessbillionaire.com", "CF-Connecting-IP": "192.0.2.10" }, body: JSON.stringify({ text: "Hi." }) }), broken, ctx);
 assert.equal(r.status, 200, "requests go through if D1 is unreachable");
-console.log("AI limit ok: 20 a minute then 429 with Retry-After and CORS, AI not called when refused, per visitor, hashed IPs, site-wide cap, fails open");
+console.log("AI limit ok: 20 a minute then 429 with Retry-After and CORS, AI not called when refused, refusals not counted site-wide, per visitor, hashed IPs, site-wide cap, fails open");

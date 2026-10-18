@@ -27,8 +27,8 @@ changed = []
 def patch(p, edits):
     s = p.read_text(encoding="utf-8")
     for old, new, what in edits:
-        if new in s:
-            continue
+        if new in s or (what == "beat to player and radio" and "beat store, music player and RB Radio" in s):
+            continue  # (the beat block may since have been refined by a later edit in this list)
         if s.count(old) != 1:
             raise SystemExit(f"{folder.name}/{p.name}: {what}: anchor found {s.count(old)} times")
         s = s.replace(old, new)
@@ -58,6 +58,37 @@ elif (folder / "creative.js").exists():
          '      if (r.trackId) await env.DB.prepare("UPDATE tracks SET audio_url = ?, cover_url = COALESCE(?, cover_url), artist_name = ?, status = \'live\' WHERE id = ?").bind(audio, cover, artist, r.trackId).run();\n'
          '      where = { place: "beat store, music player and RB Radio", product_id: r.productId, track_id: r.trackId, audio, cover, url: "https://beatstore.relentlessbillionaire.com/", price: r.price };\n',
          "beat to player and radio"),
+        # Claim the idea before publishing, so a double-click or a retry can't publish it twice (a stale claim, e.g. a
+        # crash mid-publish, can be retried after 10 minutes); a failure hands it back as ready.
+        ('  if (idea.status !== "ready") return { error: idea.status === "published" ? "Already published." : "It isn\'t ready to publish yet.", status: 409 };\n',
+         '  if (idea.status !== "ready" && idea.status !== "publishing") return { error: idea.status === "published" ? "Already published." : "It isn\'t ready to publish yet.", status: 409 };\n'
+         '  const stale = new Date(Date.now() - 600000).toISOString().replace(/\\.\\d{3}Z$/, "Z");\n'
+         '  const claim = await env.DB.prepare("UPDATE creative_ideas SET status = \'publishing\', updated_at = ? WHERE id = ? AND (status = \'ready\' OR (status = \'publishing\' AND updated_at < ?))").bind(nowIso(), id, stale).run();\n'
+         '  if (!claim.meta || !claim.meta.changes) return { error: "It\'s already being published. Check again in a minute.", status: 409 };\n'
+         '  const unclaim = () => env.DB.prepare("UPDATE creative_ideas SET status = \'ready\', updated_at = ? WHERE id = ? AND status = \'publishing\'").bind(nowIso(), id).run().catch(() => {});\n',
+         "publish claim"),
+        ('  if (!title || blocked(title, f.description)) return { error: "Add a clean title.", status: 400 };\n  let where;\n',
+         '  if (!title || blocked(title, f.description)) { await unclaim(); return { error: "Add a clean title.", status: 400 }; }\n  let where, listed = null;\n',
+         "publish claim released on a bad title"),
+        ('      if (!(price > 0 && price <= 10000)) return { error: "Set a price between $0.01 and $10,000.", status: 400 };\n',
+         '      if (!(price > 0 && price <= 10000)) { await unclaim(); return { error: "Set a price between $0.01 and $10,000.", status: 400 }; }\n',
+         "publish claim released on a bad price"),
+        ('      if (r.trackId) await env.DB.prepare("UPDATE tracks SET audio_url = ?, cover_url = COALESCE(?, cover_url), artist_name = ?, status = \'live\' WHERE id = ?").bind(audio, cover, artist, r.trackId).run();\n',
+         '      listed = { place: "beat store", product_id: r.productId, track_id: r.trackId, url: "https://beatstore.relentlessbillionaire.com/", price: r.price };\n'
+         '      if (r.trackId) await env.DB.prepare("UPDATE tracks SET audio_url = ?, cover_url = COALESCE(?, cover_url), artist_name = ?, status = \'live\' WHERE id = ?").bind(audio, cover, artist, r.trackId).run();\n',
+         "remember the beat store listing"),
+        ('  } catch (e) { return { error: `Publishing failed: ${clip(e.message, 240).replace(/\\.$/, "")}. Nothing was published.`, status: 502 }; }\n',
+         '  } catch (e) {\n'
+         '    // Listed in the beat store already: record that (so it can\'t be published twice) and say what didn\'t happen.\n'
+         '    if (listed) {\n'
+         '      await env.DB.prepare("UPDATE creative_ideas SET status = \'published\', published = ?, published_by = ?, published_at = ?, title = ?, updated_at = ? WHERE id = ?")\n'
+         '        .bind(JSON.stringify(listed), clip(by, 120), nowIso(), title, nowIso(), id).run().catch(() => {});\n'
+         '      return { error: `Listed in the beat store, but it couldn\'t be added to the music player and RB Radio (${clip(e.message, 200).replace(/\\.$/, "")}). Set its track to Live in Player.`, status: 502 };\n'
+         '    }\n'
+         '    await unclaim();\n'
+         '    return { error: `Publishing failed: ${clip(e.message, 240).replace(/\\.$/, "")}. Nothing was published.`, status: 502 };\n'
+         '  }\n',
+         "honest partial-failure message"),
     ])
 else:
     raise SystemExit(f"{folder.name}: not rb-studio or rb-autopilot")

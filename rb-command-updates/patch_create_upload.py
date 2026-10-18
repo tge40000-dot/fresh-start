@@ -57,10 +57,17 @@ QUICK = r'''  // ---------- Create: quick song upload to the music player and RB
       $("qup-go").hidden = !files.length;
     };
     var add = function(fl){
+      var skipped = 0;
       Array.prototype.forEach.call(fl || [], function(file){
-        if (!/^audio\//.test(file.type) && !/\.(mp3|wav|m4a|aac|flac)$/i.test(file.name)) return;
+        // Send a type /api/upload accepts: browsers report some audio types oddly (or not at all), so go by extension.
+        var ok = { "audio/mpeg": 1, "audio/mp3": 1, "audio/wav": 1, "audio/x-wav": 1, "audio/wave": 1, "audio/aac": 1, "audio/mp4": 1, "audio/x-m4a": 1, "audio/flac": 1 };
+        var byExt = { mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", aac: "audio/aac", flac: "audio/flac" };
+        var ext = (String(file.name).split(".").pop() || "").toLowerCase(), type = ok[file.type] ? file.type : byExt[ext];
+        if (!type) { skipped++; return; }
+        if (type !== file.type) file = new File([file], file.name, { type: type });
         var g = guess(file.name); files.push({ file: file, title: g.title || "Untitled", artist: g.artist || "Relentless Billionaire" });
       });
+      if (skipped) toast(skipped + " file" + (skipped === 1 ? " isn't" : "s aren't") + " MP3, WAV, M4A, AAC or FLAC, so " + (skipped === 1 ? "it was" : "they were") + " left out");
       draw();
     };
     $("qup-files").onchange = function(e){ add(e.target.files); e.target.value = ""; };
@@ -77,8 +84,12 @@ QUICK = r'''  // ---------- Create: quick song upload to the music player and RB
       b.disabled = true;
       var coverUrl = null, order = 0;
       var start = cover ? uploadFile(cover, "tracks").then(function(r){ coverUrl = r.url; }) : Promise.resolve();
-      start.then(function(){ return api("t/tracks?limit=500").catch(function(){ return { rows: [] }; }); }).then(function(d){
+      // The highest player order across every track (the list comes 200 at a time), so new songs go to the end.
+      var page = function(off){ return api("t/tracks?limit=200&offset=" + off).then(function(d){
         (d.rows || []).forEach(function(r){ var n = Number(r.sort_order); if (n > order) order = n; });
+        return off + 200 < (Number(d.total) || 0) ? page(off + 200) : d;
+      }); };
+      start.then(function(){ return page(0); }).then(function(){
         var i = 0;
         var next = function(){
           if (i >= todo.length) return Promise.resolve();
@@ -100,8 +111,14 @@ QUICK = r'''  // ---------- Create: quick song upload to the music player and RB
   }
 '''
 
+START = "  // ---------- Create: quick song upload to the music player and RB Radio\n"
+KIND_NEW = '  var KIND_DEST = { beat: "the beat store, music player and RB Radio", song: "the music player", video: "RB TV" };\n'
+if START in s:  # an earlier version is in place: replace it with this one
+    a = s.index(START); b = s.index(KIND_NEW, a)
+    if s[a:b] != QUICK:
+        s = s[:a] + QUICK + s[b:]; changed.append("quick upload updated")
 rep('  var KIND_DEST = { beat: "the beat store", song: "the music player", video: "RB TV" };\n',
-    QUICK + '  var KIND_DEST = { beat: "the beat store, music player and RB Radio", song: "the music player", video: "RB TV" };\n', "quick upload + beat destination")
+    QUICK + KIND_NEW, "quick upload + beat destination")
 rep("""        '<section><div class="toolbar"><div class="chips">' + CREATE_TABS.map""",
     """        (CAPS.groups.Content === "edit" ? quickUploadHtml() : "") +
         '<section><div class="toolbar"><div class="chips">' + CREATE_TABS.map""", "quick upload panel")

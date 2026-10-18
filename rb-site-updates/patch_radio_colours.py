@@ -7,7 +7,8 @@ Usage: python3 -I patch_radio_colours.py <pulled worker dir>
   rb-radio: the radio bar repaints when any colour of the palette changes, not only when its name changes (editing a
       custom palette keeps its name). RB Flow's colours come from rb-site-updates/src/rb-flow.js (run patch_radio_flow.py).
   rb-radio-hub: the call-in page, the friend pages and the hub console load the site's RB Radio colours
-      (/api/content/theme.css?site=radio); the friend page's CSP allows that one same-site stylesheet.
+      (/api/content/theme.css?site=radio); the friend page's CSP allows that one same-site stylesheet, and the hub
+      pages allow same-site fonts (Cloudflare Fonts serves them from /cf-fonts/).
 Running it twice changes nothing.
 """
 import json
@@ -60,9 +61,16 @@ if assets.exists() and "export const CALL_HTML" in assets.read_text(encoding="ut
     assets.write_text(a, encoding="utf-8")
     fr = folder / "friends.js"
     s = fr.read_text(encoding="utf-8")
-    s = rep(s, "style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src https: data:; connect-src 'self';",
+    if "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com" not in s:
+      s = rep(s, "style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src https: data:; connect-src 'self';",
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src https: data:; connect-src 'self';",
             "friend page CSP", "friends.js")
+    # Cloudflare Fonts rewrites the Google Fonts link to same-site /cf-fonts/ files, which font-src didn't allow.
+    s = rep(s, "font-src https://fonts.gstatic.com; img-src https: data:;", "font-src 'self' https://fonts.gstatic.com; img-src https: data:;", "friend page fonts", "friends.js")
     fr.write_text(s, encoding="utf-8")
+    hx = folder / "index.js"
+    h = hx.read_text(encoding="utf-8")
+    h = rep(h, '  "font-src https://fonts.gstatic.com", "manifest-src \'self\'",', '  "font-src \'self\' https://fonts.gstatic.com", "manifest-src \'self\'",', "hub page fonts", "index.js")
+    hx.write_text(h, encoding="utf-8")
 
 print(f"{folder.name}: " + (", ".join(changed) + " updated" if changed else "radio colours already in place"))

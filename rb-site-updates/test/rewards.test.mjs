@@ -144,7 +144,7 @@ sql("UPDATE reward_config SET value='on' WHERE key='enabled'");
 sql("UPDATE reward_prizes SET status='live', quantity=1, remaining=1, name='2 tickets to the RB show' WHERE set_key='front_row'");
 sql("UPDATE reward_prizes SET status='live', quantity=0, remaining=0 WHERE set_key='camera_ready'"); // live but none left: never drawn
 sql("INSERT INTO signups (email, name) VALUES ('alice@example.com', 'Alice')");
-sql("INSERT INTO shop_inquiries (name, email, options) VALUES ('A', 'alice@example.com', 'membership:waitlist:starting'), ('A', 'alice@example.com', 'membership:apply:starting'), ('A', 'ALICE@example.com', 'membership:apply:coach'), ('A', 'alice@example.com', 'beat:wav')");
+sql("INSERT INTO shop_inquiries (name, email, options) VALUES ('A', 'alice@example.com', 'membership:waitlist:just-starting'), ('A', 'alice@example.com', 'membership:apply:just-starting'), ('A', 'ALICE@example.com', 'membership:apply:coach'), ('A', 'alice@example.com', 'membership:x:t1'), ('A', 'alice@example.com', 'membership:apply:made-up-tier'), ('A', 'alice@example.com', 'beat:wav')");
 sql("INSERT INTO store_orders (stripe_session_id, customer_email, amount_total, payment_status, status) VALUES ('cs_1', 'alice@example.com', 3500, 'paid', 'paid'), ('cs_2', 'alice@example.com', 9000, 'paid', 'refunded'), ('cs_3', 'alice@example.com', 50000, 'paid', 'fulfilled')");
 sql("INSERT INTO studio_memberships (clerk_user_id, tier_key, status) VALUES ('u_alice', 'artist', 'active')");
 DONOR_DB.raw.exec("INSERT INTO contributions (stripe_event_id, email, event_type, amount_total, payment_status, occurred_at) VALUES ('evt_a', 'alice@example.com', 'checkout.session.completed', 1200, 'paid', 'x'), ('evt_b', 'alice@example.com', 'invoice.paid', 50000, 'paid', 'x'), ('evt_c', 'alice@example.com', 'invoice.payment_failed', 5000, 'unpaid', 'x')");
@@ -159,7 +159,7 @@ const EXPECT = 3 + 1 + 2 + 10 + 3 + 20 + 4 + 40 + 2;
   const a1 = await me("u_alice");
   assert.equal(a1.body.added, EXPECT); assert.equal(a1.body.plays, EXPECT);
   for (let i = 0; i < 3; i++) { const again = await me("u_alice"); assert.equal(again.body.added, 0); assert.equal(again.body.plays, EXPECT); }
-  assert.equal(one("SELECT count(*) n FROM reward_awards WHERE source='membership'").n, 2, "one award per membership tier");
+  assert.equal(one("SELECT count(*) n FROM reward_awards WHERE source='membership'").n, 2, "one award per real membership tier; made-up tiers and mismatched request types earn nothing");
   assert.equal(one("SELECT count(*) n FROM reward_awards WHERE source='order'").n, 2, "refunded order not counted");
   assert.equal(one("SELECT count(*) n FROM reward_awards WHERE source='contribution'").n, 2, "unpaid contribution not counted");
   // daily play once per day; the next Pacific day gives it again (plus the member daily plays)

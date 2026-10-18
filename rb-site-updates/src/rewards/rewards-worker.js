@@ -206,6 +206,10 @@ async function rbcPlayer(request, env) {
   throw Object.assign(new Error("Your player could not be set up. Try again."), { status: 503 });
 }
 
+// The membership requests rb-memberships records (options column) and the tier each one is.
+const RBC_TIERS = { "membership:free:passport": "passport", "membership:waitlist:just-starting": "just-starting", "membership:apply:coach": "coach",
+  "membership:apply:business-starter": "business-starter", "membership:apply:business-pro": "business-pro", "membership:apply:business-elite": "business-elite" };
+
 // ---------------------------------------------------------------- awards (pull model; every award has a unique source_ref)
 async function rbcSync(env, g, p) {
   if (g.status !== "live") return 0;
@@ -218,9 +222,11 @@ async function rbcSync(env, g, p) {
   if (email) {
     if (a.signup > 0 && await tryRead(() => env.DB.prepare("SELECT id FROM signups WHERE lower(trim(email)) = ? LIMIT 1").bind(email).first())) add("signup", `signup:${email}`, a.signup);
     const inq = await tryRead(() => env.DB.prepare("SELECT DISTINCT options FROM shop_inquiries WHERE lower(trim(email)) = ? AND options LIKE 'membership:%'").bind(email).all());
+    // Only the real /memberships tiers count (rb-memberships saves exactly these), so made-up tiers sent to the public
+    // inquiry endpoint can't mint plays: at most one award per tier, six tiers in all.
     for (const r of inq?.results || []) {
-      const tier = String(r.options).split(":")[2];
-      if (tier && /^[a-z0-9_-]{1,40}$/i.test(tier)) add("membership", `membership:${tier.toLowerCase()}:${email}`, a.membership);
+      const tier = RBC_TIERS[String(r.options || "").toLowerCase()];
+      if (tier) add("membership", `membership:${tier}:${email}`, a.membership);
     }
     const orders = await tryRead(() => env.DB.prepare("SELECT id, amount_total FROM store_orders WHERE lower(trim(customer_email)) = ? AND coalesce(payment_status, 'paid') = 'paid' AND coalesce(status, 'paid') IN ('paid', 'fulfilled') AND amount_total > 0 LIMIT 500").bind(email).all());
     for (const r of orders?.results || []) add("order", `order:${r.id}`, Math.min(a.orderCap, Math.floor(Number(r.amount_total) / 1000) * a.per10));
