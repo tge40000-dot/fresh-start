@@ -30,7 +30,7 @@ for (const want of [
   'if(R("transport"),R("lanes"),!e)',
   'g.setMonitor(null),r.recordingClip=null,R("lanes");',
   "async function yt(t){g.recording&&await bt(),",
-  'function qa(){rbSplit(),k("#t-play")',
+  "function qa(){rbSplit(),",
   "function rbSplit()",
 ]) assert.equal(main.split(want).length - 1, 1, "once in main.js: " + want);
 assert.ok(css.includes("body.rb-has-split .panel{height:var(--rb-panel-h,300px)}") && css.includes(".rb-split{"));

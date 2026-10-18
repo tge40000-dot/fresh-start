@@ -1,0 +1,115 @@
+/* RB Studio luxe (patch_daw_luxe.py): the Relentless Billionaire editorial look on the same layout.
+   Every colour comes from the site palette variables (--bg, --panel, --gold, ...), so RB Command's palettes still apply. */
+:root{--rb-serif:"Bodoni Moda",Didot,"Bodoni 72",Georgia,serif;--rb-sans:Manrope,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --rb-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;--rb-hair:color-mix(in srgb,var(--gold) 16%,var(--line));
+  --rb-glow:color-mix(in srgb,var(--gold) 22%,transparent);--rb-lift:inset 0 1px 0 rgba(255,255,255,.035)}
+body{font-family:var(--rb-sans);font-size:13px;letter-spacing:.005em;background:radial-gradient(1200px 520px at 70% -12%,color-mix(in srgb,var(--gold) 7%,transparent),transparent 62%),var(--bg)}
+::selection{background:color-mix(in srgb,var(--gold) 35%,transparent)}
+
+/* header: monogram, house name, song title in the house serif */
+.top{background:linear-gradient(180deg,var(--bg2),color-mix(in srgb,var(--bg2) 70%,var(--bg)));border-bottom:1px solid var(--rb-hair);padding:9px 16px;gap:14px;position:relative}
+.top::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--gold) 55%,transparent),transparent);pointer-events:none}
+.mark{width:32px;height:32px;border-radius:50%;background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--gold2) 30%,var(--bg2)),var(--bg));color:var(--gold2);border:1px solid color-mix(in srgb,var(--gold) 70%,transparent);font:600 13px/1 var(--rb-serif);letter-spacing:.02em;box-shadow:0 0 0 3px var(--rb-glow)}
+.word{font:600 10.5px/1 var(--rb-sans);letter-spacing:.38em;color:var(--muted)}
+.song{font:italic 500 19px/1.1 var(--rb-serif);letter-spacing:.01em;padding:4px 10px;width:min(320px,32vw)}
+.save-state{font-size:11px;letter-spacing:.04em}
+.site a{font-size:11.5px;letter-spacing:.06em}
+
+/* buttons: pills with hairlines, small caps labels */
+.btn{border-radius:999px;border:1px solid var(--rb-hair);background:color-mix(in srgb,var(--panel2) 80%,transparent);font:600 11px/1 var(--rb-sans);letter-spacing:.1em;text-transform:uppercase;padding:9px 16px;box-shadow:var(--rb-lift);transition:border-color .15s,box-shadow .15s,color .15s}
+.btn:hover{border-color:var(--gold);color:var(--gold2);box-shadow:0 0 0 3px var(--rb-glow)}
+.btn.gold{background:linear-gradient(180deg,var(--gold2),var(--gold));color:var(--bg);border:0;box-shadow:0 6px 18px -8px var(--gold)}
+.btn.gold:hover{color:var(--bg);filter:brightness(1.05)}
+.btn.small{padding:6px 11px;font-size:10.5px}
+
+/* transport: a console row with a glass position display */
+.transport{background:linear-gradient(180deg,var(--panel),color-mix(in srgb,var(--panel) 75%,var(--bg)));border-bottom:1px solid var(--rb-hair);padding:8px 16px;gap:8px 16px}
+.grp label{font-size:9.5px;letter-spacing:.18em;color:var(--dim)}
+.ib{height:32px;min-width:34px;border-radius:10px;border:1px solid var(--rb-hair);background:color-mix(in srgb,var(--panel2) 85%,transparent);box-shadow:var(--rb-lift);transition:border-color .15s,box-shadow .15s}
+.ib:hover{border-color:var(--gold);box-shadow:0 0 0 3px var(--rb-glow)}
+.ib.play{min-width:40px;border-color:color-mix(in srgb,var(--gold) 55%,transparent);color:var(--gold2)}
+.ib.play[aria-pressed=true]{background:linear-gradient(180deg,var(--gold2),var(--gold));color:var(--bg);box-shadow:0 0 0 3px var(--rb-glow)}
+.tg{height:32px;border-radius:999px;border:1px solid var(--rb-hair);font:600 10.5px/1 var(--rb-sans);letter-spacing:.12em;text-transform:uppercase;padding:0 13px}
+.tg[aria-pressed=true]{background:color-mix(in srgb,var(--gold) 12%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gold) 40%,transparent)}
+.lcd{font:500 15px/1 var(--rb-mono);background:linear-gradient(180deg,#000,color-mix(in srgb,var(--bg) 60%,#000));border:1px solid var(--rb-hair);border-radius:12px;padding:8px 14px;gap:14px;box-shadow:inset 0 1px 6px rgba(0,0,0,.7),0 1px 0 rgba(255,255,255,.04);letter-spacing:.02em}
+.lcd #pos-bar{color:var(--gold2);text-shadow:0 0 12px var(--rb-glow)}
+.lcd #pos-time{font-size:12.5px}
+#bpm{font:500 13px/1 var(--rb-mono);text-align:center;width:62px;border-radius:8px;border-color:var(--rb-hair);padding:6px}
+select{border-radius:8px;border-color:var(--rb-hair);padding:5px 8px}
+
+/* meters: fine segments, green to gold to red */
+.meter{border-radius:2px;border-color:var(--rb-hair);background:#000}
+.meter i{background:linear-gradient(90deg,var(--ok) 0,var(--ok) 66%,var(--gold) 84%,var(--rec) 100%);-webkit-mask:repeating-linear-gradient(90deg,#000 0 3px,transparent 3px 4px);mask:repeating-linear-gradient(90deg,#000 0 3px,transparent 3px 4px)}
+
+/* arrangement */
+.rulerrow,.corner{background:color-mix(in srgb,var(--bg2) 85%,#000)}
+.corner{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+.row{border-bottom-color:color-mix(in srgb,var(--line) 70%,transparent)}
+.head{background:linear-gradient(90deg,var(--panel),color-mix(in srgb,var(--panel) 80%,var(--bg)));border-right-color:var(--rb-hair);grid-template-columns:3px 1fr}
+.head .stripe{box-shadow:0 0 10px var(--c)}
+.head .in{padding:4px 10px;gap:3px}
+.head .name{font:600 13px/1.2 var(--rb-sans);letter-spacing:.01em}
+.kind{font-size:9px;letter-spacing:.2em}
+.mini{height:20px;min-width:22px;border-radius:999px;border-color:var(--rb-hair);font:700 10px/1 var(--rb-sans);letter-spacing:.04em}
+.row.sel .head{background:linear-gradient(90deg,color-mix(in srgb,var(--gold) 8%,var(--panel2)),var(--panel2))}
+.clip{border-radius:8px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 2px 8px -4px rgba(0,0,0,.8)}
+.clip .cn{font:600 10.5px/1.3 var(--rb-sans);letter-spacing:.02em}
+.playhead{width:1px;box-shadow:0 0 8px var(--gold2)}
+.addrow .btn{border-style:dashed}
+.clip{background:color-mix(in srgb,var(--c) 24%,var(--panel))}
+.steps .st{background:color-mix(in srgb,var(--bg) 70%,#000);border-color:var(--rb-hair)}
+.steps .st.beat:not([data-v="1"]):not(.soft){background:var(--panel2)}
+.steps .st.soft{background:color-mix(in srgb,var(--c,var(--pink)) 50%,var(--bg))}
+.steps .vn{border-color:var(--rb-hair);border-radius:999px;padding:3px 10px}
+
+/* bottom panel */
+.panel{background:linear-gradient(180deg,color-mix(in srgb,var(--panel) 92%,var(--gold) 0%),var(--panel))}
+.tabs{border-bottom-color:var(--rb-hair);gap:6px;padding:0 12px}
+.tabs button{font:600 10.5px/1 var(--rb-sans);letter-spacing:.16em;text-transform:uppercase;padding:12px 10px;border-bottom-width:1px}
+.tabs button[aria-selected=true]{box-shadow:inset 0 -1px 0 var(--gold)}
+.ph h3,.tune h4{font:italic 500 17px/1.2 var(--rb-serif);letter-spacing:.01em}
+
+/* mixer: even channel strips, label / control / value */
+.mixer{gap:10px}
+.strip,.strip:has(details.plug[open]){width:216px;border-radius:14px;border-color:var(--rb-hair);background:linear-gradient(180deg,color-mix(in srgb,var(--panel2) 95%,#fff 0%),color-mix(in srgb,var(--panel2) 70%,var(--bg)));padding:10px 10px 12px;gap:6px;box-shadow:var(--rb-lift)}
+.strip h4{font:italic 500 15px/1.2 var(--rb-serif);border-left-width:2px;padding-left:7px;margin-bottom:2px}
+.strip label{grid-template-columns:44px minmax(0,1fr) 66px;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;gap:6px}
+.strip label:has(select){grid-template-columns:44px minmax(0,1fr)}
+.strip label:has(input[type=number]){grid-template-columns:auto minmax(0,1fr)}
+.strip label:has(input[type=number]) input{font:500 11px/1 var(--rb-mono);background:#000;border:1px solid var(--rb-hair);border-radius:6px;padding:4px 6px;color:var(--gold2);width:100%}
+.strip.master{border-color:color-mix(in srgb,var(--gold) 55%,transparent);box-shadow:0 0 0 3px var(--rb-glow),var(--rb-lift)}
+
+/* sliders: hairline track that fills from zero (from centre for pan and EQ), a jewel thumb */
+input.rb-r{-webkit-appearance:none;appearance:none;background:transparent;height:18px;margin:0;cursor:pointer;min-width:0}
+input.rb-r::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:linear-gradient(90deg,var(--line2) var(--a,0%),var(--gold) var(--a,0%),var(--gold) var(--b,0%),var(--line2) var(--b,0%))}
+input.rb-r::-moz-range-track{height:3px;border-radius:2px;background:linear-gradient(90deg,var(--line2) var(--a,0%),var(--gold) var(--a,0%),var(--gold) var(--b,0%),var(--line2) var(--b,0%))}
+input.rb-r::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;margin-top:-5px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#fff,var(--text) 45%,color-mix(in srgb,var(--text) 70%,var(--bg)));border:2px solid var(--gold);box-shadow:0 0 0 3px var(--rb-glow),0 2px 4px rgba(0,0,0,.6)}
+input.rb-r::-moz-range-thumb{width:10px;height:10px;border-radius:50%;background:var(--text);border:2px solid var(--gold);box-shadow:0 0 0 3px var(--rb-glow)}
+input.rb-r:focus-visible{outline:none}
+input.rb-r:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 5px color-mix(in srgb,var(--gold) 45%,transparent)}
+input.rb-r:active::-webkit-slider-thumb{transform:scale(1.12)}
+
+/* the value at the end of each control */
+.rb-val{width:66px;min-width:0;height:21px;padding:0 6px;border-radius:6px;border:1px solid var(--rb-hair);background:#000;color:var(--gold2);font:500 11px/1 var(--rb-mono);text-align:right;letter-spacing:0;font-variant-numeric:tabular-nums;cursor:ns-resize;box-shadow:inset 0 1px 3px rgba(0,0,0,.8)}
+.rb-val:hover{border-color:color-mix(in srgb,var(--gold) 60%,transparent)}
+.rb-val:focus{cursor:text;border-color:var(--gold);outline:none;box-shadow:0 0 0 3px var(--rb-glow)}
+body.rb-scrub,body.rb-scrub *{cursor:ns-resize!important;user-select:none}
+.head .vol{display:grid;grid-template-columns:minmax(0,1fr) 66px 34px;gap:6px;align-items:center}
+.head .vol .rb-val{height:19px}
+.head .vol input.rb-r{height:16px}
+.head .vol .meter{width:34px}
+.plgm label{grid-template-columns:44px minmax(0,1fr) 66px}
+
+/* status line */
+.status{font-size:11px;letter-spacing:.04em;border-top:1px solid var(--rb-hair)}
+
+@media (max-width:560px){
+  .song{font-size:15px;flex:1 1 auto;min-width:72px;width:auto;padding:4px 6px}
+  .top{gap:8px;padding:8px 10px}
+  .head .in{padding:4px 6px}
+  .head .vol{grid-template-columns:minmax(0,1fr) 56px;gap:3px}
+  .head .vol .meter{display:none}
+  .head .vol .rb-val{width:56px;font-size:10px;padding:0 3px;letter-spacing:-.02em}
+}
+@media (pointer:coarse){.strip .rb-val,.plgm .rb-val{height:28px;font-size:12px}.strip input.rb-r{height:26px}}
+@media (prefers-reduced-motion:reduce){.btn,.ib{transition:none}}

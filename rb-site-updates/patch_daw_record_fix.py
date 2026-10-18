@@ -126,8 +126,8 @@ main, done = edits(main, [
      "async function yt(t){mt&&(",
      "async function yt(t){g.recording&&await bt(),mt&&("),
     ("resizer wiring",
-     'function qa(){k("#t-play")',
-     'function qa(){rbSplit(),k("#t-play")'),
+     "function qa(){",
+     "function qa(){rbSplit(),"),
 ], "main.js")
 log += done
 if BEGIN in css:

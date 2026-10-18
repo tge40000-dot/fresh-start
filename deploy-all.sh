@@ -31,6 +31,9 @@ py "$ROOT/rb-site-updates/patch_daw_plugins.py" "$W/rb-daw"
 # /record and the studio: Stop always clears the recording marker, the mic monitor turns off if recording fails, resizable track area
 node --no-warnings "$ROOT/rb-site-updates/test/daw-record-fix.test.mjs" "$W/rb-daw"
 py "$ROOT/rb-site-updates/patch_daw_record_fix.py" "$W/rb-daw"
+# the studio look: value boxes at the end of every slider (type, arrows, drag, fine Shift-drag, double-click reset), RB type and finish
+node --no-warnings "$ROOT/rb-site-updates/test/daw-luxe.test.mjs" "$W/rb-daw"
+py "$ROOT/rb-site-updates/patch_daw_luxe.py" "$W/rb-daw"
 py "$ROOT/rb-site-updates/patch_ai_speech.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_ai_image.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_ai_limit.py" "$W/relentless-billionaire-api"
