@@ -19,6 +19,8 @@ CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" p
 py "$ROOT/rb-tools/palettes.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_artist_router.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_home_status.py" "$W/artist-router"
 # RB Create at /create; /record and /studio may be framed by their own site; the free AI voice it uses
 py "$ROOT/rb-site-updates/patch_artist_router_create.py" "$W/artist-router"
+# next steps after a beat purchase (record, master, release); /advertise media kit; the RB list with interests
+py "$ROOT/rb-site-updates/patch_next_steps.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_advertise.py" "$W/artist-router"
 # /memberships: free houses, three ways in, what each plan includes; business plans on their own page
 py "$ROOT/rb-site-updates/patch_memberships.py" "$W/rb-memberships"
 # RB Collect (/rewards): ships switched off with draft prizes; the owner turns it on in RB Command > Rewards
@@ -43,11 +45,13 @@ py "$ROOT/rb-site-updates/patch_studio.py" "$W/rb-mastering-studio"
 # studio plug-ins: the test compares against the unpatched engine (bit-identical when no plug-in is ticked), then the patch
 node "$ROOT/rb-site-updates/test/studio-plugins.test.mjs" "$W/rb-mastering-studio" | tail -1
 py "$ROOT/rb-site-updates/patch_studio_plugins.py" "$W/rb-mastering-studio"
+# after a mastered download: "Next: release it"
+py "$ROOT/rb-site-updates/patch_next_steps.py" "$W/rb-mastering-studio"
 # custom palettes from the builder: every copy of theme.js learns them (consumers are deployed before rb-command)
 for s in rb-public-content artist-router rb-radio rb-command; do py "$ROOT/rb-tools/patch_theme_custom.py" "$W/$s"; done
 # rb-command: every patch, in order; each skips what's already there and drops copies an older script added twice
 py "$ROOT/rb-tools/palettes.py" "$W/rb-command"
-for p in patch_rb_command patch_show_planner patch_planner_links patch_analytics patch_rehost patch_nav patch_scheduled patch_signal patch_lux_ui patch_palette_builder patch_video patch_create_upload patch_rewards_admin; do py "$ROOT/rb-command-updates/$p.py" "$W/rb-command"; done
+for p in patch_rb_command patch_show_planner patch_planner_links patch_analytics patch_rehost patch_nav patch_scheduled patch_signal patch_lux_ui patch_palette_builder patch_video patch_create_upload patch_rewards_admin patch_media_kit; do py "$ROOT/rb-command-updates/$p.py" "$W/rb-command"; done
 # rb-email: the forwarder replaces Cloudflare's sample
 cp "$ROOT/rb-email/src/index.js" "$W/rb-email/index.js"
 
@@ -70,6 +74,7 @@ node "$ROOT/rb-site-updates/test/studio.test.mjs" "$W/rb-mastering-studio"
 node "$ROOT/rb-tools/test/custom-palettes.mjs" "$W/rb-command" "$W/rb-public-content" "$W/rb-radio" "$W/artist-router"
 node "$ROOT/rb-email/test/test.mjs"
 node --no-warnings "$ROOT/rb-site-updates/test/memberships.test.mjs" "$W/rb-memberships/index.js"
+node --no-warnings "$ROOT/rb-site-updates/test/advertise.test.mjs" "$W/artist-router/artist-router-v14.js" "$W/rb-command"
 
 if [ "${1:-}" != "--deploy" ]; then echo "Checks passed. Patched Workers: $W. Run with --deploy to upload them."; exit 0; fi
 

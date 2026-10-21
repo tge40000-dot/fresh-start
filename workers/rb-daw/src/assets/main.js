@@ -2315,8 +2315,9 @@ var g = new _t(),
 function R(t = "all") {
   for (let e of r.renderers) e(t);
 }
-function w(t, e = "") {
-  (r.status = t), (r.statusKind = e), R("status");
+// Status line; `link` ({ href, text }) adds a next-step link after the message, e.g. "Master it" after an export.
+function w(t, e = "", link = null) {
+  (r.status = t), (r.statusKind = e), (r.statusLink = link), R("status");
 }
 var mt = null,
   ye = null;
@@ -2881,10 +2882,10 @@ async function ae() {
   return (
     (r.lastExport = { blob: e, seconds: t.duration }),
     an(e, `${Qt(r.p.name)}.wav`),
-    w(
-      `Exported ${Qt(r.p.name)}.wav (${t.duration.toFixed(1)} s). Master it at relentlessbillionaire.com/studio.`,
-      "ok",
-    ),
+    w(`Exported ${Qt(r.p.name)}.wav (${t.duration.toFixed(1)} s).`, "ok", {
+      href: "https://relentlessbillionaire.com/studio/",
+      text: "Next: master it \u2192",
+    }),
     t
   );
 }
@@ -2895,7 +2896,10 @@ async function on() {
     let e = await Xt(r.p, g.buffers, { only: t.id, sampleRate: g.ctx ? g.ctx.sampleRate : 48e3 });
     an(lt(e), `${Qt(r.p.name)}-${Qt(t.name)}.wav`);
   }
-  w("Stems exported, one WAV per track.", "ok");
+  w("Stems exported, one WAV per track.", "ok", {
+    href: "https://relentlessbillionaire.com/studio/",
+    text: "Next: master your mix \u2192",
+  });
 }
 var Dt = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--head")) || 236,
   wt = (t, e) => {
@@ -4730,6 +4734,8 @@ var Le = null,
 function Tn() {
   let t = k("#status");
   (t.textContent = r.status || "Ready."), (t.className = "status" + (r.statusKind ? " " + r.statusKind : ""));
+  let e = r.statusLink;
+  e && t.append(" ", l("a", { class: "status-next", href: e.href, target: "_top", text: e.text }));
 }
 function An() {
   k("#save-state").textContent = r.saving || "";

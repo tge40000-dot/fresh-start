@@ -822,6 +822,12 @@ select {
 .status.rec {
   color: var(--rec);
 }
+.status-next {
+  color: var(--gold);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .noscript {
   padding: 20px;
 }
