@@ -22,7 +22,11 @@ changed = []
 def edit(name, old, new, what):
     p = folder / name
     s = p.read_text(encoding="utf-8")
-    if new in s:
+    # Done already, even if another patch has since added its own block at the same anchor: look for the first
+    # line this edit adds.
+    added = new.replace(old, "", 1) if old in new else new
+    first = next((ln for ln in added.split("\n") if ln.strip()), "")
+    if new in s or (len(first.strip()) > 20 and first in s):
         return
     if s.count(old) != 1:
         raise SystemExit(f"rb-command/{name}: {what}: anchor found {s.count(old)} times")
