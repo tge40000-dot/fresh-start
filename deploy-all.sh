@@ -12,7 +12,7 @@ W=$(mktemp -d)
 ACCOUNT=0a7be075f32d9d615349825b83ab8fcb
 py() { python3 -I "$@"; }
 
-for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-memberships; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
+for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-memberships rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
 # the AI Forge lives in the RB account
 CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" pull rb-studio "$W/rb-studio"
 # artist-router: colours (no-op once live), post links and the ad slot
@@ -51,11 +51,16 @@ py "$ROOT/rb-site-updates/patch_next_steps.py" "$W/rb-mastering-studio"
 for s in rb-public-content artist-router rb-radio rb-command; do py "$ROOT/rb-tools/patch_theme_custom.py" "$W/$s"; done
 # rb-command: every patch, in order; each skips what's already there and drops copies an older script added twice
 py "$ROOT/rb-tools/palettes.py" "$W/rb-command"
-for p in patch_rb_command patch_show_planner patch_planner_links patch_analytics patch_rehost patch_nav patch_scheduled patch_signal patch_lux_ui patch_palette_builder patch_video patch_create_upload patch_rewards_admin patch_media_kit; do py "$ROOT/rb-command-updates/$p.py" "$W/rb-command"; done
+for p in patch_rb_command patch_show_planner patch_planner_links patch_analytics patch_rehost patch_nav patch_scheduled patch_signal patch_lux_ui patch_palette_builder patch_video patch_create_upload patch_rewards_admin patch_media_kit patch_cover; do py "$ROOT/rb-command-updates/$p.py" "$W/rb-command"; done
+# /release: no "flat" wording, only claims the license terms back up
+py "$ROOT/rb-site-updates/patch_release_copy.py" "$W/rb-release"
+# one bold RB icon on every site (the files are served by artist-router at /brand/* and rb-favicon at /favicon.ico)
+ICON_SITES="artist-router rb-favicon rb-radio rb-radio-hub rb-tv rb-mastering-studio beatstore rb-release rb-events-page rb-jobs rb-memberships rb-fund-campaign relentless-hub rb-command rb-partners"
+for s in $ICON_SITES; do py "$ROOT/rb-tools/patch_icons.py" "$W/$s"; done
 # rb-email: the forwarder replaces Cloudflare's sample
 cp "$ROOT/rb-email/src/index.js" "$W/rb-email/index.js"
 
-for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-studio; do for f in "$W/$s"/*.js; do node --check "$f"; done; done
+for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-studio rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners; do for f in "$W/$s"/*.js; do node --check "$f"; done; done
 T="$ROOT/rb-command-updates/test"
 node "$T/no-duplicates.mjs" "$W/rb-command"
 node --no-warnings "$T/palettes.mjs" "$W/rb-command/theme.js" | tail -1
@@ -75,6 +80,8 @@ node "$ROOT/rb-tools/test/custom-palettes.mjs" "$W/rb-command" "$W/rb-public-con
 node "$ROOT/rb-email/test/test.mjs"
 node --no-warnings "$ROOT/rb-site-updates/test/memberships.test.mjs" "$W/rb-memberships/index.js"
 node --no-warnings "$ROOT/rb-site-updates/test/advertise.test.mjs" "$W/artist-router/artist-router-v14.js" "$W/rb-command"
+node --no-warnings "$T/cover.test.mjs" "$W/rb-command"
+node "$ROOT/rb-site-updates/test/icons-copy.test.mjs" "$W/rb-release" $(for s in $ICON_SITES; do [ "$s" = rb-favicon ] || echo "$W/$s"; done)
 
 if [ "${1:-}" != "--deploy" ]; then echo "Checks passed. Patched Workers: $W. Run with --deploy to upload them."; exit 0; fi
 
@@ -88,6 +95,8 @@ CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" p
 py "$ROOT/rb-tools/cfworker.py" push rb-radio-hub "$W/rb-radio-hub"
 py "$ROOT/rb-tools/cfworker.py" push rb-memberships "$W/rb-memberships"
 py "$ROOT/rb-tools/cfworker.py" push artist-router "$W/artist-router"
+# after artist-router, which serves the icon files they link to
+for s in rb-favicon rb-release beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners; do py "$ROOT/rb-tools/cfworker.py" push "$s" "$W/$s"; done
 if curl -fsS -m 20 https://relentlessbillionaire.com/radio/api/now | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("live") else 1)'; then
   echo "rb-radio: a live show is on air, so it's skipped. Run this again after the show."
 else

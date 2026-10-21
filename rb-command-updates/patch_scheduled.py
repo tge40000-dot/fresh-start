@@ -39,7 +39,8 @@ async function daily(env) {
   }
 }
 '''
-if NEW in s:
+# Already there, even if a later patch (patch_media_kit.py) has added a step to daily() since.
+if NEW in s or ("async function daily(env) {" in s and "  async scheduled(event, env, ctx) {" in s):
     print("index.js: daily run already in place")
 else:
     if s.count(OLD) != 1:

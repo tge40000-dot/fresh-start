@@ -93,7 +93,7 @@ vrep('.back{color:var(--muted);text-decoration:none;font-size:13px;border:1px so
      '.sz .sz-t{left:0;right:0;top:0;height:12%}.sz .sz-b{left:0;right:0;bottom:0;height:22%}.sz .sz-r{right:0;top:12%;bottom:22%;width:14%}\n'
      '.sz-tog{display:flex;gap:8px;align-items:center;font-size:13px;margin:10px 0 0}.keys{font-size:12px;margin:6px 0 0}', "styles")
 vrep('<a class="back" href="/">← Back to RB Command</a></header>',
-     '<span class="top-links"><a class="back" href="https://relentlessbillionaire.com/create/" target="_blank" rel="noopener">RB Create ↗</a><a class="back" href="/">← Back to RB Command</a></span></header>', "RB Create link")
+     '<span class="top-links"><a class="back" href="https://relentlessbillionaire.com/create/" target="_blank" rel="noopener">RB Create ↗</a><a class="back" href="/cover">Cover maker</a><a class="back" href="/">← Back to RB Command</a></span></header>', "RB Create link")
 vrep('<div class="stage-box"><canvas id="cv" width="270" height="480" aria-label="Video preview"></canvas></div>\n',
      '<div class="stage-box"><canvas id="cv" width="270" height="480" aria-label="Video preview"></canvas><div class="sz" id="sz" hidden aria-hidden="true"><i class="sz-t"></i><i class="sz-b"></i><i class="sz-r"></i></div></div>\n', "safe-zone layer")
 vrep('<span id="time">0:00 / 0:00</span></div>\n',
