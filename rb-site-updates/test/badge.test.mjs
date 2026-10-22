@@ -244,6 +244,65 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.equal(one("SELECT count(*) n FROM badge_points WHERE source='game'").n, 4, "one ledger row per round that earned");
 }
 
+// ---------------------------------------------------------------- 3c. RB World, on RB's own backend
+{
+  sql("CREATE TABLE IF NOT EXISTS ads (id INTEGER PRIMARY KEY AUTOINCREMENT, advertiser TEXT NOT NULL, headline TEXT, body TEXT, status TEXT DEFAULT 'live', starts_at TEXT, ends_at TEXT, weight INTEGER DEFAULT 1, surface TEXT NOT NULL DEFAULT 'all')");
+  sql("INSERT INTO ads (advertiser, headline, body, surface) VALUES ('Acme', 'Acme Studios', 'Book a session', 'game'), ('Radio only', 'x', 'y', 'radio')");
+  const redir = await go("/app/world");
+  assert.equal(redir.status, 301); assert.equal(redir.headers.get("Location"), "/app/world/");
+  const w = await go("/app/world/"), wh = await w.text();
+  assert.equal(w.status, 200);
+  const csp = w.headers.get("Content-Security-Policy");
+  assert.ok(/connect-src 'self'[^;]*basemaps\.cartocdn\.com/.test(csp) && !/esm\.sh|instantdb|stripe/i.test(csp), "the game's hosts only: no InstantDB, no Stripe");
+  assert.ok(!/instantdb|esm\.sh|js\.stripe\.com|\$9\.99/i.test(wh), "no InstantDB, Stripe or the unbacked $9.99 offer");
+  assert.ok(wh.includes('src="/app/world/main.js?v=w3"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
+  assert.ok(wh.includes("OPEN THE RB APP") && wh.includes("SEE MEMBERSHIPS"));
+  const mj = await (await go("/app/world/main.js")).text(), cj = await (await go("/app/world/rb_world.js")).text();
+  assert.ok(mj.includes("from './rb_world.js'") && !mj.includes("@instantdb") && mj.includes("const db = init();"));
+  assert.ok(cj.includes("/api/world/beat") && cj.includes("export function init"));
+  const beat = (user, body) => { NOW += 4000; return api("/api/world/beat", { method: "POST", user, body }); };
+  let b = await beat(null, { id: "aaaaaaaa-1111", name: "<b>Guest</b>", pos: [-74.0, 40.7], netWorth: 75000, tokens: 500, health: 100 });
+  assert.equal(b.status, 200, JSON.stringify(b.body)); assert.deepEqual(b.body.points, { member: false, on: true }, "guests play without points");
+  assert.equal(b.body.board[0].name, "bGuest/b", "names are cleaned");
+  b = await beat(null, { id: "bbbbbbbb-2222", name: "Rival", pos: [-74.01, 40.71], netWorth: 9e6 });
+  assert.deepEqual(b.body.peers.map((x) => x.id), ["aaaaaaaa-1111"], "sees the other player"); assert.deepEqual(b.body.peers[0].pos, [-74, 40.7]);
+  assert.deepEqual(b.body.board.map((x) => x.name), ["Rival", "bGuest/b"], "leaderboard by net worth");
+  assert.equal((await beat(null, { id: "bad" })).status, 400);
+  const chat = (id, text) => api("/api/world/chat", { method: "POST", body: { id, name: "Rival", text } });
+  assert.equal((await chat("bbbbbbbb-2222", "  ")).status, 400);
+  assert.equal((await chat("bbbbbbbb-2222", "gm <script>")).status, 200);
+  b = await beat(null, { id: "aaaaaaaa-1111", name: "Guest", since: 0 });
+  assert.equal(b.body.chat.at(-1).text, "gm script"); assert.equal(b.body.chat.at(-1).senderId, "bbbbbbbb-2222");
+  const since = b.body.chat.at(-1).n;
+  b = await beat(null, { id: "aaaaaaaa-1111", name: "Guest", since });
+  assert.deepEqual(b.body.chat, [], "only new messages after since");
+  let limited = 0; for (let i = 0; i < 14; i++) if ((await chat("bbbbbbbb-2222", "msg " + i)).status === 429) limited++;
+  assert.ok(limited >= 2, "chat is rate limited");
+  NOW += 120000;
+  assert.deepEqual((await beat(null, { id: "aaaaaaaa-1111", name: "Guest" })).body.peers, [], "players gone quiet drop off");
+  const ads = (await api("/api/world/ads")).body.ads;
+  assert.ok(ads.some((x) => x.title === "Acme Studios" && x.channel === "Ticker") && !ads.some((x) => x.title === "x"), "game ads only");
+  assert.ok(ads.some((x) => x.title === "RB Comedy Night"), "upcoming RB Events in the ticker");
+
+  // play time while signed in: 5 points per 10 minutes, up to 30 a day
+  const before = (await me("u_bob")).body.standing.lifetime;
+  let added = 0;
+  for (let i = 0; i < 151; i++) { const r = await beat("u_bob", { id: "cccccccc-3333", name: "Bob" }); added += r.body.points.added || 0; }
+  assert.equal(added, 5, "10 minutes of beats: 5 points"); assert.equal((await me("u_bob")).body.standing.lifetime, before + 5);
+  NOW += 5 * 60000;
+  const gap = await beat("u_bob", { id: "cccccccc-3333", name: "Bob" });
+  assert.equal(gap.body.points.minutes, 10, "a five-minute gap isn't play time");
+  sql("UPDATE badge_config SET value='1' WHERE key='world_block_minutes'");
+  for (let i = 0; i < 200; i++) await beat("u_bob", { id: "cccccccc-3333", name: "Bob" });
+  const capped = await beat("u_bob", { id: "cccccccc-3333", name: "Bob" });
+  assert.equal(capped.body.points.today, 30, "30 a day"); assert.equal(capped.body.points.daily, 30);
+  assert.equal(one("SELECT coalesce(sum(points), 0) n FROM badge_points WHERE source='world'").n, 30);
+  assert.equal(one("SELECT clerk_user_id FROM world_players WHERE id='cccccccc-3333'").clerk_user_id, "u_bob", "the player is linked to the account");
+  assert.ok((await me("u_bob")).body.history.some((x) => x.label === "Played RB World"));
+  const terms = await (await go("/badge/terms")).text();
+  assert.ok(terms.includes("RB World, the 3D city game") && terms.includes("are not RB Badge points"));
+}
+
 // ---------------------------------------------------------------- 4. sign-in rules and the switch
 {
   assert.equal((await me()).status, 401, "needs sign-in");
@@ -258,5 +317,8 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.ok(terms.includes("Guest list at RB shows.") && terms.includes("RB hoodie") && !terms.includes("coming soon"));
   sql("UPDATE badge_config SET value='off' WHERE key='enabled'");
   assert.equal((await me("u_alice")).status, 403, "switched off again: closed");
+  assert.equal((await api("/api/world/beat", { method: "POST", body: { id: "aaaaaaaa-1111" } })).status, 403, "RB World is closed too");
+  const offWorld = await (await go("/app/world/")).text();
+  assert.ok(offWorld.includes("coming soon") && !offWorld.includes("main.js"), "the world page says coming soon");
 }
-console.log("badge ok: RB app and manifest, Gold Rush scores checked against the round (early, too high, twice, late, round and daily caps, rounds a day), off by default, terms for review, pulled points counted once, levels, achievements, signed QR read back, redeem with stock/balance/level checks, sign-in rules");
+console.log("badge ok: RB World on RB's backend (page, no InstantDB or Stripe, players, leaderboard, chat with limits, ads ticker, play-time points with gaps and daily cap), RB app and manifest, Gold Rush scores checked against the round (early, too high, twice, late, round and daily caps, rounds a day), off by default, terms for review, pulled points counted once, levels, achievements, signed QR read back, redeem with stock/balance/level checks, sign-in rules");

@@ -139,7 +139,12 @@ body[data-status=live] .soon{display:none}
     </div>
     <div class="legend"><span><b>Gold</b> +10</span><span><b>Diamond</b> +25</span><span><b>Bomb</b> −15</span></div>
     <p class="m" id="g-today"></p>
-    <p class="m"><a href="/game/">The RB 3D game</a> is a separate game and doesn't earn badge points.</p>
+    <div class="card" id="world-card">
+      <h3>RB World</h3>
+      <span class="m">The 3D city game: conquer the city, build your empire, chat with other players. Signed in, your play time earns RB Badge points.</span>
+      <span class="m" id="world-rules"></span>
+      <a class="btn gold" href="/app/world/">Play RB World</a>
+    </div>
   </section>
 
   <section class="screen" id="s-rewards" aria-label="Rewards" hidden>
@@ -288,6 +293,8 @@ body[data-status=live] .soon{display:none}
   function renderGameInfo() {
     var g = state.game || {};
     $("game-rules").textContent = g.round_max > 0 && g.daily > 0 ? "Every " + fmt(g.per_point) + " score is 1 point, up to " + fmt(g.round_max) + " a round and " + fmt(g.daily) + " a day. Free to play." : "Play for fun. Rounds don't earn points right now.";
+    var w = (state.earn || []).filter(function (x) { return x.label === "Play RB World"; })[0];
+    $("world-rules").textContent = w ? w.detail : "Play for fun; play time doesn't earn points right now.";
     var t = me && me.game ? me.game : { rounds: 0, points: 0, best: 0 };
     $("g-today").textContent = "Today: " + fmt(t.rounds) + " of " + fmt(g.rounds || 0) + " rounds, " + fmt(t.points) + " game points, best score " + fmt(t.best) + ".";
   }

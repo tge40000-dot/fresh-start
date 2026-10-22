@@ -78,7 +78,7 @@ SPECS = '''  // ---------------- Badges (RB Badge at relentlessbillionaire.com/b
       const k = before && before.key, val = v.value == null ? "" : String(v.value).trim();
       if (!("value" in v)) return;
       if (k === "enabled" && !["on", "off"].includes(val)) errors.value = "Use on or off.";
-      if (/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_)/.test(k || "") && !/^\\d{1,6}$/.test(val)) errors.value = "Use a whole number (0 turns it off).";
+      if (/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_|world_)/.test(k || "") && !/^\\d{1,6}$/.test(val)) errors.value = "Use a whole number (0 turns it off).";
       if ((k === "eligibility" || k === "redeem_how") && !val) errors.value = "This is shown in the terms, so it can't be empty.";
       if (k === "enabled" && val === "on") {
         const live = await env.DB.prepare("SELECT count(*) AS n FROM badge_levels WHERE status = 'live' AND perks NOT LIKE 'DRAFT:%' AND trim(coalesce(perks, '')) != ''").first().catch(() => null);
@@ -149,7 +149,18 @@ SPECS = '''  // ---------------- Badges (RB Badge at relentlessbillionaire.com/b
   feature_controls: {'''
 edit("tables.js", "  // ---------------- Settings\n  feature_controls: {", SPECS, "Badges tables")
 
-upgrade("tables.js", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max)/", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_)/", "game settings are checked")
+upgrade("tables.js", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max)/", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_|world_)/", "game settings are checked")
+upgrade("tables.js", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_)/", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_|world_)/", "RB World settings are checked")
+
+# RB World chat (the 3D game at relentlessbillionaire.com/app/world), so the team can remove messages.
+edit("tables.js", "  // ---------------- Settings\n  feature_controls: {",
+     "  world_chat: {\n"
+     '    label: "RB World chat", group: "Badges", pk: "n", title: "text", list: ["created_at", "name", "text"], search: ["name", "text", "player_id"], order: "n DESC",\n'
+     "    del: true, readonly: false, ensure: BADGE_SCHEMA,\n"
+     '    note: "Messages players sent in RB World\'s city chat (the newest 2,000 are kept). Delete any that break the rules; it disappears from the game within a few seconds.",\n'
+     '    fields: { name: f.ro("Player"), text: f.ro("Message", "textarea"), player_id: f.ro("Game id"), created_at: f.ro("Sent", "datetime") },\n'
+     "  },\n\n"
+     "  // ---------------- Settings\n  feature_controls: {", "RB World chat table")
 
 # ---------------------------------------------------------------- auth.js: the new group and the Door staff role
 edit("auth.js", '"Partners", "Members", "Rewards", "CRM", "Settings"])', '"Partners", "Members", "Rewards", "Badges", "CRM", "Settings"])', "Badges capability")

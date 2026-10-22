@@ -7,6 +7,8 @@ Adds, after the RB Collect block (patch_rewards.py, whose helpers it reuses):
 - GET /badge/terms    the terms, built from the live values (always visible so they can be reviewed before launch)
 - GET /app            the RB app (installable): pass, RB Gold Rush (the game that earns points), rewards, events, me
 - GET /app/manifest.webmanifest
+- GET /app/world/     RB World, the 3D city game (src/world/), on RB's own backend instead of InstantDB:
+  POST /api/world/beat and /api/world/chat, GET /api/world/ads (src/world/world-worker.js)
 - GET /api/badge/state, GET /api/badge/me, GET /api/badge/pass, POST /api/badge/redeem,
   POST /api/badge/game/start and /api/badge/game/finish (scores checked against the round's plan, src/badge/goldrush.js)
 Points are pulled read-only by the member's verified email (or account) from signups, shop_inquiries, store_orders
@@ -35,6 +37,17 @@ loader = re.search(r'^<script nonce="__NONCE__">\(function\(\)\{function script\
 if not loader or app.count("<!--CLERK-LOADER-->") != 1 or app.count("/*GOLDRUSH*/") != 1:
     raise SystemExit("app.html: needs one <!--CLERK-LOADER--> and one /*GOLDRUSH*/, and badge.html its Clerk loader")
 app = app.replace("<!--CLERK-LOADER-->", loader.group(0)).replace("/*GOLDRUSH*/", goldrush.rstrip("\n"))
+wsrc = HERE / "src/world"
+world = (wsrc / "index.html").read_text(encoding="utf-8")
+if world.count("<!--CLERK-LOADER-->") != 1 or "__CLERK_KEY__" not in world or 'data-rbtabs="off"' not in world:
+    raise SystemExit("src/world/index.html: needs the Clerk placeholders and data-rbtabs=\"off\"")
+# The world page has no nonce: its own script tags carry none, and its CSP allows inline scripts as the game always has.
+world = world.replace("<!--CLERK-LOADER-->", loader.group(0).replace(' nonce="__NONCE__"', ""))
+world_main = (wsrc / "main.js").read_text(encoding="utf-8")
+world_client = (wsrc / "rb_world.js").read_text(encoding="utf-8")
+world_code = (wsrc / "world-worker.js").read_text(encoding="utf-8")
+if "@instantdb" in world_main or "instantdb" in world.lower():
+    raise SystemExit("src/world: InstantDB is still referenced")
 for ph in ("__NONCE__", "__STATUS__", "__STATE__", "__CLERK_KEY__"):
     if ph not in page or ph not in app:
         raise SystemExit(f"badge.html or app.html: missing {ph}")
@@ -51,7 +64,9 @@ END = "// ---------------------------------------------------------------- end R
 # The QR encoder is a plain script that defines `qrcode`; keep it private to this block.
 qr_block = "const rbbQrcode = (function () {\n" + qr.rstrip("\n") + "\nreturn qrcode;\n})();\n"
 block = (START + "const RB_BADGE_HTML = " + json.dumps(page) + ";\n" + "const RB_APP_HTML = " + json.dumps(app) + ";\n"
-         + "const RB_BADGE_SCHEMA = " + json.dumps(statements) + ";\n" + qr_block + goldrush.rstrip("\n") + "\n" + code.rstrip("\n") + "\n" + END)
+         + "const RB_BADGE_SCHEMA = " + json.dumps(statements) + ";\n" + qr_block + goldrush.rstrip("\n") + "\n" + code.rstrip("\n") + "\n"
+         + "const RB_WORLD_HTML = " + json.dumps(world) + ";\nconst RB_WORLD_MAIN = " + json.dumps(world_main) + ";\nconst RB_WORLD_CLIENT = " + json.dumps(world_client) + ";\n"
+         + world_code.rstrip("\n") + "\n" + END)
 
 if START in s:
     a = s.index(START); b = s.index(END) + len(END)
@@ -62,9 +77,11 @@ else:
 
 ROUTE_OLD = "    if ((path === '/rewards' || path.startsWith('/rewards/') || path.startsWith('/api/rewards/'))"
 ROUTE_V1 = "    if ((path === '/badge' || path.startsWith('/badge/') || path.startsWith('/api/badge/')) && (host === 'relentlessbillionaire.com' || host === 'www.relentlessbillionaire.com')) { const rbb = await rbBadgeRoute(request, env, url); if (rbb) return rbb; }\n"
-ROUTE = ("    if ((path === '/badge' || path.startsWith('/badge/') || path.startsWith('/api/badge/') || path === '/app' || path.startsWith('/app/')) && (host === 'relentlessbillionaire.com' || host === 'www.relentlessbillionaire.com')) { const rbb = await rbBadgeRoute(request, env, url); if (rbb) return rbb; }\n")
-if ROUTE_V1 in s:
-    s = s.replace(ROUTE_V1, ROUTE); changed.append("routes now include /app")
+ROUTE_V2 = "    if ((path === '/badge' || path.startsWith('/badge/') || path.startsWith('/api/badge/') || path === '/app' || path.startsWith('/app/')) && (host === 'relentlessbillionaire.com' || host === 'www.relentlessbillionaire.com')) { const rbb = await rbBadgeRoute(request, env, url); if (rbb) return rbb; }\n"
+ROUTE = ("    if ((path === '/badge' || path.startsWith('/badge/') || path.startsWith('/api/badge/') || path === '/app' || path.startsWith('/app/') || path.startsWith('/api/world/')) && (host === 'relentlessbillionaire.com' || host === 'www.relentlessbillionaire.com')) { const rbb = await rbBadgeRoute(request, env, url); if (rbb) return rbb; }\n")
+for old_route in (ROUTE_V1, ROUTE_V2):
+    if old_route in s:
+        s = s.replace(old_route, ROUTE); changed.append("routes brought up to date")
 if ROUTE not in s:
     if s.count(ROUTE_OLD) != 1:
         raise SystemExit(f"artist-router: route anchor found {s.count(ROUTE_OLD)} times")

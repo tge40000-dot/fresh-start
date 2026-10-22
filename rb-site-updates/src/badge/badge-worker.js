@@ -6,18 +6,18 @@
 //   lifetime = everything earned (minus hand removals), which sets the level; balance = lifetime minus redemptions.
 // The door desk in RB Command (badgedesk.js) checks members in by scanning the QR on their pass, which carries a token
 // signed with the member's own pass_secret and good for RBB_TOKEN_MINUTES, so a screenshot stops working.
-const RBB_SCHEMA_VERSION = "rb-badge-2";
+const RBB_SCHEMA_VERSION = "rb-badge-3";
 const RBB_DEFAULTS = { enabled: "off", eligibility: "Open to anyone with an RB account and a verified email address.", redeem_how: "",
   points_welcome: "50", points_daily: "5", points_signup: "25", points_membership_request: "50", points_per_dollar_spent: "10", order_cap: "5000",
   points_per_dollar_given: "10", contribution_cap: "5000", points_member_month: "100", points_release: "100", points_event_listed: "50", points_collect: "50",
-  checkin_points: "100", checkin_max: "1000", adjust_max: "10000", game_points_round: "20", game_score_per_point: "10", game_points_daily: "60", game_rounds_daily: "25" };
+  checkin_points: "100", checkin_max: "1000", adjust_max: "10000", game_points_round: "20", game_score_per_point: "10", game_points_daily: "60", game_rounds_daily: "25", world_points_block: "5", world_block_minutes: "10", world_points_daily: "30" };
 const RBB_TOKEN_MINUTES = 10;
 const RBB_WRITES_PER_MINUTE = 20;
 // Where each achievement rule counts from: the ledger source it counts rows of.
 const RBB_RULE_SOURCE = { checkins: "checkin", signup: "signup", membership: "membership", orders: "order", contributions: "contribution", member: "member_month", release: "release", event_listed: "event_listed", collect: "collect" };
 const RBB_SOURCES = { welcome: "Welcome", daily: "Opened your badge", signup: "Joined the RB list", membership: "Membership request", order: "Store order", contribution: "Gave at /fund",
   member_month: "RB Studio membership", release: "Song approved on RB Release", event_listed: "Event listed on RB Events", collect: "RB Collect prize", checkin: "Checked in",
-  adjust: "From the RB team", redeem: "Redeemed", refund: "Points returned", game: "RB Gold Rush" };
+  adjust: "From the RB team", redeem: "Redeemed", refund: "Points returned", game: "RB Gold Rush", world: "Played RB World" };
 let rbbSchemaReady = null;
 
 async function rbbEnsureSchema(env) {
@@ -51,7 +51,8 @@ async function rbbLoad(env) {
     perDollarSpent: n("points_per_dollar_spent"), orderCap: n("order_cap"), perDollarGiven: n("points_per_dollar_given"), contribCap: n("contribution_cap"),
     memberMonth: n("points_member_month"), release: n("points_release"), eventListed: n("points_event_listed"), collect: n("points_collect"),
     checkin: n("checkin_points"), checkinMax: n("checkin_max"), adjustMax: n("adjust_max"),
-    gameRound: n("game_points_round"), gamePerPoint: Math.max(1, n("game_score_per_point")), gameDaily: n("game_points_daily"), gameRounds: n("game_rounds_daily", 1000) };
+    gameRound: n("game_points_round"), gamePerPoint: Math.max(1, n("game_score_per_point")), gameDaily: n("game_points_daily"), gameRounds: n("game_rounds_daily", 1000),
+    worldBlock: n("world_points_block"), worldBlockMinutes: n("world_block_minutes", 1440), worldDaily: n("world_points_daily") };
   // Only live levels with real perks count; Draft text never reaches members.
   const levels = (levelRows.results || []).filter((l) => l.status === "live" && !rbbDraft(l.perks)).map((l) => ({ key: l.level_key, name: l.name, min: Math.max(0, Number(l.min_points) || 0), perks: String(l.perks || "") }));
   const rewards = (rewardRows.results || []).filter((r) => r.status === "live" && !rbbDraft(r.description) && Number(r.cost) > 0)
@@ -90,6 +91,7 @@ function rbbEarnList(g) {
   add(a.release, "Release with RB", `${a.release} points for each song RB approves on RB Release.`);
   add(a.eventListed, "List an event", `${a.eventListed} points for each event RB publishes on RB Events.`);
   if (a.gameRound > 0 && a.gameDaily > 0) out.push({ points: a.gameRound, label: "Play RB Gold Rush", detail: `Up to ${a.gameRound} points a round in the RB app (1 point per ${a.gamePerPoint} score), up to ${a.gameDaily} a day.` });
+  if (a.worldBlock > 0 && a.worldBlockMinutes > 0 && a.worldDaily > 0) out.push({ points: a.worldBlock, label: "Play RB World", detail: `${a.worldBlock} points for every ${a.worldBlockMinutes} minutes you play RB World signed in, up to ${a.worldDaily} a day.` });
   add(a.collect, "Win at RB Collect", `${a.collect} points for each RB Collect prize claim RB approves.`);
   return out;
 }
@@ -323,6 +325,8 @@ async function rbbAppPage(request, env) {
 const RBB_MANIFEST = JSON.stringify({ name: "RB: Relentless Billionaire", short_name: "RB", description: "Your RB Badge: points, levels, rewards, events and RB Gold Rush.", id: "/app", start_url: "/app", scope: "/app", display: "standalone", orientation: "portrait", background_color: "#07060A", theme_color: "#07060A",
   icons: [{ src: "/brand/icon-192.png?v=3", sizes: "192x192", type: "image/png" }, { src: "/brand/icon-512.png?v=3", sizes: "512x512", type: "image/png" }, { src: "/brand/maskable-512.png?v=3", sizes: "512x512", type: "image/png", purpose: "maskable" }] });
 
+const a0 = (g) => { const a = g.amounts; return a.worldBlock > 0 && a.worldBlockMinutes > 0 && a.worldDaily > 0 ? `Play time while you're signed in earns ${a.worldBlock} RB Badge points every ${a.worldBlockMinutes} minutes, up to ${a.worldDaily} a day; RB counts the time itself. ` : "Right now play time doesn't earn RB Badge points. "; };
+
 async function rbbTermsPage(request, env) {
   const g = await rbbLoad(env), nonce = rbcNonce(), e = rbcEsc, fmt = (x) => Number(x).toLocaleString("en-US");
   const earn = rbbEarnList(g).map((x) => `<li><b>${e(x.label)}</b>: ${e(x.detail)}</li>`).join("");
@@ -344,10 +348,11 @@ ${g.on ? "" : `<div class="box">RB Badge is coming soon. These terms show the va
 <h2>4. Levels</h2><p>Your level comes from your lifetime points: everything you have earned, minus any points the team removed. Spending points on rewards never lowers your level.</p>${levels}<p>Perks at shows and events are given by RB staff at the door when they scan your badge, while places or tickets last, and can depend on the venue's own rules (for example age limits).</p>
 <h2>5. Rewards</h2><p>${e(g.cfg.redeem_how)}</p><p>At RB shows and events you can also spend points in person: show your pass and RB staff redeem the reward for you on the spot.</p>${rewards}
 <h2>6. RB Gold Rush</h2><p>RB Gold Rush is a free game in the RB app at <a href="/app">relentlessbillionaire.com/app</a>. Each round is decided by skill: catch what falls, avoid the bombs. ${g.amounts.gameRound > 0 && g.amounts.gameDaily > 0 ? `A round earns 1 point for every ${g.amounts.gamePerPoint} score, up to ${g.amounts.gameRound} points a round and ${g.amounts.gameDaily} a day, with up to ${g.amounts.gameRounds} rounds a day.` : "Right now rounds don't earn points."} RB checks every score against what that round could reach, and may remove points from scores it believes were not played fairly. Game points spend like any other points, online or at RB events.</p>
-<h2>7. Your pass</h2><p>The QR code on your badge changes every few minutes and only works for you. Don't share it. Staff may ask for ID that matches your account.</p>
-<h2>8. What points aren't</h2><p>Points and levels have no cash value. They can't be sold, transferred, exchanged for money or combined between accounts. Buying something never earns more than the amounts above, and you can earn points without buying anything.</p>
-<h2>9. Fair play</h2><p>RB may remove points, cancel redemptions or close a badge that comes from duplicate accounts, automation, fraud, refunded or charged-back payments, or a breach of these terms.</p>
-<h2>10. Changes</h2><p>RB may change the amounts, levels, perks or rewards, or end RB Badge. Changes show on this page. Your information is handled as described in the <a href="/privacy">privacy policy</a>; the <a href="/terms">terms</a> also apply.</p>
+<h2>7. RB World</h2><p>RB World, the 3D city game in the RB app at <a href="/app/world/">relentlessbillionaire.com/app/world</a>, is free. ${a0(g)}Your net worth, tokens and items in RB World are game money only: they stay in the game and are not RB Badge points. The leaderboard shows what each player's game reports.</p>
+<h2>8. Your pass</h2><p>The QR code on your badge changes every few minutes and only works for you. Don't share it. Staff may ask for ID that matches your account.</p>
+<h2>9. What points aren't</h2><p>Points and levels have no cash value. They can't be sold, transferred, exchanged for money or combined between accounts. Buying something never earns more than the amounts above, and you can earn points without buying anything.</p>
+<h2>10. Fair play</h2><p>RB may remove points, cancel redemptions or close a badge that comes from duplicate accounts, automation, fraud, refunded or charged-back payments, or a breach of these terms.</p>
+<h2>11. Changes</h2><p>RB may change the amounts, levels, perks or rewards, or end RB Badge. Changes show on this page. Your information is handled as described in the <a href="/privacy">privacy policy</a>; the <a href="/terms">terms</a> also apply.</p>
 </main></body></html>`;
   return new Response(request.method === "HEAD" ? null : html, { headers: rbcPageHeaders(env, nonce) });
 }
@@ -356,12 +361,13 @@ ${g.on ? "" : `<div class="box">RB Badge is coming soon. These terms show the va
 async function rbBadgeRoute(request, env, url) {
   const path = url.pathname.replace(/\/+$/, "") || "/", method = request.method;
   const page = method === "GET" || method === "HEAD";
-  if (!["/badge", "/badge/terms", "/app", "/app/manifest.webmanifest"].includes(path) && !path.startsWith("/api/badge/")) return null;
+  if (!["/badge", "/badge/terms", "/app", "/app/manifest.webmanifest"].includes(path) && !path.startsWith("/api/badge/") && !path.startsWith("/app/world") && !path.startsWith("/api/world/")) return null;
   try {
     await (rbbSchemaReady ||= rbbEnsureSchema(env).catch((err) => { rbbSchemaReady = null; throw err; }));
     if (path === "/badge" && page) return await rbbPassPage(request, env);
     if (path === "/badge/terms" && page) return await rbbTermsPage(request, env);
     if (path === "/app" && page) return await rbbAppPage(request, env);
+    if (path.startsWith("/app/world") || path.startsWith("/api/world/")) { const w = await rbWorldRoute(request, env, url, path, method); if (w) return w; }
     if (path === "/app/manifest.webmanifest" && page) return new Response(RBB_MANIFEST, { headers: { "Content-Type": "application/manifest+json", "Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff" } });
     const g = await rbbLoad(env);
     if (path === "/api/badge/state" && method === "GET") return rbcJson(rbbPublicState(g));
