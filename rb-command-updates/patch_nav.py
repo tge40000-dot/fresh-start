@@ -35,7 +35,7 @@ edit("ui.js", '''    NAV_TOP.forEach(function(n){ html += link(n[0] === "home" ?
       Object.keys(T).forEach(function(k){ if (T[k].group === g) html += link("t/" + k, T[k].label, k); });
     });
 ''', '''    // The tools in two sections; anything not listed here stays at the top with Overview.
-    var SECT = { shows: "Shows & sites", radio: "Shows & sites", review: "Shows & sites", blocks: "Shows & sites", colors: "Shows & sites", "/images": "Shows & sites", affiliate: "Shows & sites", "/video": "Shows & sites", "/cover": "Shows & sites", "/upload": "Shows & sites",
+    var SECT = { shows: "Shows & sites", radio: "Shows & sites", review: "Shows & sites", blocks: "Shows & sites", colors: "Shows & sites", "/images": "Shows & sites", affiliate: "Shows & sites", "/video": "Shows & sites", "/cover": "Shows & sites", "/badge-desk": "Shows & sites", "/upload": "Shows & sites",
       crm: "Growth", talent: "Growth", marketing: "Growth", create: "Growth", autopilot: "Growth", projects: "Growth", "/finder": "Growth", jobs: "Growth", "/resumes": "Growth" };
     NAV_TOP.forEach(function(n){ if (!SECT[n[0]]) html += link(n[0] === "home" ? "" : n[0], n[1], n[2]); });
     ["Shows & sites", "Growth"].forEach(function(sec){
@@ -58,7 +58,7 @@ edit("ui.js", '''    NAV_TOP.forEach(function(n){ html += link(n[0] === "home" ?
 ''')
 ui = folder / "ui.js"
 cur = ui.read_text(encoding="utf-8")
-for key, after in (('"/cover"', '"/video": "Shows & sites", '), ('"/images"', 'colors: "Shows & sites", ')):
+for key, after in (('"/cover"', '"/video": "Shows & sites", '), ('"/images"', 'colors: "Shows & sites", '), ('"/badge-desk"', '"/cover": "Shows & sites", ')):
     if MARK in cur and f'{key}: "Shows & sites"' not in cur and cur.count(after) == 1:
         cur = cur.replace(after, after + f'{key}: "Shows & sites", ')
         ui.write_text(cur, encoding="utf-8")

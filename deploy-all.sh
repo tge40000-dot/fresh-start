@@ -25,6 +25,8 @@ py "$ROOT/rb-site-updates/patch_next_steps.py" "$W/artist-router"; py "$ROOT/rb-
 py "$ROOT/rb-site-updates/patch_memberships.py" "$W/rb-memberships"
 # RB Collect (/rewards): ships switched off with draft prizes; the owner turns it on in RB Command > Rewards
 py "$ROOT/rb-site-updates/patch_rewards.py" "$W/artist-router"
+# RB Badge (/badge): points, levels, rewards and the door QR; ships switched off, turned on in RB Command > Badges
+py "$ROOT/rb-site-updates/patch_badge.py" "$W/artist-router"
 py "$ROOT/rb-site-updates/patch_embed_create.py" "$W/rb-mastering-studio"
 # RB Studio (rb-daw) is built from workers/rb-daw/src (its source since 18 Oct 2026; the old rb-daw patches are all in it).
 # --check builds it and compares with live: exit 1 just means src/ has changes that are not deployed yet.
@@ -61,6 +63,8 @@ for s in $ICON_SITES; do py "$ROOT/rb-tools/patch_icons.py" "$W/$s"; done
 for s in $ICON_SITES; do py "$ROOT/rb-tools/patch_tabs.py" "$W/$s"; done
 # Site images (RB Command > Site images): the screen in rb-command, the pictures and per-site CSS from rb-public-content
 py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-command"; py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-public-content"
+# RB Command > Badges (levels, rewards, achievements, settings) and the Badge desk for the door
+py "$ROOT/rb-command-updates/patch_badges_admin.py" "$W/rb-command"
 # rb-email: the forwarder replaces Cloudflare's sample
 cp "$ROOT/rb-email/src/index.js" "$W/rb-email/index.js"
 
@@ -76,6 +80,8 @@ node --no-warnings "$ROOT/rb-surface/test/fresh.mjs" "$W/artist-router/artist-ro
 node --no-warnings "$ROOT/rb-site-updates/test/post-link.test.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$ROOT/rb-site-updates/test/create.test.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$ROOT/rb-site-updates/test/rewards.test.mjs" "$W/artist-router/artist-router-v14.js" | tail -c 120
+node --no-warnings "$ROOT/rb-site-updates/test/badge.test.mjs" "$W/artist-router/artist-router-v14.js"
+node --no-warnings "$T/badge-desk.test.mjs" "$W/rb-command"
 node --no-warnings "$ROOT/rb-site-updates/test/ai-limit.test.mjs" "$W/relentless-billionaire-api/script.js"
 node --no-warnings "$ROOT/rb-site-updates/test/radio-tv.test.mjs" "$W/rb-radio" "$W/rb-tv"
 node "$ROOT/rb-site-updates/test/flow.test.mjs" "$W/rb-radio"

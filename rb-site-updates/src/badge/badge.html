@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>RB Badge · Relentless Billionaire</title>
+<meta name="description" content="RB Badge by Relentless Billionaire: earn points for showing up and backing RB, level up for perks at shows and events, and spend points on rewards.">
+<link rel="canonical" href="https://relentlessbillionaire.com/badge">
+<meta name="theme-color" content="#07060A">
+<link rel="icon" href="/favicon.ico">
+<style nonce="__NONCE__">
+@font-face{font-family:"RB Cinzel";src:url(https://fonts.gstatic.com/s/cinzel/v26/8vIJ7ww63mVu7gt79mT7.woff2) format("woff2");font-weight:400 900;font-display:swap}
+@font-face{font-family:"RB Cormorant";src:url(https://fonts.gstatic.com/s/cormorantgaramond/v21/co3bmX5slCNuHLi8bLeY9MK7whWMhyjYqXtK.woff2) format("woff2");font-weight:300 700;font-display:swap}
+:root{--bg:#07060A;--panel:#110F0C;--panel2:#18150F;--line:#2B261C;--line2:#3D3527;--gold:#C9A227;--gold2:#E9CF83;--gold3:#8F6A22;--text:#EFE8D8;--muted:#A79E89;--ok:#7CC48A;
+  --caps:"RB Cinzel",Cinzel,"Times New Roman",serif;--serif:"RB Cormorant","Cormorant Garamond",Georgia,serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;min-width:320px;background:radial-gradient(1100px 520px at 80% -10%,rgba(201,162,39,.12),transparent 62%),radial-gradient(800px 500px at -10% 110%,rgba(201,162,39,.06),transparent 60%),var(--bg);color:var(--text);font:15px/1.5 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--gold2)}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--gold2);outline-offset:2px;border-radius:8px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0}
+.brand{display:flex;align-items:center;gap:10px;color:var(--text);text-decoration:none;font:600 11px/1.2 var(--caps);letter-spacing:.18em}
+.mark{width:34px;height:34px;flex:none;border-radius:50%;border:1px solid var(--gold3);display:grid;place-items:center;font:700 12px/1 var(--caps);color:var(--gold2);box-shadow:0 0 18px rgba(201,162,39,.18)}
+.top nav{display:flex;gap:14px;font-size:13px}
+.top nav a{color:var(--muted);text-decoration:none}
+.top nav a:hover{color:var(--gold2)}
+.hero{padding:18px 0 8px}
+.eyebrow{font:600 11px/1 var(--caps);letter-spacing:.28em;color:var(--gold)}
+h1{font:600 clamp(32px,8.5vw,64px)/1.02 var(--caps);letter-spacing:.02em;margin:12px 0 10px}
+h1 em{font-style:normal;color:var(--gold2)}
+.lede{font:italic 400 clamp(19px,4.6vw,24px)/1.35 var(--serif);color:var(--muted);max-width:660px;margin:0}
+h2{font:600 18px/1.25 var(--caps);letter-spacing:.06em;color:var(--gold2);margin:0 0 10px}
+.panel{background:linear-gradient(180deg,rgba(201,162,39,.05),transparent 40%),var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px}
+.grid{display:grid;gap:14px;margin:18px 0}
+.soon{text-align:center;padding:34px 18px;border-color:var(--gold3)}
+.soon h2{font-size:clamp(22px,5.5vw,30px)}
+.soon p{color:var(--muted);max-width:520px;margin:8px auto 0}
+body[data-status=off] .live-only{display:none}
+body[data-status=live] .soon{display:none}
+.m{color:var(--muted);font-size:13px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border-radius:999px;border:1px solid var(--line2);background:var(--panel2);color:var(--text);text-decoration:none;font-weight:600;font-size:14px}
+.btn:hover{border-color:var(--gold3)}
+.btn.gold{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#140F05;border-color:var(--gold)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.note{min-height:1.5em;font-size:14px;color:var(--gold2);margin:0}
+.note.err{color:#FF8A96}
+/* the pass */
+.pass{display:grid;gap:18px;align-items:center;position:relative;overflow:hidden;border-color:var(--gold3);background:radial-gradient(500px 260px at 0% 0%,rgba(233,207,131,.14),transparent 70%),linear-gradient(160deg,#17130B,#0C0A07 60%)}
+.pass::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:18px;background:repeating-linear-gradient(115deg,transparent 0 22px,rgba(233,207,131,.025) 22px 24px)}
+.pass .lvl{display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border-radius:999px;border:1px solid var(--gold);font:700 12px/1 var(--caps);letter-spacing:.2em;color:var(--gold2)}
+.pass .who{font:600 clamp(22px,5vw,30px)/1.15 var(--serif);margin:12px 0 2px}
+.nums{display:flex;flex-wrap:wrap;gap:18px 28px;margin:14px 0 8px}
+.nums div{display:grid}
+.nums b{font:700 34px/1 var(--caps);color:var(--gold2)}
+.nums span{font-size:12px;color:var(--muted);letter-spacing:.06em}
+.bar{height:8px;border-radius:999px;background:#0B0A08;border:1px solid var(--line2);overflow:hidden;margin:8px 0 4px}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold3),var(--gold2));transition:width .6s ease}
+.qrbox{justify-self:center;display:grid;gap:6px;text-align:center}
+.qrbox img{width:min(220px,62vw);aspect-ratio:1;border-radius:12px;background:#fff;padding:6px;box-shadow:0 0 0 1px var(--gold3),0 10px 34px rgba(0,0,0,.5)}
+.qrbox code{font-size:12px;color:var(--muted);letter-spacing:.08em}
+.perks{margin:10px 0 0;padding:12px;border-radius:12px;background:rgba(201,162,39,.07);border:1px solid var(--line2);font-size:14px}
+/* achievements */
+.ach{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.ach div{border:1px dashed var(--line2);border-radius:14px;padding:12px;display:grid;gap:4px;align-content:start;color:var(--muted);font-size:13px}
+.ach div b{color:var(--muted);font:600 14px/1.2 var(--caps);letter-spacing:.04em}
+.ach div.got{border-style:solid;border-color:var(--gold3);background:rgba(201,162,39,.08);color:var(--text)}
+.ach div.got b{color:var(--gold2)}
+.ach .medal{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line2);font:700 13px/1 var(--caps)}
+.ach .got .medal{border-color:var(--gold);background:radial-gradient(circle at 35% 30%,var(--gold2),var(--gold3));color:#140F05}
+/* rewards and lists */
+.rewards{display:grid;gap:12px;grid-template-columns:1fr}
+.reward{display:grid;gap:8px;align-content:start}
+.reward img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
+.reward h3{font:600 20px/1.2 var(--serif);margin:0}
+.reward .meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;font-size:13px;color:var(--muted)}
+.cost{font:700 15px/1 var(--caps);color:var(--gold2)}
+.levels{display:grid;gap:10px;grid-template-columns:1fr}
+.levels>div{border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--panel2)}
+.levels b{font:700 14px/1 var(--caps);letter-spacing:.16em;color:var(--gold2)}
+.levels>.here{border-color:var(--gold)}
+ul.earn{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+ul.earn li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}
+ul.earn .n{font:700 15px/1 var(--caps);color:var(--gold2);white-space:nowrap}
+ul.earn p{grid-column:1/-1;margin:0;color:var(--muted);font-size:13px}
+.history{list-style:none;margin:0;padding:0;font-size:13px;color:var(--muted);display:grid;gap:6px}
+.history li{display:flex;justify-content:space-between;gap:12px}
+.history .plus{color:var(--ok)}
+footer{border-top:1px solid var(--line);margin-top:28px;padding:20px 0 90px;color:var(--muted);font-size:13px}
+footer p{margin:4px 0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (min-width:760px){.pass{grid-template-columns:1fr 250px}.rewards,.levels{grid-template-columns:repeat(2,minmax(0,1fr))}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1080px){.rewards{grid-template-columns:repeat(3,minmax(0,1fr))}.levels{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body data-status="__STATUS__">
+<div class="wrap">
+<header class="top">
+  <a class="brand" href="/" aria-label="Relentless Billionaire home"><span class="mark">RB</span><span>RELENTLESS<br>BILLIONAIRE</span></a>
+  <nav aria-label="RB Badge"><a href="/badge/terms">Terms</a><a href="/events">Events</a><a href="/memberships">Memberships</a></nav>
+</header>
+<main>
+  <section class="hero">
+    <div class="eyebrow">RB BADGE</div>
+    <h1>Show up.<br><em>Level up.</em></h1>
+    <p class="lede">One badge for every RB venture. Earn points for showing up and backing RB, reach levels with perks at shows and events, and spend points on rewards.</p>
+  </section>
+
+  <section class="panel soon grid" id="soon" aria-live="polite">
+    <h2>RB Badge is coming soon</h2>
+    <p>Levels, perks, rewards and the terms are posted here before it opens.</p>
+    <p><a href="/badge/terms">Terms</a></p>
+  </section>
+
+  <section class="panel live-only grid" id="signed-out" aria-labelledby="in-h">
+    <h2 id="in-h">Get your badge</h2>
+    <p class="m">Sign in with your RB account to open your badge. Points from what you've already done with the same verified email are added the first time.</p>
+    <div><button class="btn gold" id="signin" type="button">Sign in</button></div>
+  </section>
+
+  <section class="panel pass live-only" id="pass" aria-labelledby="pass-h" hidden>
+    <div>
+      <h2 class="sr" id="pass-h">Your pass</h2>
+      <span class="lvl" id="lvl">RB BADGE</span>
+      <div class="who" id="who"></div>
+      <div class="m" id="since"></div>
+      <div class="nums">
+        <div><b id="balance">0</b><span>POINTS TO SPEND</span></div>
+        <div><b id="lifetime">0</b><span>LIFETIME POINTS</span></div>
+        <div><b id="checkins">0</b><span>CHECK-INS</span></div>
+      </div>
+      <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+      <div class="m" id="next"></div>
+      <div class="perks" id="perks" hidden></div>
+    </div>
+    <div class="qrbox">
+      <img id="qr" alt="Your RB Badge QR code. Show it to RB staff at the door." width="220" height="220">
+      <code id="code"></code>
+      <span class="m">Show this at the door. It refreshes every few minutes.</span>
+    </div>
+  </section>
+  <p class="note" id="note" role="status" aria-live="polite"></p>
+
+  <section class="panel live-only grid" aria-labelledby="ach-h" id="ach-box">
+    <h2 id="ach-h">Badges to collect</h2>
+    <div class="ach" id="ach"></div>
+  </section>
+
+  <section class="panel live-only grid" aria-labelledby="lv-h">
+    <h2 id="lv-h">Levels</h2>
+    <p class="m">Your level comes from lifetime points. Spending points never lowers it.</p>
+    <div class="levels" id="levels"></div>
+  </section>
+
+  <section class="live-only grid" aria-labelledby="rw-h">
+    <h2 id="rw-h">Rewards</h2>
+    <p class="m" id="redeem-how"></p>
+    <div class="rewards" id="rewards"></div>
+  </section>
+
+  <div class="grid two live-only">
+    <section class="panel" aria-labelledby="earn-h">
+      <h2 id="earn-h">How to earn points</h2>
+      <ul class="earn" id="earn"></ul>
+    </section>
+    <section class="panel" aria-labelledby="hist-h" id="hist-box" hidden>
+      <h2 id="hist-h">Your points</h2>
+      <ul class="history" id="redemptions"></ul>
+      <ul class="history" id="history"></ul>
+    </section>
+  </div>
+</main>
+<footer>
+  <p>Points and levels have no cash value and can't be sold or transferred. You can earn points without buying anything.</p>
+  <p><a href="/badge/terms">RB Badge terms</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · Run by Relentless Billionaire.</p>
+</footer>
+</div>
+<script type="application/json" id="rb-state" nonce="__NONCE__">__STATE__</script>
+<script nonce="__NONCE__">(function(){function script(src,key){return new Promise(function(resolve,reject){var tag=document.createElement('script');tag.src=src;tag.async=true;tag.crossOrigin='anonymous';if(key)tag.setAttribute('data-clerk-publishable-key',key);tag.onload=resolve;tag.onerror=function(){reject(new Error('Secure sign-in could not load. Please refresh or try again.'))};document.head.appendChild(tag)})}window.RBLoadClerk=window.RBLoadClerk||function(key){if(window.__rbClerkPromise)return window.__rbClerkPromise;window.__rbClerkPromise=Promise.resolve().then(function(){if(!key)throw new Error('Member identity is being activated. Please return shortly.');var encoded=String(key).split('_')[2];var domain=atob(encoded).slice(0,-1);return script('https://'+domain+'/npm/@clerk/ui@1/dist/ui.browser.js').then(function(){return script('https://'+domain+'/npm/@clerk/clerk-js@6/dist/clerk.browser.js',key)}).then(function(){if(!window.Clerk)throw new Error('Secure sign-in could not load. Please refresh or try again.');return window.Clerk.load({ui:{ClerkUI:window.__internal_ClerkUICtor}}).then(function(){return window.Clerk})})});return window.__rbClerkPromise}})();</script>
+<script nonce="__NONCE__">
+(function () {
+  "use strict";
+  var KEY = __CLERK_KEY__;
+  var state = JSON.parse(document.getElementById("rb-state").textContent || "{}");
+  var me = null, clerk = null, timer = null;
+  var $ = function (id) { return document.getElementById(id); };
+  var fmt = function (n) { return Number(n || 0).toLocaleString("en-US"); };
+  var REDEEM = { requested: "Requested, points held", approved: "Approved", fulfilled: "Delivered", rejected: "Not approved, points returned" };
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function say(text, err) { var n = $("note"); n.textContent = text || ""; n.className = "note" + (err ? " err" : ""); }
+
+  function api(path, opts) {
+    opts = opts || {};
+    var tokenP = clerk && clerk.session ? clerk.session.getToken() : Promise.resolve(null);
+    return tokenP.then(function (token) {
+      var headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = "Bearer " + token;
+      return fetch(path, { method: opts.method || "GET", headers: headers, body: opts.body ? JSON.stringify(opts.body) : undefined, credentials: "same-origin" });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) { if (!res.ok || body.ok === false) throw new Error(body.error || "Something went wrong. Please try again."); return body; });
+    });
+  }
+
+  function levelName(key) { var l = (state.levels || []).filter(function (x) { return x.key === key; })[0]; return l ? l.name : ""; }
+
+  function renderPass() {
+    var signed = !!me;
+    $("signed-out").hidden = signed;
+    $("pass").hidden = !signed;
+    $("hist-box").hidden = !signed;
+    if (!signed) return;
+    var s = me.standing;
+    $("lvl").textContent = s.level ? s.level.name.toUpperCase() : "RB BADGE";
+    $("who").textContent = me.member.name || me.member.email || "Your badge";
+    $("since").textContent = me.member.email ? me.member.email : "";
+    $("balance").textContent = fmt(s.balance);
+    $("lifetime").textContent = fmt(s.lifetime);
+    $("checkins").textContent = fmt(s.checkins);
+    if (s.next) {
+      var from = s.level ? (state.levels.filter(function (x) { return x.key === s.level.key; })[0] || { min: 0 }).min : 0;
+      var pct = Math.max(0, Math.min(100, Math.round((s.lifetime - from) / Math.max(1, s.next.min - from) * 100)));
+      $("bar").style.width = pct + "%";
+      $("next").textContent = fmt(s.next.to_go) + " more points to " + s.next.name + ".";
+    } else { $("bar").style.width = "100%"; $("next").textContent = s.level ? "Top level reached." : ""; }
+    $("perks").hidden = !(s.level && s.level.perks);
+    if (s.level && s.level.perks) $("perks").textContent = s.level.name + ": " + s.level.perks;
+    showQr(me.pass);
+  }
+
+  function showQr(p) {
+    if (!p) return;
+    $("qr").src = "data:image/svg+xml," + encodeURIComponent(p.svg);
+    $("code").textContent = p.code;
+    clearTimeout(timer);
+    timer = setTimeout(refreshQr, Math.max(60, p.refresh_seconds || 480) * 1000);
+  }
+  function refreshQr() { if (!me) return; api("/api/badge/pass").then(function (d) { me.pass = d.pass; showQr(d.pass); }).catch(function () { timer = setTimeout(refreshQr, 60000); }); }
+
+  function renderAch() {
+    var box = $("ach"); box.textContent = "";
+    var got = me ? me.standing.earned : [], prog = me ? me.standing.progress : {};
+    (state.achievements || []).forEach(function (a) {
+      var has = got.indexOf(a.key) >= 0, d = el("div", has ? "got" : "");
+      d.appendChild(el("span", "medal", has ? "✓" : "·"));
+      d.appendChild(el("b", null, a.name));
+      d.appendChild(el("span", null, a.description));
+      if (!has && me && prog[a.key] != null) d.appendChild(el("span", "m", "Progress: " + fmt(prog[a.key])));
+      box.appendChild(d);
+    });
+    $("ach-box").hidden = !(state.achievements || []).length;
+  }
+
+  function renderLevels() {
+    var box = $("levels"); box.textContent = "";
+    (state.levels || []).forEach(function (l) {
+      var d = el("div", me && me.standing.level && me.standing.level.key === l.key ? "here" : "");
+      d.appendChild(el("b", null, l.name.toUpperCase()));
+      d.appendChild(el("div", "m", fmt(l.min) + "+ lifetime points"));
+      d.appendChild(el("p", null, l.perks));
+      box.appendChild(d);
+    });
+  }
+
+  function renderRewards() {
+    var box = $("rewards"); box.textContent = "";
+    $("redeem-how").textContent = state.redeem_how || "";
+    if (!(state.rewards || []).length) { box.appendChild(el("p", "m", "Rewards are posted here when RB adds them.")); return; }
+    state.rewards.forEach(function (r) {
+      var c = el("article", "panel reward");
+      if (r.image_url) { var img = el("img"); img.src = r.image_url; img.alt = ""; img.loading = "lazy"; c.appendChild(img); }
+      c.appendChild(el("h3", null, r.name));
+      if (r.description) c.appendChild(el("p", "m", r.description));
+      var meta = el("div", "meta");
+      meta.appendChild(el("span", "cost", fmt(r.cost) + " pts"));
+      meta.appendChild(el("span", null, r.remaining > 0 ? fmt(r.remaining) + " left" : "All gone"));
+      if (r.min_level && levelName(r.min_level)) meta.appendChild(el("span", null, levelName(r.min_level) + " and up"));
+      c.appendChild(meta);
+      var b = el("button", "btn gold", me ? "Redeem" : "Sign in to redeem"); b.type = "button";
+      if (me && (r.remaining <= 0 || me.standing.balance < r.cost)) b.disabled = true;
+      b.addEventListener("click", function () { if (!me) { signIn(); return; } redeem(r, b); });
+      c.appendChild(b);
+      box.appendChild(c);
+    });
+  }
+
+  function renderEarn() {
+    var box = $("earn"); box.textContent = "";
+    (state.earn || []).forEach(function (x) {
+      var li = el("li"); li.appendChild(el("b", null, x.label)); li.appendChild(el("span", "n", "+" + fmt(x.points))); li.appendChild(el("p", null, x.detail)); box.appendChild(li);
+    });
+  }
+
+  function renderHistory() {
+    var r = $("redemptions"), h = $("history"); r.textContent = ""; h.textContent = "";
+    if (!me) return;
+    (me.redemptions || []).forEach(function (x) { var li = el("li"); li.appendChild(el("span", null, x.reward + ": " + (REDEEM[x.status] || x.status))); li.appendChild(el("span", null, fmt(x.cost) + " pts")); r.appendChild(li); });
+    (me.history || []).forEach(function (x) {
+      var li = el("li"); li.appendChild(el("span", null, x.label + (x.note ? " · " + x.note : "") + " · " + String(x.at || "").slice(0, 10)));
+      li.appendChild(el("span", x.points > 0 ? "plus" : "", (x.points > 0 ? "+" : "") + fmt(x.points))); h.appendChild(li);
+    });
+    if (!(me.history || []).length) h.appendChild(el("li", null, "No points yet."));
+  }
+
+  function render() { renderPass(); renderAch(); renderLevels(); renderRewards(); renderEarn(); renderHistory(); }
+
+  function loadMe() {
+    say("Loading your badge…");
+    return api("/api/badge/me").then(function (d) { me = d; if (d.state) state = d.state; say(d.added > 0 ? "+" + fmt(d.added) + " points added." : ""); render(); })
+      .catch(function (e) { say(e.message, true); });
+  }
+
+  function redeem(r, btn) {
+    if (!window.confirm("Spend " + fmt(r.cost) + " points on " + r.name + "? The points are held while RB reviews it.")) return;
+    btn.disabled = true;
+    api("/api/badge/redeem", { method: "POST", body: { reward_id: r.id } }).then(function () { say("Request sent. RB will contact you at your verified email."); return loadMe(); })
+      .catch(function (e) { say(e.message, true); btn.disabled = false; });
+  }
+
+  function signIn() {
+    if (clerk) { clerk.openSignIn({ afterSignInUrl: location.href }); return; }
+    say("Loading secure sign-in…");
+    window.RBLoadClerk(KEY).then(function (c) { clerk = c; say(""); if (c.user) return loadMe(); c.openSignIn({ afterSignInUrl: location.href }); }).catch(function (e) { say(e.message, true); });
+  }
+
+  $("signin").addEventListener("click", signIn);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && me) refreshQr(); });
+  render();
+  if (state.status === "live") {
+    if (!KEY) { $("signin").disabled = true; say("Sign-in is being set up. Please check back soon."); }
+    else window.RBLoadClerk(KEY).then(function (c) { clerk = c; if (c.user) return loadMe(); render(); }).catch(function (e) { say(e.message, true); });
+  }
+})();
+</script>
+</body>
+</html>
