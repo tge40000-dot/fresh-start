@@ -57,6 +57,8 @@ py "$ROOT/rb-site-updates/patch_release_copy.py" "$W/rb-release"
 # one bold RB icon on every site (the files are served by artist-router at /brand/* and rb-favicon at /favicon.ico)
 ICON_SITES="artist-router rb-favicon rb-radio rb-radio-hub rb-tv rb-mastering-studio beatstore rb-release rb-events-page rb-jobs rb-memberships rb-fund-campaign relentless-hub rb-command rb-partners"
 for s in $ICON_SITES; do py "$ROOT/rb-tools/patch_icons.py" "$W/$s"; done
+# one row of tabs for every user site at the top of each (styled by rb-public-content's site-images.css)
+for s in $ICON_SITES; do py "$ROOT/rb-tools/patch_tabs.py" "$W/$s"; done
 # Site images (RB Command > Site images): the screen in rb-command, the pictures and per-site CSS from rb-public-content
 py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-command"; py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-public-content"
 # rb-email: the forwarder replaces Cloudflare's sample
@@ -84,6 +86,7 @@ node --no-warnings "$ROOT/rb-site-updates/test/memberships.test.mjs" "$W/rb-memb
 node --no-warnings "$ROOT/rb-site-updates/test/advertise.test.mjs" "$W/artist-router/artist-router-v14.js" "$W/rb-command"
 node --no-warnings "$T/cover.test.mjs" "$W/rb-command"
 node --no-warnings "$ROOT/rb-site-updates/test/site-images.test.mjs" "$W/rb-command" "$W/rb-public-content" $(for s in $ICON_SITES; do case $s in rb-favicon|rb-command) ;; *) echo "$W/$s";; esac; done)
+node "$ROOT/rb-site-updates/test/tabs.test.mjs" $(for s in $ICON_SITES; do case $s in rb-favicon|rb-command) ;; *) echo "$W/$s";; esac; done)
 node "$ROOT/rb-site-updates/test/icons-copy.test.mjs" "$W/rb-release" $(for s in $ICON_SITES; do [ "$s" = rb-favicon ] || echo "$W/$s"; done)
 
 if [ "${1:-}" != "--deploy" ]; then echo "Checks passed. Patched Workers: $W. Run with --deploy to upload them."; exit 0; fi

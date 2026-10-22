@@ -63,6 +63,18 @@ export async function siteImage(request, env, ctx, url) {
   return new Response(null, { status: 302, headers: { Location: new URL(to, SITE).toString(), "Cache-Control": "public, max-age=300" } });
 }
 
+// The row of RB site tabs (rb-tools/patch_tabs.py puts <nav class="rbtabs" hidden> in every user site's pages).
+// Shown and styled only here, so a page that can't load this stylesheet keeps it hidden. Strong selectors and
+// !important so each site's own nav and link styles don't restyle it; it sits in the page flow above the site's header.
+const TABS_CSS = 'nav.rbtabs.rbtabs[hidden]{display:flex!important}' +
+  'nav.rbtabs.rbtabs{position:relative!important;z-index:2147483000;display:flex;gap:0;margin:0!important;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;' +
+  'background:#0a0908!important;border-bottom:1px solid rgba(212,175,55,.28);padding:0 6px!important;box-sizing:border-box;width:100%;max-width:100vw;min-width:0;align-self:stretch;grid-column:1/-1;-webkit-overflow-scrolling:touch}' +
+  'nav.rbtabs.rbtabs::-webkit-scrollbar{display:none}' +
+  'nav.rbtabs.rbtabs a{flex:0 0 auto!important;display:block!important;color:#cfc6b8!important;text-decoration:none!important;padding:11px 12px 10px!important;margin:0!important;' +
+  'font:600 12.5px/1.1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif!important;letter-spacing:.02em!important;text-transform:none!important;border:0!important;border-bottom:2px solid transparent!important;background:none!important;white-space:nowrap!important;opacity:1!important}' +
+  'nav.rbtabs.rbtabs a:hover,nav.rbtabs.rbtabs a:focus-visible{color:#f2d98a!important}' +
+  'nav.rbtabs.rbtabs a[aria-current]{color:#f0c75a!important;border-bottom-color:#e2b649!important}\n';
+
 export async function siteImagesCss(request, env, ctx, url) {
   const site = String(url.searchParams.get("site") || "");
   const headers = { "Content-Type": "text/css; charset=utf-8", "Cache-Control": "public, max-age=60", "X-Content-Type-Options": "nosniff", "Access-Control-Allow-Origin": "*" };
@@ -70,7 +82,7 @@ export async function siteImagesCss(request, env, ctx, url) {
   if (!def) return new Response("/* unknown site */\n", { status: 400, headers });
   const st = env.DB ? await state(env, ctx, url.origin) : { setting: parseImages(null), assets: {} };
   const u = (slot, a) => `${SITE}/api/content/site-image?site=${site}&slot=${slot}&v=${a.id}`;
-  let css = `/* RB site images: ${site} */\n`;
+  let css = `/* RB site images: ${site} */\n` + TABS_CSS;
   const bg = chosen(st, "background", site);
   if (bg) css += `html body{background:linear-gradient(rgba(8,6,10,.74),rgba(8,6,10,.86)),url("${u("background", bg)}") center/cover no-repeat fixed!important;background-color:#0b0a09!important}\n`;
   const logo = chosen(st, "logo", site);
