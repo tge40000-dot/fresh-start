@@ -12,7 +12,7 @@ W=$(mktemp -d)
 ACCOUNT=0a7be075f32d9d615349825b83ab8fcb
 py() { python3 -I "$@"; }
 
-for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-memberships rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
+for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-memberships rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners rb-game; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
 # the AI Forge lives in the RB account
 CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" pull rb-studio "$W/rb-studio"
 # artist-router: colours (no-op once live), post links and the ad slot
@@ -27,6 +27,8 @@ py "$ROOT/rb-site-updates/patch_memberships.py" "$W/rb-memberships"
 py "$ROOT/rb-site-updates/patch_rewards.py" "$W/artist-router"
 # RB Badge (/badge): points, levels, rewards and the door QR; ships switched off, turned on in RB Command > Badges
 py "$ROOT/rb-site-updates/patch_badge.py" "$W/artist-router"
+# relentlessbillionaire.com/game/ sends players to RB World (/app/world/); the old game's files are still served
+py "$ROOT/rb-tools/patch_game_redirect.py" "$W/rb-game"
 py "$ROOT/rb-site-updates/patch_embed_create.py" "$W/rb-mastering-studio"
 # RB Studio (rb-daw) is built from workers/rb-daw/src (its source since 18 Oct 2026; the old rb-daw patches are all in it).
 # --check builds it and compares with live: exit 1 just means src/ has changes that are not deployed yet.
@@ -68,7 +70,7 @@ py "$ROOT/rb-command-updates/patch_badges_admin.py" "$W/rb-command"
 # rb-email: the forwarder replaces Cloudflare's sample
 cp "$ROOT/rb-email/src/index.js" "$W/rb-email/index.js"
 
-for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-studio rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners; do for f in "$W/$s"/*.js; do node --check "$f"; done; done
+for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-studio rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners rb-game; do for f in "$W/$s"/*.js; do node --check "$f"; done; done
 T="$ROOT/rb-command-updates/test"
 node "$T/no-duplicates.mjs" "$W/rb-command"
 node --no-warnings "$T/palettes.mjs" "$W/rb-command/theme.js" | tail -1
@@ -82,6 +84,7 @@ node --no-warnings "$ROOT/rb-site-updates/test/create.test.mjs" "$W/artist-route
 node --no-warnings "$ROOT/rb-site-updates/test/rewards.test.mjs" "$W/artist-router/artist-router-v14.js" | tail -c 120
 node --no-warnings "$ROOT/rb-site-updates/test/badge.test.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$T/badge-desk.test.mjs" "$W/rb-command"
+node --no-warnings "$ROOT/rb-site-updates/test/game-redirect.test.mjs" "$W/rb-game"
 node --no-warnings "$ROOT/rb-site-updates/test/ai-limit.test.mjs" "$W/relentless-billionaire-api/script.js"
 node --no-warnings "$ROOT/rb-site-updates/test/radio-tv.test.mjs" "$W/rb-radio" "$W/rb-tv"
 node "$ROOT/rb-site-updates/test/flow.test.mjs" "$W/rb-radio"
@@ -109,6 +112,8 @@ py "$ROOT/rb-tools/cfworker.py" push rb-memberships "$W/rb-memberships"
 py "$ROOT/rb-tools/cfworker.py" push artist-router "$W/artist-router"
 # after artist-router, which serves the icon files they link to
 for s in rb-favicon rb-release beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners; do py "$ROOT/rb-tools/cfworker.py" push "$s" "$W/$s"; done
+# after artist-router, which serves RB World
+py "$ROOT/rb-tools/cfworker.py" push rb-game "$W/rb-game"
 if curl -fsS -m 20 https://relentlessbillionaire.com/radio/api/now | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("live") else 1)'; then
   echo "rb-radio: a live show is on air, so it's skipped. Run this again after the show."
 else

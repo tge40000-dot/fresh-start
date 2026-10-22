@@ -317,8 +317,15 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.ok(terms.includes("Guest list at RB shows.") && terms.includes("RB hoodie") && !terms.includes("coming soon"));
   sql("UPDATE badge_config SET value='off' WHERE key='enabled'");
   assert.equal((await me("u_alice")).status, 403, "switched off again: closed");
-  assert.equal((await api("/api/world/beat", { method: "POST", body: { id: "aaaaaaaa-1111" } })).status, 403, "RB World is closed too");
-  const offWorld = await (await go("/app/world/")).text();
-  assert.ok(offWorld.includes("coming soon") && !offWorld.includes("main.js"), "the world page says coming soon");
+  const ob = await api("/api/world/beat", { method: "POST", body: { id: "aaaaaaaa-1111", name: "Guest" } });
+  assert.equal(ob.status, 200, "RB World stays open with RB Badge off"); assert.deepEqual(ob.body.points, { member: false, on: false }, "but no points");
+  const signedOff = await api("/api/world/beat", { method: "POST", user: "u_bob", body: { id: "cccccccc-3333", name: "Bob" } });
+  assert.equal(signedOff.body.points.member, false, "signed in, still no points while RB Badge is off");
+  assert.ok((await (await go("/app/world/")).text()).includes("/app/world/main.js"), "the world page plays");
+  sql("UPDATE badge_config SET value='off' WHERE key='world_open'");
+  assert.equal((await api("/api/world/beat", { method: "POST", body: { id: "aaaaaaaa-1111" } })).status, 403, "RB World open = off closes it");
+  const closed = await (await go("/app/world/")).text();
+  assert.ok(closed.includes("coming soon") && !closed.includes("main.js"), "the world page says coming soon");
+  sql("UPDATE badge_config SET value='on' WHERE key='world_open'");
 }
 console.log("badge ok: RB World on RB's backend (page, no InstantDB or Stripe, players, leaderboard, chat with limits, ads ticker, play-time points with gaps and daily cap), RB app and manifest, Gold Rush scores checked against the round (early, too high, twice, late, round and daily caps, rounds a day), off by default, terms for review, pulled points counted once, levels, achievements, signed QR read back, redeem with stock/balance/level checks, sign-in rules");

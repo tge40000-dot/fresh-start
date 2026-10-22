@@ -9,7 +9,8 @@
 // Play time: a signed-in member's beats add up the seconds between them (at most WORLD_BEAT_CREDIT each, so several
 // tabs or a stalled tab don't count extra); every world_block_minutes of play gives world_points_block points, up to
 // world_points_daily a day. Net worth and the rest of the game stay in the player's browser, as before; the
-// leaderboard shows what each player's game reports.
+// leaderboard shows what each player's game reports. RB World is open on its own (setting world_open, default on, so
+// relentlessbillionaire.com/game/ keeps working); play-time points only start once RB Badge itself is switched on.
 const WORLD_PEER_SECONDS = 20;
 const WORLD_BEAT_CREDIT = 10;
 const WORLD_VERSION = "w3";
@@ -126,7 +127,7 @@ async function rbWorldRoute(request, env, url, path, method) {
   if (path === "/app/world" && page && !url.pathname.endsWith("/")) return new Response(null, { status: 301, headers: { Location: "/app/world/" + url.search } });
   const g = await rbbLoad(env);
   if (path === "/app/world" && page) {
-    if (!g.on) {
+    if (!g.worldOpen) {
       const nonce = rbcNonce();
       return new Response(request.method === "HEAD" ? null : RB_APP_HTML.replaceAll("__NONCE__", nonce).replace("__STATUS__", "off").replace("__CLERK_KEY__", '""').replace("__STATE__", () => rbcScriptJson(rbbPublicState(g))), { headers: rbcPageHeaders(env, nonce) });
     }
@@ -134,11 +135,11 @@ async function rbWorldRoute(request, env, url, path, method) {
     return new Response(request.method === "HEAD" ? null : html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Content-Security-Policy": worldCsp(env), "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN", "Referrer-Policy": "strict-origin-when-cross-origin" } });
   }
   if ((path === "/app/world/main.js" || path === "/app/world/rb_world.js") && page) {
-    if (!g.on) return new Response("// RB World is coming soon.\n", { status: 404, headers: { "Content-Type": "application/javascript; charset=utf-8" } });
+    if (!g.worldOpen) return new Response("// RB World is coming soon.\n", { status: 404, headers: { "Content-Type": "application/javascript; charset=utf-8" } });
     return new Response(path.endsWith("main.js") ? RB_WORLD_MAIN : RB_WORLD_CLIENT, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff" } });
   }
   if (!path.startsWith("/api/world/")) return null;
-  if (!g.on) return rbcJson({ ok: false, error: "RB World is coming soon." }, 403);
+  if (!g.worldOpen) return rbcJson({ ok: false, error: "RB World is coming soon." }, 403);
   if (path === "/api/world/ads" && method === "GET") return await worldAds(env);
   if ((path === "/api/world/beat" || path === "/api/world/chat") && method === "POST") {
     const origin = request.headers.get("Origin");

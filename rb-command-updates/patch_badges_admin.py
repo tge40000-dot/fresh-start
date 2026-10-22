@@ -77,8 +77,8 @@ SPECS = '''  // ---------------- Badges (RB Badge at relentlessbillionaire.com/b
     async check(env, v, errors, mode, before) {
       const k = before && before.key, val = v.value == null ? "" : String(v.value).trim();
       if (!("value" in v)) return;
-      if (k === "enabled" && !["on", "off"].includes(val)) errors.value = "Use on or off.";
-      if (/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_|world_)/.test(k || "") && !/^\\d{1,6}$/.test(val)) errors.value = "Use a whole number (0 turns it off).";
+      if ((k === "enabled" || k === "world_open") && !["on", "off"].includes(val)) errors.value = "Use on or off.";
+      if (/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_|world_points|world_block)/.test(k || "") && !/^\\d{1,6}$/.test(val)) errors.value = "Use a whole number (0 turns it off).";
       if ((k === "eligibility" || k === "redeem_how") && !val) errors.value = "This is shown in the terms, so it can't be empty.";
       if (k === "enabled" && val === "on") {
         const live = await env.DB.prepare("SELECT count(*) AS n FROM badge_levels WHERE status = 'live' AND perks NOT LIKE 'DRAFT:%' AND trim(coalesce(perks, '')) != ''").first().catch(() => null);
@@ -149,8 +149,10 @@ SPECS = '''  // ---------------- Badges (RB Badge at relentlessbillionaire.com/b
   feature_controls: {'''
 edit("tables.js", "  // ---------------- Settings\n  feature_controls: {", SPECS, "Badges tables")
 
-upgrade("tables.js", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max)/", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_|world_)/", "game settings are checked")
-upgrade("tables.js", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_)/", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_|world_)/", "RB World settings are checked")
+upgrade("tables.js", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max)/", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_|world_points|world_block)/", "game settings are checked")
+upgrade("tables.js", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_|world_)/", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_|world_points|world_block)/", "RB World point settings are checked")
+upgrade("tables.js", 'if (k === "enabled" && !["on", "off"].includes(val))', 'if ((k === "enabled" || k === "world_open") && !["on", "off"].includes(val))', "RB World switch is checked")
+upgrade("tables.js", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_)/", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_|world_points|world_block)/", "RB World settings are checked")
 
 # RB World chat (the 3D game at relentlessbillionaire.com/app/world), so the team can remove messages.
 edit("tables.js", "  // ---------------- Settings\n  feature_controls: {",
