@@ -11,6 +11,7 @@ for (const d of process.argv.slice(2)) {
   for (const f of readdirSync(d).filter((x) => /\.(js|html)$/.test(x) && x !== "brand_icons.js")) {
     const s = readFileSync(join(d, f), "utf8").replace(/\\"/g, '"');
     for (const m of s.matchAll(/<body\b[^>]*>/gi)) {
+      if (/data-rbtabs="off"/.test(m[0])) { assert.ok(!s.slice(m.index, m.index + 400).includes('class="rbtabs"'), `${d}/${f}: an app page keeps its own nav`); continue; }
       const after = s.slice(m.index + m[0].length, m.index + m[0].length + 3000);
       assert.ok(after.startsWith('<nav class="rbtabs" hidden aria-label="Relentless Billionaire sites">'), `${d}/${f}: the tabs open the page`);
       const bar = after.slice(0, after.indexOf("</nav>") + 6);

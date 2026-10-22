@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>RB App · Relentless Billionaire</title>
+<meta name="description" content="The RB app: your RB Badge pass, points, levels, rewards, events and RB Gold Rush, the game that earns points.">
+<link rel="canonical" href="https://relentlessbillionaire.com/app">
+<link rel="manifest" href="/app/manifest.webmanifest">
+<meta name="theme-color" content="#07060A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RB">
+<link rel="icon" href="/favicon.ico">
+<style nonce="__NONCE__">
+@font-face{font-family:"RB Cinzel";src:url(https://fonts.gstatic.com/s/cinzel/v26/8vIJ7ww63mVu7gt79mT7.woff2) format("woff2");font-weight:400 900;font-display:swap}
+@font-face{font-family:"RB Cormorant";src:url(https://fonts.gstatic.com/s/cormorantgaramond/v21/co3bmX5slCNuHLi8bLeY9MK7whWMhyjYqXtK.woff2) format("woff2");font-weight:300 700;font-display:swap}
+:root{--bg:#07060A;--panel:#110F0C;--panel2:#18150F;--line:#2B261C;--line2:#3D3527;--gold:#C9A227;--gold2:#E9CF83;--gold3:#8F6A22;--text:#EFE8D8;--muted:#A79E89;--ok:#7CC48A;--bad:#FF8A96;
+  --caps:"RB Cinzel",Cinzel,"Times New Roman",serif;--serif:"RB Cormorant","Cormorant Garamond",Georgia,serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;min-width:320px;min-height:100vh;background:radial-gradient(900px 480px at 85% -10%,rgba(201,162,39,.14),transparent 62%),var(--bg);color:var(--text);font:15px/1.5 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden;padding-bottom:calc(78px + env(safe-area-inset-bottom))}
+a{color:var(--gold2)}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--gold2);outline-offset:2px;border-radius:8px}
+.wrap{max-width:720px;margin:0 auto;padding:0 16px}
+header.app{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:calc(12px + env(safe-area-inset-top)) 0 10px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--text);text-decoration:none;font:600 11px/1.2 var(--caps);letter-spacing:.18em}
+.mark{width:34px;height:34px;flex:none;border-radius:50%;border:1px solid var(--gold3);display:grid;place-items:center;font:700 12px/1 var(--caps);color:var(--gold2)}
+.pts{display:flex;align-items:baseline;gap:6px;padding:6px 12px;border-radius:999px;border:1px solid var(--line2);background:var(--panel2)}
+.pts b{font:700 16px/1 var(--caps);color:var(--gold2)}
+.pts span{font-size:11px;color:var(--muted);letter-spacing:.08em}
+h1{font:600 clamp(28px,8vw,44px)/1.05 var(--caps);margin:8px 0 6px}
+h1 em{font-style:normal;color:var(--gold2)}
+h2{font:600 15px/1.25 var(--caps);letter-spacing:.08em;color:var(--gold2);margin:0 0 10px}
+.lede{font:italic 400 19px/1.35 var(--serif);color:var(--muted);margin:0}
+.panel{background:linear-gradient(180deg,rgba(201,162,39,.05),transparent 40%),var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px;margin:12px 0}
+.m{color:var(--muted);font-size:13px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:0 20px;border-radius:999px;border:1px solid var(--line2);background:var(--panel2);color:var(--text);text-decoration:none;font-weight:600;font-size:14px}
+.btn.gold{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#140F05;border-color:var(--gold)}
+.btn.wide{width:100%}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.note{min-height:1.4em;font-size:14px;color:var(--gold2);margin:6px 0 0}
+.note.err{color:var(--bad)}
+.screen{padding-top:4px}
+/* pass */
+.pass{text-align:center;border-color:var(--gold3);background:radial-gradient(420px 220px at 50% 0%,rgba(233,207,131,.16),transparent 70%),linear-gradient(160deg,#17130B,#0C0A07 60%)}
+.lvl{display:inline-block;padding:5px 14px;border-radius:999px;border:1px solid var(--gold);font:700 12px/1 var(--caps);letter-spacing:.22em;color:var(--gold2)}
+.who{font:600 26px/1.15 var(--serif);margin:10px 0 2px}
+.qr{width:min(260px,72vw);aspect-ratio:1;border-radius:14px;background:#fff;padding:6px;margin:14px auto 6px;display:block;box-shadow:0 0 0 1px var(--gold3),0 12px 36px rgba(0,0,0,.55)}
+.code{font-size:12px;color:var(--muted);letter-spacing:.1em}
+.nums{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0 6px}
+.nums div{padding:10px 4px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}
+.nums b{display:block;font:700 22px/1 var(--caps);color:var(--gold2)}
+.nums span{font-size:11px;color:var(--muted)}
+.bar{height:8px;border-radius:999px;background:#0B0A08;border:1px solid var(--line2);overflow:hidden;margin:8px 0 4px}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold3),var(--gold2));transition:width .6s ease}
+.perks{margin-top:10px;padding:12px;border-radius:12px;background:rgba(201,162,39,.07);border:1px solid var(--line2);font-size:14px;text-align:left}
+/* game */
+.stage{position:relative;width:100%;max-width:480px;margin:0 auto;aspect-ratio:3/4;border-radius:18px;overflow:hidden;border:1px solid var(--gold3);background:radial-gradient(400px 300px at 50% 0%,rgba(233,207,131,.12),transparent 70%),#0B0907;touch-action:none;user-select:none;-webkit-user-select:none}
+.stage canvas{width:100%;height:100%;display:block}
+.hud{position:absolute;top:10px;left:12px;right:12px;display:flex;justify-content:space-between;font:700 15px/1 var(--caps);color:var(--gold2);pointer-events:none;text-shadow:0 1px 4px #000}
+.over{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;background:rgba(7,6,10,.72)}
+.over h3{font:700 26px/1.1 var(--caps);color:var(--gold2);margin:0 0 8px;letter-spacing:.06em}
+.over p{margin:0 0 14px;color:var(--text)}
+.legend{display:flex;justify-content:center;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin:10px 0}
+.legend b{color:var(--text)}
+/* lists */
+.rewards,.events,.ach{display:grid;gap:10px}
+.card{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--panel2);display:grid;gap:6px}
+.card h3{font:600 19px/1.2 var(--serif);margin:0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.cost{font:700 14px/1 var(--caps);color:var(--gold2)}
+.ach{grid-template-columns:repeat(2,minmax(0,1fr))}
+.ach div{border:1px dashed var(--line2);border-radius:12px;padding:10px;font-size:12px;color:var(--muted)}
+.ach div b{display:block;font:600 13px/1.2 var(--caps);color:var(--muted)}
+.ach div.got{border-style:solid;border-color:var(--gold3);background:rgba(201,162,39,.08);color:var(--text)}
+.ach div.got b{color:var(--gold2)}
+.history{list-style:none;margin:0;padding:0;font-size:13px;color:var(--muted);display:grid;gap:6px}
+.history li{display:flex;justify-content:space-between;gap:10px}
+.history .plus{color:var(--ok)}
+/* bottom nav */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:50;display:grid;grid-template-columns:repeat(5,1fr);background:rgba(10,9,8,.96);border-top:1px solid var(--line2);padding:6px 4px calc(6px + env(safe-area-inset-bottom));backdrop-filter:blur(10px)}
+nav.tabs button{background:none;border:0;display:grid;justify-items:center;gap:3px;padding:6px 0;color:var(--muted);font:600 11px/1 var(--sans);letter-spacing:.04em}
+nav.tabs svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+nav.tabs button[aria-selected=true]{color:var(--gold2)}
+body[data-status=off] nav.tabs,body[data-status=off] .live-only{display:none}
+body[data-status=live] .soon{display:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body data-status="__STATUS__" data-rbtabs="off">
+<div class="wrap">
+<header class="app">
+  <a class="brand" href="/" aria-label="Relentless Billionaire home"><span class="mark">RB</span><span>RB APP</span></a>
+  <div class="pts live-only" id="hdr-pts" hidden><b id="hdr-bal">0</b><span>POINTS</span></div>
+</header>
+
+<section class="panel soon">
+  <h1>The RB app is <em>coming soon.</em></h1>
+  <p class="lede">Your RB Badge, points, rewards, events and RB Gold Rush, in one place.</p>
+  <p class="m"><a href="/badge/terms">RB Badge terms</a> · <a href="/">Back to the site</a></p>
+</section>
+
+<section class="panel live-only" id="signed-out" hidden>
+  <h1>Show up.<br><em>Play. Level up.</em></h1>
+  <p class="lede">Earn points at RB shows, in the store and in RB Gold Rush. Spend them online or at the door.</p>
+  <p class="m">Sign in with your RB account. Points from what you've already done with the same verified email are added the first time.</p>
+  <button class="btn gold wide" id="signin" type="button">Sign in</button>
+  <p class="note" id="note0" role="status" aria-live="polite"></p>
+</section>
+
+<main class="live-only" id="app" hidden>
+  <section class="screen" id="s-pass" aria-label="Pass">
+    <div class="panel pass">
+      <span class="lvl" id="lvl">RB BADGE</span>
+      <div class="who" id="who"></div>
+      <img class="qr" id="qr" alt="Your RB Badge QR code. Show it to RB staff at the door." width="260" height="260">
+      <div class="code" id="code"></div>
+      <div class="m">Show this at RB shows and events to check in and redeem rewards. It refreshes every few minutes.</div>
+      <div class="nums"><div><b id="bal">0</b><span>to spend</span></div><div><b id="life">0</b><span>lifetime</span></div><div><b id="chk">0</b><span>check-ins</span></div></div>
+      <div class="bar" aria-hidden="true"><i id="barfill"></i></div>
+      <div class="m" id="next"></div>
+      <div class="perks" id="perks" hidden></div>
+    </div>
+    <button class="btn wide" type="button" data-go="play">Play RB Gold Rush to earn points</button>
+  </section>
+
+  <section class="screen" id="s-play" aria-label="Play" hidden>
+    <h2>RB Gold Rush</h2>
+    <p class="m" id="game-rules"></p>
+    <div class="stage" id="stage">
+      <canvas id="cv" width="480" height="640" aria-label="RB Gold Rush game. Drag or use the arrow keys to move the case." role="img"></canvas>
+      <div class="hud"><span id="g-score">0</span><span id="g-time">45</span></div>
+      <div class="over" id="g-over"><div><h3 id="g-title">RB GOLD RUSH</h3><p id="g-msg">Catch the gold, grab the diamonds, dodge the bombs. 45 seconds a round.</p><button class="btn gold" id="g-go" type="button">Play</button></div></div>
+    </div>
+    <div class="legend"><span><b>Gold</b> +10</span><span><b>Diamond</b> +25</span><span><b>Bomb</b> −15</span></div>
+    <p class="m" id="g-today"></p>
+    <p class="m"><a href="/game/">The RB 3D game</a> is a separate game and doesn't earn badge points.</p>
+  </section>
+
+  <section class="screen" id="s-rewards" aria-label="Rewards" hidden>
+    <h2>Rewards</h2>
+    <p class="m" id="redeem-how"></p>
+    <p class="m">At RB shows and events you can also spend points in person: show your pass and staff redeem it on the spot.</p>
+    <div class="rewards" id="rewards"></div>
+    <h2 class="sr">Your requests</h2>
+    <ul class="history" id="redemptions"></ul>
+  </section>
+
+  <section class="screen" id="s-events" aria-label="Events" hidden>
+    <h2>Coming up</h2>
+    <p class="m">Show your pass at the door to check in for points.</p>
+    <div class="events" id="events"></div>
+    <p class="m"><a href="/events">All RB events</a></p>
+  </section>
+
+  <section class="screen" id="s-me" aria-label="Me" hidden>
+    <div class="panel"><h2>Badges to collect</h2><div class="ach" id="ach"></div></div>
+    <div class="panel"><h2>Levels</h2><div class="events" id="levels"></div></div>
+    <div class="panel"><h2>How to earn</h2><ul class="history" id="earn"></ul></div>
+    <div class="panel"><h2>Your points</h2><ul class="history" id="history"></ul></div>
+    <p class="m"><a href="/badge/terms">RB Badge terms</a> · <a href="/privacy">Privacy</a> · <button class="btn" id="signout" type="button">Sign out</button></p>
+  </section>
+  <p class="note" id="note" role="status" aria-live="polite"></p>
+</main>
+</div>
+
+<nav class="tabs live-only" id="tabs" aria-label="RB app" hidden>
+  <button type="button" data-go="pass" aria-selected="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>Pass</button>
+  <button type="button" data-go="play"><svg viewBox="0 0 24 24"><path d="M6 11h4M8 9v4"/><circle cx="15.5" cy="11" r=".6"/><circle cx="17.5" cy="13" r=".6"/><path d="M7 5h10a5 5 0 0 1 5 5v1a6 6 0 0 1-10.4 4h-1.2A6 6 0 0 1 2 11v-1a5 5 0 0 1 5-5z"/></svg>Play</button>
+  <button type="button" data-go="rewards"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="13" rx="1"/><path d="M12 8v13M3 12h18M12 8c-2-4-6-4-6-1.5S9 8 12 8zm0 0c2-4 6-4 6-1.5S15 8 12 8z"/></svg>Rewards</button>
+  <button type="button" data-go="events"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Events</button>
+  <button type="button" data-go="me"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Me</button>
+</nav>
+<script type="application/json" id="rb-state" nonce="__NONCE__">__STATE__</script>
+<!--CLERK-LOADER-->
+<script nonce="__NONCE__">
+/*GOLDRUSH*/
+(function () {
+  "use strict";
+  var KEY = __CLERK_KEY__;
+  var state = JSON.parse(document.getElementById("rb-state").textContent || "{}");
+  var me = null, clerk = null, timer = null, screen = "pass";
+  var $ = function (id) { return document.getElementById(id); };
+  var fmt = function (n) { return Number(n || 0).toLocaleString("en-US"); };
+  var REDEEM = { requested: "Requested, points held", approved: "Approved", fulfilled: "Delivered", rejected: "Not approved, points returned" };
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function say(text, err) { var n = $(me ? "note" : "note0"); n.textContent = text || ""; n.className = "note" + (err ? " err" : ""); }
+  function api(path, opts) {
+    opts = opts || {};
+    var tokenP = clerk && clerk.session ? clerk.session.getToken() : Promise.resolve(null);
+    return tokenP.then(function (token) {
+      var headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = "Bearer " + token;
+      return fetch(path, { method: opts.method || "GET", headers: headers, body: opts.body ? JSON.stringify(opts.body) : undefined, credentials: "same-origin" });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) { if (!res.ok || body.ok === false) throw new Error(body.error || "Something went wrong. Please try again."); return body; });
+    });
+  }
+
+  // ---- screens
+  function go(name) {
+    if (game.running && name !== "play") return;
+    if (name !== screen) say("");
+    screen = name;
+    ["pass", "play", "rewards", "events", "me"].forEach(function (s) { $("s-" + s).hidden = s !== name; });
+    Array.prototype.forEach.call(document.querySelectorAll("nav.tabs button"), function (b) { b.setAttribute("aria-selected", String(b.getAttribute("data-go") === name)); });
+    if (name === "pass") refreshQr();
+    if (name === "play") game.draw();
+    try { history.replaceState(null, "", "#" + name); } catch (e) {}
+    window.scrollTo(0, 0);
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("[data-go]"), function (b) { b.addEventListener("click", function () { go(b.getAttribute("data-go")); }); });
+
+  function levelOf(key) { return (state.levels || []).filter(function (x) { return x.key === key; })[0]; }
+
+  function renderPass() {
+    var s = me.standing;
+    $("hdr-bal").textContent = fmt(s.balance);
+    $("lvl").textContent = s.level ? s.level.name.toUpperCase() : "RB BADGE";
+    $("who").textContent = me.member.name || me.member.email || "Your badge";
+    $("bal").textContent = fmt(s.balance); $("life").textContent = fmt(s.lifetime); $("chk").textContent = fmt(s.checkins);
+    if (s.next) {
+      var from = s.level ? (levelOf(s.level.key) || { min: 0 }).min : 0;
+      $("barfill").style.width = Math.max(0, Math.min(100, Math.round((s.lifetime - from) / Math.max(1, s.next.min - from) * 100))) + "%";
+      $("next").textContent = fmt(s.next.to_go) + " more points to " + s.next.name + ".";
+    } else { $("barfill").style.width = "100%"; $("next").textContent = s.level ? "Top level reached." : ""; }
+    $("perks").hidden = !(s.level && s.level.perks);
+    if (s.level && s.level.perks) $("perks").textContent = s.level.name + ": " + s.level.perks;
+    showQr(me.pass);
+  }
+  function showQr(p) {
+    if (!p) return;
+    $("qr").src = "data:image/svg+xml," + encodeURIComponent(p.svg);
+    $("code").textContent = p.code;
+    clearTimeout(timer);
+    timer = setTimeout(refreshQr, Math.max(60, p.refresh_seconds || 480) * 1000);
+  }
+  function refreshQr() { if (!me) return; api("/api/badge/pass").then(function (d) { me.pass = d.pass; showQr(d.pass); }).catch(function () { clearTimeout(timer); timer = setTimeout(refreshQr, 60000); }); }
+
+  function renderRewards() {
+    var box = $("rewards"); box.textContent = "";
+    $("redeem-how").textContent = state.redeem_how || "";
+    if (!(state.rewards || []).length) box.appendChild(el("p", "m", "Rewards are posted here when RB adds them."));
+    (state.rewards || []).forEach(function (r) {
+      var c = el("article", "card");
+      c.appendChild(el("h3", null, r.name));
+      if (r.description) c.appendChild(el("p", "m", r.description));
+      var row = el("div", "row"), lv = r.min_level && levelOf(r.min_level);
+      row.appendChild(el("span", "cost", fmt(r.cost) + " pts"));
+      row.appendChild(el("span", "m", (r.remaining > 0 ? fmt(r.remaining) + " left" : "All gone") + (lv ? " · " + lv.name + " and up" : "")));
+      c.appendChild(row);
+      var b = el("button", "btn gold", "Redeem online"); b.type = "button";
+      b.disabled = !me || r.remaining <= 0 || me.standing.balance < r.cost;
+      b.addEventListener("click", function () { redeem(r, b); });
+      c.appendChild(b);
+      box.appendChild(c);
+    });
+    var red = $("redemptions"); red.textContent = "";
+    (me.redemptions || []).forEach(function (x) { var li = el("li"); li.appendChild(el("span", null, x.reward + ": " + (REDEEM[x.status] || x.status))); li.appendChild(el("span", null, fmt(x.cost) + " pts")); red.appendChild(li); });
+  }
+  function renderEvents() {
+    var box = $("events"); box.textContent = "";
+    if (!(state.events || []).length) box.appendChild(el("p", "m", "No RB events are posted right now."));
+    (state.events || []).forEach(function (e) {
+      var c = el("article", "card"), d = new Date(String(e.starts_at).replace(" ", "T") + (/[zZ]|[+-]\d\d:?\d\d$/.test(e.starts_at) ? "" : "Z"));
+      c.appendChild(el("h3", null, e.title));
+      c.appendChild(el("span", "m", (isNaN(d) ? String(e.starts_at) : d.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })) + (e.venue ? " · " + e.venue : "")));
+      if (e.ticket_url) { var a = el("a", "btn", "Tickets"); a.href = e.ticket_url; a.rel = "noopener"; a.target = "_blank"; c.appendChild(a); }
+      box.appendChild(c);
+    });
+  }
+  function renderMe() {
+    var ach = $("ach"); ach.textContent = "";
+    (state.achievements || []).forEach(function (a) { var has = me.standing.earned.indexOf(a.key) >= 0, d = el("div", has ? "got" : ""); d.appendChild(el("b", null, (has ? "✓ " : "") + a.name)); d.appendChild(document.createTextNode(a.description)); ach.appendChild(d); });
+    var lv = $("levels"); lv.textContent = "";
+    (state.levels || []).forEach(function (l) { var c = el("div", "card"); c.appendChild(el("h3", null, l.name)); c.appendChild(el("span", "m", fmt(l.min) + "+ lifetime points")); c.appendChild(el("span", null, l.perks)); lv.appendChild(c); });
+    var earn = $("earn"); earn.textContent = "";
+    (state.earn || []).forEach(function (x) { var li = el("li"); li.appendChild(el("span", null, x.label + ": " + x.detail)); li.appendChild(el("span", "plus", "+" + fmt(x.points))); earn.appendChild(li); });
+    var h = $("history"); h.textContent = "";
+    (me.history || []).forEach(function (x) { var li = el("li"); li.appendChild(el("span", null, x.label + (x.note ? " · " + x.note : "") + " · " + String(x.at || "").slice(0, 10))); li.appendChild(el("span", x.points > 0 ? "plus" : "", (x.points > 0 ? "+" : "") + fmt(x.points))); h.appendChild(li); });
+    if (!(me.history || []).length) h.appendChild(el("li", null, "No points yet."));
+  }
+  function renderGameInfo() {
+    var g = state.game || {};
+    $("game-rules").textContent = g.round_max > 0 && g.daily > 0 ? "Every " + fmt(g.per_point) + " score is 1 point, up to " + fmt(g.round_max) + " a round and " + fmt(g.daily) + " a day. Free to play." : "Play for fun. Rounds don't earn points right now.";
+    var t = me && me.game ? me.game : { rounds: 0, points: 0, best: 0 };
+    $("g-today").textContent = "Today: " + fmt(t.rounds) + " of " + fmt(g.rounds || 0) + " rounds, " + fmt(t.points) + " game points, best score " + fmt(t.best) + ".";
+  }
+  function render() {
+    var signed = !!me;
+    $("signed-out").hidden = signed || state.status !== "live";
+    $("app").hidden = !signed; $("tabs").hidden = !signed; $("hdr-pts").hidden = !signed;
+    if (!signed) return;
+    renderPass(); renderRewards(); renderEvents(); renderMe(); renderGameInfo();
+  }
+  function loadMe() {
+    return api("/api/badge/me").then(function (d) { me = d; if (d.state) state = d.state; render(); say(d.added > 0 ? "+" + fmt(d.added) + " points added." : ""); })
+      .catch(function (e) { say(e.message, true); });
+  }
+  function redeem(r, btn) {
+    if (!window.confirm("Spend " + fmt(r.cost) + " points on " + r.name + "? The points are held while RB reviews it.")) return;
+    btn.disabled = true;
+    api("/api/badge/redeem", { method: "POST", body: { reward_id: r.id } }).then(function () { say("Request sent. RB will contact you at your verified email."); return loadMe(); })
+      .catch(function (e) { say(e.message, true); btn.disabled = false; });
+  }
+
+  // ---- RB Gold Rush
+  var cv = $("cv"), cx = cv.getContext("2d");
+  var game = { running: false, plan: [], start: 0, score: 0, x: 0.5, round: null, raf: 0, keys: {}, pops: [] };
+  game.draw = function () {
+    var W = cv.width, H = cv.height, now = performance.now(), t = game.running ? now - game.start : 0;
+    cx.clearRect(0, 0, W, H);
+    // floor line and case
+    cx.strokeStyle = "rgba(233,207,131,.18)"; cx.beginPath(); cx.moveTo(0, H * 0.94); cx.lineTo(W, H * 0.94); cx.stroke();
+    var bw = W * 0.2, bx = game.x * W - bw / 2, by = H * 0.885;
+    var grad = cx.createLinearGradient(0, by, 0, by + 34); grad.addColorStop(0, "#E9CF83"); grad.addColorStop(1, "#8F6A22");
+    cx.fillStyle = grad; roundRect(bx, by, bw, 30, 8); cx.fill();
+    cx.fillStyle = "#140F05"; cx.font = "700 14px Cinzel, Georgia, serif"; cx.textAlign = "center"; cx.textBaseline = "middle"; cx.fillText("RB", game.x * W, by + 15);
+    if (game.running) {
+      game.plan.forEach(function (it) {
+        if (it.done || t < it.t) return;
+        var y = (t - it.t) / 1000 * it.speed * H, x = it.x * W, r = it.kind === "diamond" ? 15 : 16;
+        if (y > by - r && y < by + 18 && Math.abs(x - game.x * W) < bw / 2 + r * 0.6) { it.done = true; game.score = Math.max(0, game.score + it.value); game.pops.push({ x: x, y: by - 8, v: it.value, t: now }); return; }
+        if (y > H + r) { it.done = true; return; }
+        drawItem(it.kind, x, y, r);
+      });
+      game.pops = game.pops.filter(function (p) { return now - p.t < 700; });
+      game.pops.forEach(function (p) { cx.globalAlpha = 1 - (now - p.t) / 700; cx.fillStyle = p.v > 0 ? "#E9CF83" : "#FF8A96"; cx.font = "700 18px Cinzel, Georgia, serif"; cx.fillText((p.v > 0 ? "+" : "") + p.v, p.x, p.y - (now - p.t) / 12); cx.globalAlpha = 1; });
+      $("g-score").textContent = fmt(game.score);
+      $("g-time").textContent = Math.max(0, Math.ceil((RBG_MS - t) / 1000));
+    }
+  };
+  function roundRect(x, y, w, h, r) { cx.beginPath(); cx.moveTo(x + r, y); cx.arcTo(x + w, y, x + w, y + h, r); cx.arcTo(x + w, y + h, x, y + h, r); cx.arcTo(x, y + h, x, y, r); cx.arcTo(x, y, x + w, y, r); cx.closePath(); }
+  function drawItem(kind, x, y, r) {
+    if (kind === "gold") {
+      var g = cx.createRadialGradient(x - r / 3, y - r / 3, 2, x, y, r); g.addColorStop(0, "#FFF1BF"); g.addColorStop(0.5, "#E2B649"); g.addColorStop(1, "#8F6A22");
+      cx.fillStyle = g; cx.beginPath(); cx.arc(x, y, r, 0, Math.PI * 2); cx.fill(); cx.fillStyle = "#5A4210"; cx.font = "700 11px Cinzel, Georgia, serif"; cx.fillText("RB", x, y + 1);
+    } else if (kind === "diamond") {
+      cx.fillStyle = "#BFEFFF"; cx.strokeStyle = "#6FD3F5"; cx.lineWidth = 2; cx.beginPath(); cx.moveTo(x, y - r); cx.lineTo(x + r, y - r / 4); cx.lineTo(x, y + r); cx.lineTo(x - r, y - r / 4); cx.closePath(); cx.fill(); cx.stroke();
+    } else {
+      cx.fillStyle = "#1A1416"; cx.strokeStyle = "#D2394B"; cx.lineWidth = 2.5; cx.beginPath(); cx.arc(x, y, r, 0, Math.PI * 2); cx.fill(); cx.stroke();
+      cx.strokeStyle = "#E9CF83"; cx.lineWidth = 2; cx.beginPath(); cx.moveTo(x + r * 0.5, y - r * 0.8); cx.lineTo(x + r * 0.9, y - r * 1.3); cx.stroke();
+    }
+  }
+  function loop() {
+    if (!game.running) return;
+    var t = performance.now() - game.start, step = 0.018;
+    if (game.keys.ArrowLeft) game.x = Math.max(0.1, game.x - step);
+    if (game.keys.ArrowRight) game.x = Math.min(0.9, game.x + step);
+    game.draw();
+    if (t >= RBG_MS) return finish();
+    game.raf = requestAnimationFrame(loop);
+  }
+  function moveTo(clientX) { var r = cv.getBoundingClientRect(); game.x = Math.max(0.1, Math.min(0.9, (clientX - r.left) / r.width)); if (!game.running) game.draw(); }
+  $("stage").addEventListener("pointerdown", function (e) { moveTo(e.clientX); });
+  $("stage").addEventListener("pointermove", function (e) { if (e.pointerType !== "mouse" || e.buttons || game.running) moveTo(e.clientX); });
+  document.addEventListener("keydown", function (e) { if (screen === "play" && (e.key === "ArrowLeft" || e.key === "ArrowRight")) { game.keys[e.key] = true; e.preventDefault(); } });
+  document.addEventListener("keyup", function (e) { game.keys[e.key] = false; });
+  function overlay(title, msg, btn) { $("g-over").hidden = false; $("g-title").textContent = title; $("g-msg").textContent = msg; $("g-go").textContent = btn || "Play again"; $("g-go").disabled = false; }
+  function countdown(n, done) { if (n === 0) return done(); overlay(String(n), "Get ready.", "…"); $("g-go").disabled = true; setTimeout(function () { countdown(n - 1, done); }, 700); }
+  $("g-go").addEventListener("click", function () {
+    $("g-go").disabled = true;
+    api("/api/badge/game/start", { method: "POST", body: {} }).then(function (d) {
+      game.round = d.round; game.plan = rbgPlan(d.seed); game.score = 0; game.pops = []; game.x = 0.5;
+      if (me) { me.game = me.game || {}; me.game.rounds = d.today.rounds; renderGameInfo(); }
+      countdown(3, function () { $("g-over").hidden = true; game.start = performance.now(); game.running = true; loop(); });
+    }).catch(function (e) { overlay("RB GOLD RUSH", e.message, "Try again"); });
+  });
+  function finish() {
+    game.running = false; cancelAnimationFrame(game.raf); game.draw();
+    overlay("SCORE " + fmt(game.score), "Counting your points…", "Play again"); $("g-go").disabled = true;
+    var send = function (tries) {
+      api("/api/badge/game/finish", { method: "POST", body: { round: game.round, score: game.score } }).then(function (d) {
+        me.game = d.today; me.standing = d.standing; renderPass(); renderGameInfo(); renderRewards();
+        overlay("SCORE " + fmt(d.score), d.points > 0 ? "+" + fmt(d.points) + " points" + (d.capped ? " (today's game limit reached)" : "") + "." : d.capped ? "That's today's game points. Play on for fun." : "No points this round. Catch more gold.", "Play again");
+      }).catch(function (e) { if (tries > 0 && /isn't over yet/.test(e.message)) return setTimeout(function () { send(tries - 1); }, 1500); overlay("SCORE " + fmt(game.score), e.message, "Play again"); });
+    };
+    send(2);
+  }
+
+  function signIn() {
+    if (clerk) { clerk.openSignIn({ afterSignInUrl: location.href }); return; }
+    say("Loading secure sign-in…");
+    window.RBLoadClerk(KEY).then(function (c) { clerk = c; say(""); if (c.user) return loadMe(); c.openSignIn({ afterSignInUrl: location.href }); }).catch(function (e) { say(e.message, true); });
+  }
+  $("signin").addEventListener("click", signIn);
+  $("signout").addEventListener("click", function () { if (clerk) clerk.signOut().then(function () { location.reload(); }); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && me && screen === "pass") refreshQr(); });
+  render();
+  game.draw();
+  var start = (location.hash || "").slice(1);
+  if (state.status === "live") {
+    if (!KEY) { $("signin").disabled = true; say("Sign-in is being set up. Please check back soon."); }
+    else window.RBLoadClerk(KEY).then(function (c) { clerk = c; if (c.user) return loadMe().then(function () { if (["play", "rewards", "events", "me"].indexOf(start) >= 0) go(start); }); render(); }).catch(function (e) { say(e.message, true); });
+  }
+})();
+</script>
+</body>
+</html>

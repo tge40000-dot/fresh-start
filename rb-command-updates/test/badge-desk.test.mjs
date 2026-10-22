@@ -99,6 +99,36 @@ assert.equal(one("SELECT count(*) n FROM badge_points WHERE source='refund'").n,
 r = await desk.lookup(env, { id: "m_alice" });
 assert.equal(r.member.balance, 150); assert.equal(r.member.lifetime, 150, "redeem and refund don't touch the level");
 
+// ---- door staff and redeeming in person
+const door = { email: "gate@rb.test", mustScan: true };
+await rejects(desk.checkin(env, door, { member_id: "m_alice", event_label: "Door test" }), /Scan the member's badge first/);
+r = await desk.checkin(env, door, { member_id: "m_alice", token: tok(nowMin), event_label: "Door test", points: 10 });
+assert.equal(r.already, false); assert.equal(r.member.lifetime, 160);
+await rejects(desk.checkin(env, door, { member_id: "m_other", token: tok(nowMin), event_label: "Door test 2" }), /belongs to someone else/);
+await rejects(desk.checkin(env, door, { token: tok(nowMin - 30), event_label: "Door test 3" }), /out of date/);
+sql("INSERT INTO badge_rewards (id, name, description, cost, quantity, remaining, status) VALUES (8, 'Drink ticket', 'One drink at the bar.', 50, 5, 5, 'live'), (9, 'Draft thing', 'DRAFT: x', 5, 5, 5, 'live'), (10, 'VIP table', 'A table.', 10, 5, 5, 'live')");
+sql("UPDATE badge_rewards SET min_level='gold' WHERE id=10");
+s = await desk.summary(env);
+assert.deepEqual(s.rewards.map((x) => x.name).sort(), ["Drink ticket", "RB hoodie", "VIP table"], "live, non-draft rewards for the counter");
+await rejects(desk.redeemInPerson(env, who, { member_id: "m_alice", reward_id: 8 }), /Scan the member's badge first/, "always needs the live QR, even for the team");
+const bal = (await desk.lookup(env, { id: "m_alice" })).member.balance;
+r = await desk.redeemInPerson(env, door, { member_id: "m_alice", token: tok(nowMin), reward_id: 8 });
+assert.equal(r.reward, "Drink ticket"); assert.equal(r.member.balance, bal - 50); assert.equal(r.member.lifetime, 160, "spending keeps the level");
+const red = one("SELECT * FROM badge_redemptions WHERE reward_id = 8");
+assert.equal(red.status, "fulfilled"); assert.equal(red.handled_by, "gate@rb.test"); assert.equal(red.notes, "In person");
+assert.equal(one("SELECT remaining FROM badge_rewards WHERE id=8").remaining, 4);
+await rejects(desk.redeemInPerson(env, door, { member_id: "m_alice", token: tok(nowMin), reward_id: 9 }), /isn't available/);
+sql("UPDATE badge_levels SET min_points = 100000 WHERE level_key='gold'");
+await rejects(desk.redeemInPerson(env, door, { member_id: "m_alice", token: tok(nowMin), reward_id: 10 }), /Gold members and up/);
+sql("UPDATE badge_levels SET min_points = 150 WHERE level_key='gold'");
+sql("UPDATE badge_rewards SET cost = 100000 WHERE id = 8");
+await rejects(desk.redeemInPerson(env, door, { member_id: "m_alice", token: tok(nowMin), reward_id: 8 }), /They need 100,000 points/);
+assert.equal(one("SELECT count(*) n FROM command_log WHERE action='badge.redeem'").n, 1);
+const man = await desk.manifest().json();
+assert.equal(man.start_url, "/badge-desk"); assert.equal(man.name, "RB Door"); assert.equal(man.display, "standalone");
+const dp = desk.page("n0nce", false, true);
+assert.ok(dp.includes('data-door="1"') && dp.includes('id="signout"') && !dp.includes("Back to RB Command") && dp.includes('rel="manifest" href="/badge-desk/manifest.webmanifest"'));
+
 // ---- page, routes, tables, nav
 const html = desk.page("n0nce", true);
 for (const tag of html.match(/<(script|style)\b[^>]*>/g)) assert.match(tag, /nonce="n0nce"/);
@@ -110,10 +140,17 @@ const js = await desk.jsqr().text();
 assert.ok(js.includes("jsQR") && js.length > 200000); new Function(js);
 const once = (src, x, what) => assert.equal(src.split(x).length - 1, 1, what);
 const index = readFileSync(join(dir, "index.js"), "utf8"), ui = readFileSync(join(dir, "ui.js"), "utf8"), tables = readFileSync(join(dir, "tables.js"), "utf8"), authjs = readFileSync(join(dir, "auth.js"), "utf8");
-for (const x of ['if (path === "/badge-desk") {', '"/badge-desk/jsqr.js"', 'if (path === "/api/badge-desk") {', '"/api/badge-desk/lookup"', '"/api/badge-desk/checkin"', '"/api/badge-desk/adjust"', '"/api/badge-desk/grant"', '"/api/badge-desk/redemption"', '"/api/badge-desk/redemptions"', "RB Badge reward requests", "const badgeDesk = "]) once(index, x, x);
+for (const x of ['if (path === "/badge-desk") {', '"/badge-desk/jsqr.js") {', 'if (path === "/api/badge-desk") {', '"/api/badge-desk/lookup"', '"/api/badge-desk/checkin"', '"/api/badge-desk/adjust"', '"/api/badge-desk/grant"', '"/api/badge-desk/redemption"', '"/api/badge-desk/redemptions"', "RB Badge reward requests", "const badgeDesk = "]) once(index, x, x);
 once(ui, '["/badge-desk", "Badge desk"]', "nav entry"); once(ui, '"/badge-desk": "Shows & sites"', "nav section");
 for (const t of ["badge_config: {", "badge_levels: {", "badge_rewards: {", "badge_achievements: {", 'import { BADGE_SCHEMA } from "./badge_schema.js";', '"Rewards", "Badges", "Settings"]']) once(tables, t, t);
 once(authjs, '"Rewards", "Badges", "CRM"', "capability");
+once(authjs, 'door: { label: "Door staff"', "door role"); once(authjs, 'door: "support" }', "stored as support with an override");
+once(index, "if (auth.ROLES[user.role]?.door) {", "door gate");
+once(index, 'return redirect("/badge-desk")', "door staff land on the desk");
+for (const x of ['"/api/badge-desk/redeem"', '"/badge-desk/manifest.webmanifest") {', "const deskWho = ", "badgedesk.checkin(env, deskWho(user), body)"]) once(index, x, x);
+const auth = await import(join(dir, "auth.js"));
+assert.equal(auth.ROLES.door.door, true); assert.equal(auth.capabilities("door").door, true);
+assert.ok(Object.values(auth.capabilities("door").groups).every((v) => v === null), "no RB Command sections");
 const T = (await import(join(dir, "tables.js"))).TABLES;
 const errs = {}; await T.badge_levels.check(env, { status: "live" }, errs, "update", { perks: "DRAFT: x" });
 assert.match(errs.perks, /before setting it live/);
@@ -124,4 +161,4 @@ const e3 = {}; await T.badge_config.check(env, { value: "on" }, e3, "update", { 
 assert.match(e3.value, /at least one level live/);
 const e4 = {}; await T.badge_rewards.check(env, { min_level: "platinum", quantity: 1, remaining: 2 }, e4, "update", {});
 assert.match(e4.min_level, /No level/); assert.match(e4.remaining, /more than Quantity/);
-console.log("badge desk ok: tokens (good, old, forged), lookup, check-in once per event, levels and perks, by hand, achievements, reward requests with refunds, page, routes, tables, nav");
+console.log("badge desk ok: door staff (scan to check in, live QR to redeem in person, desk-only role, installable), tokens (good, old, forged), lookup, check-in once per event, levels and perks, by hand, achievements, reward requests with refunds, page, routes, tables, nav");

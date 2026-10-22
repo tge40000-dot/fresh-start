@@ -28,7 +28,11 @@ statements = [x.strip() for x in re.split(r";\s*\n", "\n".join(l for l in sql.sp
 def edit(name, old, new, what):
     p = folder / name
     s = p.read_text(encoding="utf-8")
-    if new in s:
+    # Done already, even if a later patch has since added its own lines inside this block: look for the first line
+    # this edit adds.
+    added = new.replace(old, "", 1) if old in new else new
+    first = next((ln for ln in added.split("\n") if ln.strip()), "")
+    if new in s or (len(first.strip()) > 20 and first in s):
         return
     if s.count(old) != 1:
         raise SystemExit(f"{name}: {what}: anchor found {s.count(old)} times: {old[:70]!r}")
@@ -37,7 +41,9 @@ def edit(name, old, new, what):
 
 
 # ---------------------------------------------------------------- tables.js
-edit("tables.js", 'export const GROUPS = ["Content", "TV", "Events", "Club", "Money", "Inbox", "Sports 4 All", "Partners", "Members", "Settings"];',
+# (Done already when "Rewards" is in the list, even with groups added after it by later patches.)
+if '"Members", "Rewards"' not in (folder / "tables.js").read_text(encoding="utf-8"):
+  edit("tables.js", 'export const GROUPS = ["Content", "TV", "Events", "Club", "Money", "Inbox", "Sports 4 All", "Partners", "Members", "Settings"];',
      'export const GROUPS = ["Content", "TV", "Events", "Club", "Money", "Inbox", "Sports 4 All", "Partners", "Members", "Rewards", "Settings"];', "Rewards group")
 
 SPECS = '''  // ---------------- Rewards (RB Collect at relentlessbillionaire.com/rewards)
@@ -144,7 +150,8 @@ for fn, args in [("listRows", "env, name, params"), ("getRow", "env, name, rawId
 # send `ensure` or `check` to the browser (it lists its keys explicitly), so nothing else changes in tables.js.
 
 # ---------------------------------------------------------------- auth.js: the capability list knows the new group
-edit("auth.js", 'for (const g of ["Content", "TV", "Events", "Club", "Money", "Inbox", "Sports 4 All", "Partners", "Members", "CRM", "Settings"])',
+if '"Members", "Rewards"' not in (folder / "auth.js").read_text(encoding="utf-8"):
+  edit("auth.js", 'for (const g of ["Content", "TV", "Events", "Club", "Money", "Inbox", "Sports 4 All", "Partners", "Members", "CRM", "Settings"])',
      'for (const g of ["Content", "TV", "Events", "Club", "Money", "Inbox", "Sports 4 All", "Partners", "Members", "Rewards", "CRM", "Settings"])', "Rewards capability")
 
 # ---------------------------------------------------------------- index.js: requested claims as a nav count and a to-do

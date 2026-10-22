@@ -58,7 +58,8 @@ CREATE TABLE shop_inquiries (id INTEGER PRIMARY KEY AUTOINCREMENT, product_id IN
 CREATE TABLE store_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, stripe_session_id TEXT NOT NULL UNIQUE, product_id INTEGER, product_title TEXT, brand TEXT, fulfillment_type TEXT, customer_email TEXT, customer_name TEXT, amount_total INTEGER, currency TEXT, payment_status TEXT, status TEXT DEFAULT 'paid', created_at TEXT NOT NULL DEFAULT (datetime('now')));
 CREATE TABLE studio_memberships (clerk_user_id TEXT PRIMARY KEY, tier_key TEXT NOT NULL, status TEXT NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT UNIQUE, current_period_start TEXT, current_period_end TEXT, source TEXT NOT NULL DEFAULT 'admin', created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')));
 CREATE TABLE record_submissions (id TEXT PRIMARY KEY, email TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft');
-CREATE TABLE rb_event_submissions (id INTEGER PRIMARY KEY AUTOINCREMENT, submitter_email TEXT NOT NULL, status TEXT DEFAULT 'pending');`);
+CREATE TABLE rb_event_submissions (id INTEGER PRIMARY KEY AUTOINCREMENT, submitter_email TEXT NOT NULL, status TEXT DEFAULT 'pending');
+CREATE TABLE rb_events (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, starts_at TEXT NOT NULL, venue_name TEXT, ticket_url TEXT, status TEXT DEFAULT 'live');`);
 DONOR_DB.raw.exec(`CREATE TABLE contributions (id INTEGER PRIMARY KEY AUTOINCREMENT, stripe_event_id TEXT NOT NULL UNIQUE, email TEXT, amount_total INTEGER, payment_status TEXT);`);
 const PK = "pk_test_" + btoa("example-clerk.clerk.accounts.dev$");
 const env = { DB, DONOR_DB, CLERK_PUBLISHABLE_KEY: PK, CLERK_SECRET_KEY: "sk_test_fake" };
@@ -192,6 +193,57 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.ok(hist.history.some((x) => x.source === "redeem" && x.points === -1000));
 }
 
+// ---------------------------------------------------------------- 3b. the RB app and RB Gold Rush
+{
+  sql("INSERT INTO rb_events (title, starts_at, venue_name, ticket_url, status) VALUES ('RB Comedy Night', datetime('now', '+3 days'), 'The Room', 'https://tickets.example/rb', 'live'), ('Old', datetime('now', '-9 days'), 'x', '', 'live'), ('Hidden', datetime('now', '+2 days'), 'x', 'javascript:alert(1)', 'archived')");
+  const app = await go("/app"), ah = await app.text();
+  assert.equal(app.status, 200); checkPage(app, ah);
+  assert.ok(ah.includes('data-rbtabs="off"') && ah.includes('rel="manifest" href="/app/manifest.webmanifest"') && ah.includes("function rbgPlan("), "app page with its game");
+  const man = await go("/app/manifest.webmanifest");
+  assert.equal(man.headers.get("Content-Type"), "application/manifest+json");
+  const mj = await man.json(); assert.equal(mj.start_url, "/app"); assert.equal(mj.display, "standalone"); assert.ok(mj.icons.some((i) => i.purpose === "maskable"));
+  const st = (await api("/api/badge/state")).body;
+  assert.deepEqual(st.events.map((e) => e.title), ["RB Comedy Night"], "upcoming live events only"); assert.equal(st.events[0].ticket_url, "https://tickets.example/rb");
+  assert.equal(st.game.round_max, 20); assert.ok(st.earn.some((x) => x.label === "Play RB Gold Rush"));
+  const terms = await (await go("/badge/terms")).text();
+  assert.ok(terms.includes("RB Gold Rush is a free game") && terms.includes("1 point for every 10 score") && terms.includes("spend points in person"));
+
+  const plan = vm.runInNewContext(readFileSync(new URL("../src/badge/goldrush.js", import.meta.url), "utf8") + ";({ rbgPlan, rbgMax, RBG_MS })");
+  const startRound = () => api("/api/badge/game/start", { method: "POST", user: "u_bob", body: {} });
+  const finish = (round, score) => api("/api/badge/game/finish", { method: "POST", user: "u_bob", body: { round, score } });
+  const bobBefore = (await me("u_bob")).body.standing.lifetime;
+  let r = await startRound();
+  assert.equal(r.status, 200); assert.equal(r.body.ms, 45000);
+  const max = plan.rbgMax(r.body.seed);
+  assert.ok(max > 300 && max < 2000, "a round is worth a few hundred");
+  assert.equal(max, plan.rbgPlan(r.body.seed).filter((x) => x.value > 0).reduce((n, x) => n + x.value, 0));
+  assert.equal((await finish(r.body.round, 100)).status, 409, "the round isn't over yet");
+  NOW += 46000;
+  assert.match((await finish(r.body.round, max + 10)).body.error, /higher than the round allowed/);
+  assert.equal((await finish(r.body.round, -5)).status, 400);
+  assert.equal((await api("/api/badge/game/finish", { method: "POST", user: "u_alice", body: { round: r.body.round, score: 10 } })).status, 404, "someone else's round");
+  let f = await finish(r.body.round, 157);
+  assert.equal(f.status, 200, JSON.stringify(f.body)); assert.equal(f.body.points, 15); assert.equal(f.body.standing.lifetime, bobBefore + 15);
+  assert.equal((await finish(r.body.round, 157)).status, 409, "counted once");
+  // the round cap, then the daily cap
+  r = await startRound(); NOW += 46000; f = await finish(r.body.round, Math.min(max, plan.rbgMax(r.body.seed)));
+  assert.equal(f.body.points, 20, "at most 20 a round");
+  r = await startRound(); NOW += 46000; f = await finish(r.body.round, plan.rbgMax(r.body.seed));
+  assert.equal(f.body.points, 20); assert.equal(f.body.today.points, 55);
+  r = await startRound(); NOW += 46000; f = await finish(r.body.round, plan.rbgMax(r.body.seed));
+  assert.equal(f.body.points, 5); assert.equal(f.body.capped, true, "60 a day");
+  r = await startRound(); NOW += 46000; f = await finish(r.body.round, plan.rbgMax(r.body.seed));
+  assert.equal(f.body.points, 0); assert.equal(f.body.today.points, 60);
+  r = await startRound(); NOW += 20 * 60000; f = await finish(r.body.round, 50);
+  assert.equal(f.body.points, 0); assert.equal(f.body.late, true, "a round sent much later earns nothing");
+  sql("UPDATE badge_config SET value='7' WHERE key='game_rounds_daily'");
+  assert.equal((await startRound()).status, 200);
+  const no = await startRound(); assert.equal(no.status, 429); assert.match(no.body.error, /all 7 rounds/);
+  const hist = (await me("u_bob")).body;
+  assert.ok(hist.history.some((x) => x.source === "game" && x.label === "RB Gold Rush")); assert.equal(hist.game.points, 60);
+  assert.equal(one("SELECT count(*) n FROM badge_points WHERE source='game'").n, 4, "one ledger row per round that earned");
+}
+
 // ---------------------------------------------------------------- 4. sign-in rules and the switch
 {
   assert.equal((await me()).status, 401, "needs sign-in");
@@ -207,4 +259,4 @@ USERS.u_bob = { email: "bob@example.com" };
   sql("UPDATE badge_config SET value='off' WHERE key='enabled'");
   assert.equal((await me("u_alice")).status, 403, "switched off again: closed");
 }
-console.log("badge ok: off by default, terms for review, pulled points counted once, levels, achievements, signed QR read back, redeem with stock/balance/level checks, sign-in rules");
+console.log("badge ok: RB app and manifest, Gold Rush scores checked against the round (early, too high, twice, late, round and daily caps, rounds a day), off by default, terms for review, pulled points counted once, levels, achievements, signed QR read back, redeem with stock/balance/level checks, sign-in rules");

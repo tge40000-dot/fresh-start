@@ -7,9 +7,11 @@ Usage: python3 -I patch_badges_admin.py <pulled rb-command dir>
 - tables.js: a nav group "Badges" (owner only by default; give a role Badges: "view"/"edit" in auth.js ROLES) with
   Settings (badge_config: the on/off switch and every point value, checked), Levels (badge_levels), Rewards
   (badge_rewards) and Achievements (badge_achievements). Opening any of them creates missing tables.
-- index.js: GET /badge-desk (Badges edit or Club edit), GET /badge-desk/jsqr.js, GET /api/badge-desk, and POST
-  /api/badge-desk/lookup and /checkin (same people), /adjust, /grant, /redemption and GET /api/badge-desk/redemptions
-  (Badges edit). Requested rewards show as an Overview to-do.
+- auth.js: a "Door staff" role for event workers: RB Command shows them only the Badge desk (signing in lands there).
+- index.js: GET /badge-desk, /badge-desk/jsqr.js and /badge-desk/manifest.webmanifest (the desk installs on a phone as
+  "RB Door"), GET /api/badge-desk, and POST /api/badge-desk/lookup, /checkin and /redeem (in person) for Badges edit,
+  Club edit or Door staff (Door staff must scan to check in); /adjust, /grant, /redemption and GET
+  /api/badge-desk/redemptions for Badges edit. Requested rewards show as an Overview to-do.
 - ui.js: "Badge desk" in the nav (its section, Shows & sites, is in patch_nav.py).
 RB Badge ships switched off; the Settings note says what to do before switching it on. Running this twice changes nothing.
 """
@@ -33,6 +35,15 @@ jsqr = (ROOT / "rb-tools/vendor/jsQR-1.4.0.js").read_text(encoding="utf-8")
 (folder / "badge_jsqr.js").write_text("// jsQR 1.4.0 (https://github.com/cozmo/jsQR), Apache License 2.0: rb-tools/vendor/jsQR-1.4.0.LICENSE.\n"
                                       "// Served to the Badge desk at /badge-desk/jsqr.js to read QR codes from the camera.\n"
                                       "export default " + json.dumps("/*! jsQR 1.4.0 | Apache-2.0 | https://github.com/cozmo/jsQR */\n" + jsqr) + ";\n", encoding="utf-8")
+
+
+def upgrade(name, old, new, what):
+    """Bring a line an earlier version of this patch added up to date."""
+    p = folder / name
+    t = p.read_text(encoding="utf-8")
+    if old in t and new not in t:
+        p.write_text(t.replace(old, new), encoding="utf-8")
+        changed.append(what)
 
 
 def edit(name, old, new, what):
@@ -67,7 +78,7 @@ SPECS = '''  // ---------------- Badges (RB Badge at relentlessbillionaire.com/b
       const k = before && before.key, val = v.value == null ? "" : String(v.value).trim();
       if (!("value" in v)) return;
       if (k === "enabled" && !["on", "off"].includes(val)) errors.value = "Use on or off.";
-      if (/^(points_|order_cap|contribution_cap|checkin_|adjust_max)/.test(k || "") && !/^\\d{1,6}$/.test(val)) errors.value = "Use a whole number (0 turns it off).";
+      if (/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_)/.test(k || "") && !/^\\d{1,6}$/.test(val)) errors.value = "Use a whole number (0 turns it off).";
       if ((k === "eligibility" || k === "redeem_how") && !val) errors.value = "This is shown in the terms, so it can't be empty.";
       if (k === "enabled" && val === "on") {
         const live = await env.DB.prepare("SELECT count(*) AS n FROM badge_levels WHERE status = 'live' AND perks NOT LIKE 'DRAFT:%' AND trim(coalesce(perks, '')) != ''").first().catch(() => null);
@@ -138,29 +149,61 @@ SPECS = '''  // ---------------- Badges (RB Badge at relentlessbillionaire.com/b
   feature_controls: {'''
 edit("tables.js", "  // ---------------- Settings\n  feature_controls: {", SPECS, "Badges tables")
 
-# ---------------------------------------------------------------- auth.js: the capability list knows the new group
+upgrade("tables.js", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max)/", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_)/", "game settings are checked")
+
+# ---------------------------------------------------------------- auth.js: the new group and the Door staff role
 edit("auth.js", '"Partners", "Members", "Rewards", "CRM", "Settings"])', '"Partners", "Members", "Rewards", "Badges", "CRM", "Settings"])', "Badges capability")
+edit("auth.js", 'const STORED_AS = { store: "support", member: "support" };', 'const STORED_AS = { store: "support", member: "support", door: "support" };', "door role storage")
+edit("auth.js", "  // Members only ever see the member portal",
+     "  // Door staff only ever see the Badge desk (index.js sends them there and refuses everything else).\n"
+     '  door: { label: "Door staff", blurb: "Only the Badge desk: scan RB Badges at shows and events, check people in and redeem rewards in person. Nothing else in RB Command.",\n'
+     "    groups: {}, door: true },\n"
+     "  // Members only ever see the member portal", "door role")
+edit("auth.js", "limited: Boolean(r.limited), member: Boolean(r.member) };", "limited: Boolean(r.limited), member: Boolean(r.member), door: Boolean(r.door) };", "door capability")
+
 
 # ---------------------------------------------------------------- index.js
 edit("index.js", 'import * as siteimages from "./siteimages.js";\n', 'import * as siteimages from "./siteimages.js";\nimport * as badgedesk from "./badgedesk.js";\n', "import")
-DESK = 'const badgeDesk = (user) => auth.can(user.role, "Badges", "edit") || auth.can(user.role, "Club", "edit");\n'
+DESK_V1 = 'const badgeDesk = (user) => auth.can(user.role, "Badges", "edit") || auth.can(user.role, "Club", "edit");\n'
+DESK = ('const badgeDesk = (user) => Boolean(auth.ROLES[user.role]?.door) || auth.can(user.role, "Badges", "edit") || auth.can(user.role, "Club", "edit");\n'
+        "// Door staff check people in only by scanning; the Badges and Club teams can also check in someone they looked up.\n"
+        'const deskWho = (user) => ({ ...user, mustScan: !(auth.can(user.role, "Badges", "edit") || auth.can(user.role, "Club", "edit")) });\n')
+upgrade("index.js", DESK_V1, DESK, "desk access with Door staff")
 edit("index.js", "async function readJson(request, url) {\n", DESK + "async function readJson(request, url) {\n", "desk access")
+edit("index.js", "  const limited = Boolean(auth.ROLES[user.role]?.limited);\n",
+     "  if (auth.ROLES[user.role]?.door) {\n"
+     '    const read = request.method === "GET" || request.method === "HEAD";\n'
+     '    const ok = read ? ["/", "/login", "/api/me", "/badge-desk", "/badge-desk/jsqr.js", "/badge-desk/manifest.webmanifest", "/api/badge-desk"].includes(path)\n'
+     '      : request.method === "POST" && /^\\/api\\/(badge-desk\\/(lookup|checkin|redeem)|auth\\/(logout|password))$/.test(path);\n'
+     '    if (!ok) { await discard(request); throw new HttpError(403, "Your role only covers the Badge desk."); }\n'
+     '    if (read && (path === "/" || path === "/login")) return redirect("/badge-desk");\n'
+     "  }\n"
+     "  const limited = Boolean(auth.ROLES[user.role]?.limited);\n", "door staff gate")
+PAGE_V1 = 'return new Response(badgedesk.page(nonce, auth.can(user.role, "Badges", "edit")), {'
+PAGE = 'return new Response(badgedesk.page(nonce, auth.can(user.role, "Badges", "edit"), Boolean(auth.ROLES[user.role]?.door)), {'
+upgrade("index.js", PAGE_V1, PAGE, "desk page knows Door staff")
+JSQR = '    if (path === "/badge-desk/jsqr.js") { if (!badgeDesk(user)) throw new HttpError(403, "Forbidden"); return badgedesk.jsqr(); }\n'
+MANIFEST = '    if (path === "/badge-desk/manifest.webmanifest") { if (!badgeDesk(user)) throw new HttpError(403, "Forbidden"); return badgedesk.manifest(); }\n'
+upgrade("index.js", JSQR, JSQR + MANIFEST, "desk manifest route")
 edit("index.js", '    if (path === "/images") {\n',
      '    if (path === "/badge-desk") {\n'
-     '      if (!badgeDesk(user)) throw new HttpError(403, "The Badge desk needs Badges or Club edit access.");\n'
+     '      if (!badgeDesk(user)) throw new HttpError(403, "The Badge desk needs Badges or Club edit access, or the Door staff role.");\n'
      '      const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));\n'
-     '      return new Response(badgedesk.page(nonce, auth.can(user.role, "Badges", "edit")), { headers: { ...BASE_HEADERS, "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": badgedesk.csp(nonce), "X-Frame-Options": "DENY" } });\n'
-     '    }\n'
-     '    if (path === "/badge-desk/jsqr.js") { if (!badgeDesk(user)) throw new HttpError(403, "Forbidden"); return badgedesk.jsqr(); }\n'
+     '      ' + PAGE + ' headers: { ...BASE_HEADERS, "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": badgedesk.csp(nonce), "X-Frame-Options": "DENY" } });\n'
+     '    }\n' + JSQR + MANIFEST +
      '    if (path === "/images") {\n', "page routes")
 edit("index.js", '    if (path === "/api/site-images") { needs(user, "Content", "view"); return json(await siteimages.get(env)); }\n',
      '    if (path === "/api/site-images") { needs(user, "Content", "view"); return json(await siteimages.get(env)); }\n'
      '    if (path === "/api/badge-desk") { if (!badgeDesk(user)) throw new HttpError(403, "Forbidden"); return json(await badgedesk.summary(env)); }\n'
      '    if (path === "/api/badge-desk/redemptions") { needs(user, "Badges", "edit"); return json(await badgedesk.redemptions(env)); }\n', "read routes")
+CHECKIN_V1 = '  if (path === "/api/badge-desk/checkin") { if (!badgeDesk(user)) throw new HttpError(403, "Forbidden"); return json(await badgedesk.checkin(env, user, body)); }\n'
+CHECKIN = ('  if (path === "/api/badge-desk/checkin") { if (!badgeDesk(user)) throw new HttpError(403, "Forbidden"); return json(await badgedesk.checkin(env, deskWho(user), body)); }\n'
+           '  if (path === "/api/badge-desk/redeem") { if (!badgeDesk(user)) throw new HttpError(403, "Forbidden"); return json(await badgedesk.redeemInPerson(env, deskWho(user), body)); }\n')
+upgrade("index.js", CHECKIN_V1, CHECKIN, "check-in and in-person redeem routes")
 edit("index.js", '  if (path === "/api/site-images") { needs(user, "Content", "edit"); return json(await siteimages.save(env, user, body)); }\n',
      '  if (path === "/api/site-images") { needs(user, "Content", "edit"); return json(await siteimages.save(env, user, body)); }\n'
      '  if (path === "/api/badge-desk/lookup") { if (!badgeDesk(user)) throw new HttpError(403, "Forbidden"); return json(await badgedesk.lookup(env, body)); }\n'
-     '  if (path === "/api/badge-desk/checkin") { if (!badgeDesk(user)) throw new HttpError(403, "Forbidden"); return json(await badgedesk.checkin(env, user, body)); }\n'
+     + CHECKIN +
      '  if (path === "/api/badge-desk/adjust") { needs(user, "Badges", "edit"); return json(await badgedesk.adjust(env, user, body)); }\n'
      '  if (path === "/api/badge-desk/grant") { needs(user, "Badges", "edit"); return json(await badgedesk.grant(env, user, body)); }\n'
      '  if (path === "/api/badge-desk/redemption") { needs(user, "Badges", "edit"); return json(await badgedesk.setRedemption(env, user, body)); }\n', "write routes")

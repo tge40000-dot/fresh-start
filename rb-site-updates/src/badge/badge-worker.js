@@ -6,18 +6,18 @@
 //   lifetime = everything earned (minus hand removals), which sets the level; balance = lifetime minus redemptions.
 // The door desk in RB Command (badgedesk.js) checks members in by scanning the QR on their pass, which carries a token
 // signed with the member's own pass_secret and good for RBB_TOKEN_MINUTES, so a screenshot stops working.
-const RBB_SCHEMA_VERSION = "rb-badge-1";
+const RBB_SCHEMA_VERSION = "rb-badge-2";
 const RBB_DEFAULTS = { enabled: "off", eligibility: "Open to anyone with an RB account and a verified email address.", redeem_how: "",
   points_welcome: "50", points_daily: "5", points_signup: "25", points_membership_request: "50", points_per_dollar_spent: "10", order_cap: "5000",
   points_per_dollar_given: "10", contribution_cap: "5000", points_member_month: "100", points_release: "100", points_event_listed: "50", points_collect: "50",
-  checkin_points: "100", checkin_max: "1000", adjust_max: "10000" };
+  checkin_points: "100", checkin_max: "1000", adjust_max: "10000", game_points_round: "20", game_score_per_point: "10", game_points_daily: "60", game_rounds_daily: "25" };
 const RBB_TOKEN_MINUTES = 10;
 const RBB_WRITES_PER_MINUTE = 20;
 // Where each achievement rule counts from: the ledger source it counts rows of.
 const RBB_RULE_SOURCE = { checkins: "checkin", signup: "signup", membership: "membership", orders: "order", contributions: "contribution", member: "member_month", release: "release", event_listed: "event_listed", collect: "collect" };
 const RBB_SOURCES = { welcome: "Welcome", daily: "Opened your badge", signup: "Joined the RB list", membership: "Membership request", order: "Store order", contribution: "Gave at /fund",
   member_month: "RB Studio membership", release: "Song approved on RB Release", event_listed: "Event listed on RB Events", collect: "RB Collect prize", checkin: "Checked in",
-  adjust: "From the RB team", redeem: "Redeemed", refund: "Points returned" };
+  adjust: "From the RB team", redeem: "Redeemed", refund: "Points returned", game: "RB Gold Rush" };
 let rbbSchemaReady = null;
 
 async function rbbEnsureSchema(env) {
@@ -50,14 +50,23 @@ async function rbbLoad(env) {
   const amounts = { welcome: n("points_welcome"), daily: n("points_daily"), signup: n("points_signup"), membership: n("points_membership_request"),
     perDollarSpent: n("points_per_dollar_spent"), orderCap: n("order_cap"), perDollarGiven: n("points_per_dollar_given"), contribCap: n("contribution_cap"),
     memberMonth: n("points_member_month"), release: n("points_release"), eventListed: n("points_event_listed"), collect: n("points_collect"),
-    checkin: n("checkin_points"), checkinMax: n("checkin_max"), adjustMax: n("adjust_max") };
+    checkin: n("checkin_points"), checkinMax: n("checkin_max"), adjustMax: n("adjust_max"),
+    gameRound: n("game_points_round"), gamePerPoint: Math.max(1, n("game_score_per_point")), gameDaily: n("game_points_daily"), gameRounds: n("game_rounds_daily", 1000) };
   // Only live levels with real perks count; Draft text never reaches members.
   const levels = (levelRows.results || []).filter((l) => l.status === "live" && !rbbDraft(l.perks)).map((l) => ({ key: l.level_key, name: l.name, min: Math.max(0, Number(l.min_points) || 0), perks: String(l.perks || "") }));
   const rewards = (rewardRows.results || []).filter((r) => r.status === "live" && !rbbDraft(r.description) && Number(r.cost) > 0)
     .map((r) => ({ id: Number(r.id), name: r.name, description: r.description || "", cost: Number(r.cost), remaining: Math.max(0, Number(r.remaining) || 0), quantity: Number(r.quantity) || 0, min_level: r.min_level || "", image_url: r.image_url || "" }));
   const achievements = (achRows.results || []).filter((a) => a.status === "live").map((a) => ({ key: a.key, name: a.name, description: a.description || "", rule: a.rule, threshold: Math.max(1, Number(a.threshold) || 1) }));
   const on = String(cfg.enabled).trim().toLowerCase() === "on" && levels.length > 0;
-  return { cfg, amounts, levels, rewards, achievements, on, status: on ? "live" : "off" };
+  // Upcoming RB Events, for the app (none if that table isn't there).
+  let events = [];
+  if (on) {
+    try {
+      const r = await env.DB.prepare("SELECT id, title, starts_at, venue_name, ticket_url FROM rb_events WHERE status = 'live' AND datetime(starts_at) >= datetime('now', '-6 hours') ORDER BY datetime(starts_at) LIMIT 8").all();
+      events = (r.results || []).map((e) => ({ id: e.id, title: e.title, starts_at: e.starts_at, venue: e.venue_name || "", ticket_url: /^https:\/\//.test(String(e.ticket_url || "")) ? e.ticket_url : "" }));
+    } catch {}
+  }
+  return { cfg, amounts, levels, rewards, achievements, events, on, status: on ? "live" : "off" };
 }
 
 // The level a lifetime total reaches, and the next one.
@@ -80,12 +89,13 @@ function rbbEarnList(g) {
   add(a.memberMonth, "Be an RB Studio member", `${a.memberMonth} points each month your RB Studio membership is active.`);
   add(a.release, "Release with RB", `${a.release} points for each song RB approves on RB Release.`);
   add(a.eventListed, "List an event", `${a.eventListed} points for each event RB publishes on RB Events.`);
+  if (a.gameRound > 0 && a.gameDaily > 0) out.push({ points: a.gameRound, label: "Play RB Gold Rush", detail: `Up to ${a.gameRound} points a round in the RB app (1 point per ${a.gamePerPoint} score), up to ${a.gameDaily} a day.` });
   add(a.collect, "Win at RB Collect", `${a.collect} points for each RB Collect prize claim RB approves.`);
   return out;
 }
 
 function rbbPublicState(g) {
-  return { status: g.status, eligibility: g.cfg.eligibility, redeem_how: g.cfg.redeem_how,
+  return { status: g.status, events: g.on ? g.events || [] : [], game: g.on ? { round_max: g.amounts.gameRound, per_point: g.amounts.gamePerPoint, daily: g.amounts.gameDaily, rounds: g.amounts.gameRounds, ms: RBG_MS } : null, eligibility: g.cfg.eligibility, redeem_how: g.cfg.redeem_how,
     levels: g.on ? g.levels.map((l) => ({ key: l.key, name: l.name, min: l.min, perks: l.perks })) : [],
     rewards: g.on ? g.rewards.map((r) => ({ id: r.id, name: r.name, description: r.description, cost: r.cost, remaining: r.remaining, min_level: r.min_level, image_url: r.image_url })) : [],
     achievements: g.on ? g.achievements.map((a) => ({ key: a.key, name: a.name, description: a.description })) : [],
@@ -219,13 +229,13 @@ async function rbbMe(env, g, m) {
   ]);
   const [user, domain] = String(m.email_norm || "").split("@");
   return { ok: true, member: { name: m.display_name || "", email: user ? `${user.slice(0, 2)}${"•".repeat(Math.max(1, Math.min(6, user.length - 2)))}@${domain}` : null, since: m.created_at },
-    standing: await rbbStanding(env, g, m.id), pass: await rbbPass(m),
+    standing: await rbbStanding(env, g, m.id), pass: await rbbPass(m), game: await rbbGameToday(env, m.id),
     history: (hist.results || []).map((r) => ({ source: r.source, label: RBB_SOURCES[r.source] || r.source, points: Number(r.points), note: r.source === "checkin" || r.source === "adjust" ? r.note || "" : "", at: r.created_at })),
     redemptions: (reds.results || []).map((r) => ({ id: r.id, reward: r.reward_name, cost: Number(r.cost), status: r.status, at: r.created_at })) };
 }
 
 async function rbbRateOk(env, memberId) {
-  const minute = new Date().toISOString().slice(0, 16);
+  const minute = new Date(Date.now()).toISOString().slice(0, 16);
   await env.DB.prepare("DELETE FROM badge_rate WHERE member_id = ? AND minute < ?").bind(memberId, minute).run();
   const row = await env.DB.prepare("INSERT INTO badge_rate (member_id, minute, n) VALUES (?, ?, 1) ON CONFLICT(member_id, minute) DO UPDATE SET n = n + 1 RETURNING n").bind(memberId, minute).first();
   return Number(row?.n || 0) <= RBB_WRITES_PER_MINUTE;
@@ -243,7 +253,7 @@ async function rbbRedeem(env, g, m, body) {
     if (need && st.lifetime < need.min) return rbcJson({ ok: false, error: `This reward is for ${need.name} members and up.` }, 403);
   }
   if (st.balance < r.cost) return rbcJson({ ok: false, error: `You need ${r.cost.toLocaleString("en-US")} points for this. You have ${st.balance.toLocaleString("en-US")}.` }, 409);
-  const rid = rbcId("r_", 14), ref = `redeem:${rid}`, at = new Date().toISOString();
+  const rid = rbcId("r_", 14), ref = `redeem:${rid}`, at = new Date(Date.now()).toISOString();
   await env.DB.batch([
     env.DB.prepare("INSERT INTO badge_points (id, member_id, source, source_ref, points, note, created_at) SELECT ?, ?, 'redeem', ?, ?, ?, ? WHERE (SELECT coalesce(sum(points), 0) FROM badge_points WHERE member_id = ?) >= ? AND (SELECT remaining FROM badge_rewards WHERE id = ? AND status = 'live') > 0")
       .bind(rbcId("b_"), m.id, ref, -r.cost, r.name, at, m.id, r.cost, r.id),
@@ -256,6 +266,46 @@ async function rbbRedeem(env, g, m, body) {
   return rbcJson({ ok: true, redemption: { id: rid, reward: r.name, cost: r.cost, status: "requested" }, standing: await rbbStanding(env, g, m.id) });
 }
 
+// ---------------------------------------------------------------- RB Gold Rush (the game in the app)
+async function rbbGameToday(env, memberId) {
+  const since = new Date(rbcLaInstant(rbcLaDay(Date.now()))).toISOString();
+  const r = await env.DB.prepare("SELECT count(*) AS rounds, coalesce(sum(points), 0) AS points, coalesce(max(score), 0) AS best FROM badge_game_rounds WHERE member_id = ? AND started_at >= ?").bind(memberId, since).first();
+  return { rounds: Number(r?.rounds) || 0, points: Number(r?.points) || 0, best: Number(r?.best) || 0, since };
+}
+
+async function rbbGameStart(env, g, m) {
+  const today = await rbbGameToday(env, m.id);
+  if (today.rounds >= g.amounts.gameRounds) return rbcJson({ ok: false, error: `That's all ${g.amounts.gameRounds} rounds for today. Come back tomorrow.` }, 429);
+  const id = rbcId("g_", 14), seed = crypto.getRandomValues(new Uint32Array(1))[0];
+  await env.DB.prepare("INSERT INTO badge_game_rounds (id, member_id, seed, started_at) VALUES (?, ?, ?, ?)").bind(id, m.id, seed, new Date(Date.now()).toISOString()).run();
+  return rbcJson({ ok: true, round: id, seed, ms: RBG_MS, today: { rounds: today.rounds + 1, points: today.points } });
+}
+
+// A score is accepted once, for a round this member started, after the round has had time to play out, and only up
+// to what that round could score. Points: score / per_point, at most round_max, and never past today's limit.
+async function rbbGameFinish(env, g, m, body) {
+  const id = String(body?.round || ""), score = Number(body?.score);
+  const r = await env.DB.prepare("SELECT * FROM badge_game_rounds WHERE id = ? AND member_id = ?").bind(id, m.id).first();
+  if (!r) return rbcJson({ ok: false, error: "That round isn't yours." }, 404);
+  if (r.finished_at) return rbcJson({ ok: false, error: "That round is already counted." }, 409);
+  const age = Date.now() - Date.parse(r.started_at);
+  if (age < RBG_MS - 2000) return rbcJson({ ok: false, error: "That round isn't over yet." }, 409);
+  if (!Number.isInteger(score) || score < 0) return rbcJson({ ok: false, error: "That score isn't valid." }, 400);
+  const late = age > 15 * 60000, max = rbgMax(Number(r.seed));
+  if (score > max) return rbcJson({ ok: false, error: "That score is higher than the round allowed." }, 400);
+  const a = g.amounts, today = await rbbGameToday(env, m.id);
+  const want = late ? 0 : Math.min(a.gameRound, Math.floor(score / a.gamePerPoint));
+  const points = Math.max(0, Math.min(want, a.gameDaily - today.points));
+  const at = new Date(Date.now()).toISOString();
+  const res = await env.DB.batch([
+    env.DB.prepare("UPDATE badge_game_rounds SET finished_at = ?, score = ?, points = ? WHERE id = ? AND finished_at IS NULL").bind(at, score, points, id),
+    env.DB.prepare("INSERT OR IGNORE INTO badge_points (id, member_id, source, source_ref, points, note, created_at) SELECT ?, ?, 'game', ?, ?, ?, ? WHERE ? > 0 AND EXISTS (SELECT 1 FROM badge_game_rounds WHERE id = ? AND finished_at = ?)")
+      .bind(rbcId("b_"), m.id, `game:${id}`, points, `Score ${score}`, at, points, id, at),
+  ]);
+  if (!res[0].meta?.changes) return rbcJson({ ok: false, error: "That round is already counted." }, 409);
+  return rbcJson({ ok: true, score, points, capped: points < want, late, today: { rounds: today.rounds, points: today.points + points, best: Math.max(today.best, score) }, standing: await rbbStanding(env, g, m.id) });
+}
+
 // ---------------------------------------------------------------- pages
 async function rbbPassPage(request, env) {
   const g = await rbbLoad(env), nonce = rbcNonce();
@@ -263,6 +313,15 @@ async function rbbPassPage(request, env) {
     .replace("__CLERK_KEY__", () => rbcScriptJson(String(env.CLERK_PUBLISHABLE_KEY || ""))).replace("__STATE__", () => rbcScriptJson(rbbPublicState(g)));
   return new Response(request.method === "HEAD" ? null : html, { headers: rbcPageHeaders(env, nonce) });
 }
+
+async function rbbAppPage(request, env) {
+  const g = await rbbLoad(env), nonce = rbcNonce();
+  const html = RB_APP_HTML.replaceAll("__NONCE__", nonce).replace("__STATUS__", () => rbcEsc(g.status))
+    .replace("__CLERK_KEY__", () => rbcScriptJson(String(env.CLERK_PUBLISHABLE_KEY || ""))).replace("__STATE__", () => rbcScriptJson(rbbPublicState(g)));
+  return new Response(request.method === "HEAD" ? null : html, { headers: rbcPageHeaders(env, nonce) });
+}
+const RBB_MANIFEST = JSON.stringify({ name: "RB: Relentless Billionaire", short_name: "RB", description: "Your RB Badge: points, levels, rewards, events and RB Gold Rush.", id: "/app", start_url: "/app", scope: "/app", display: "standalone", orientation: "portrait", background_color: "#07060A", theme_color: "#07060A",
+  icons: [{ src: "/brand/icon-192.png?v=3", sizes: "192x192", type: "image/png" }, { src: "/brand/icon-512.png?v=3", sizes: "512x512", type: "image/png" }, { src: "/brand/maskable-512.png?v=3", sizes: "512x512", type: "image/png", purpose: "maskable" }] });
 
 async function rbbTermsPage(request, env) {
   const g = await rbbLoad(env), nonce = rbcNonce(), e = rbcEsc, fmt = (x) => Number(x).toLocaleString("en-US");
@@ -283,11 +342,12 @@ ${g.on ? "" : `<div class="box">RB Badge is coming soon. These terms show the va
 <h2>2. Who can join</h2><p>${e(g.cfg.eligibility)}</p><p>One badge per person. Your badge is tied to your RB account and its verified email.</p>
 <h2>3. How you earn points</h2>${earn ? `<ul>${earn}</ul>` : "<p>Ways to earn are listed here once RB sets them.</p>"}<p>Purchases, contributions, memberships, songs, events and prize claims are matched to your badge by the verified email (or account) they were made with, including ones made before you opened your badge, and each one counts once. The RB team can also add points (for example for helping at an event) or remove points given by mistake; each change shows in your history.</p>
 <h2>4. Levels</h2><p>Your level comes from your lifetime points: everything you have earned, minus any points the team removed. Spending points on rewards never lowers your level.</p>${levels}<p>Perks at shows and events are given by RB staff at the door when they scan your badge, while places or tickets last, and can depend on the venue's own rules (for example age limits).</p>
-<h2>5. Rewards</h2><p>${e(g.cfg.redeem_how)}</p>${rewards}
-<h2>6. Your pass</h2><p>The QR code on your badge changes every few minutes and only works for you. Don't share it. Staff may ask for ID that matches your account.</p>
-<h2>7. What points aren't</h2><p>Points and levels have no cash value. They can't be sold, transferred, exchanged for money or combined between accounts. Buying something never earns more than the amounts above, and you can earn points without buying anything.</p>
-<h2>8. Fair play</h2><p>RB may remove points, cancel redemptions or close a badge that comes from duplicate accounts, automation, fraud, refunded or charged-back payments, or a breach of these terms.</p>
-<h2>9. Changes</h2><p>RB may change the amounts, levels, perks or rewards, or end RB Badge. Changes show on this page. Your information is handled as described in the <a href="/privacy">privacy policy</a>; the <a href="/terms">terms</a> also apply.</p>
+<h2>5. Rewards</h2><p>${e(g.cfg.redeem_how)}</p><p>At RB shows and events you can also spend points in person: show your pass and RB staff redeem the reward for you on the spot.</p>${rewards}
+<h2>6. RB Gold Rush</h2><p>RB Gold Rush is a free game in the RB app at <a href="/app">relentlessbillionaire.com/app</a>. Each round is decided by skill: catch what falls, avoid the bombs. ${g.amounts.gameRound > 0 && g.amounts.gameDaily > 0 ? `A round earns 1 point for every ${g.amounts.gamePerPoint} score, up to ${g.amounts.gameRound} points a round and ${g.amounts.gameDaily} a day, with up to ${g.amounts.gameRounds} rounds a day.` : "Right now rounds don't earn points."} RB checks every score against what that round could reach, and may remove points from scores it believes were not played fairly. Game points spend like any other points, online or at RB events.</p>
+<h2>7. Your pass</h2><p>The QR code on your badge changes every few minutes and only works for you. Don't share it. Staff may ask for ID that matches your account.</p>
+<h2>8. What points aren't</h2><p>Points and levels have no cash value. They can't be sold, transferred, exchanged for money or combined between accounts. Buying something never earns more than the amounts above, and you can earn points without buying anything.</p>
+<h2>9. Fair play</h2><p>RB may remove points, cancel redemptions or close a badge that comes from duplicate accounts, automation, fraud, refunded or charged-back payments, or a breach of these terms.</p>
+<h2>10. Changes</h2><p>RB may change the amounts, levels, perks or rewards, or end RB Badge. Changes show on this page. Your information is handled as described in the <a href="/privacy">privacy policy</a>; the <a href="/terms">terms</a> also apply.</p>
 </main></body></html>`;
   return new Response(request.method === "HEAD" ? null : html, { headers: rbcPageHeaders(env, nonce) });
 }
@@ -296,11 +356,13 @@ ${g.on ? "" : `<div class="box">RB Badge is coming soon. These terms show the va
 async function rbBadgeRoute(request, env, url) {
   const path = url.pathname.replace(/\/+$/, "") || "/", method = request.method;
   const page = method === "GET" || method === "HEAD";
-  if (!["/badge", "/badge/terms"].includes(path) && !path.startsWith("/api/badge/")) return null;
+  if (!["/badge", "/badge/terms", "/app", "/app/manifest.webmanifest"].includes(path) && !path.startsWith("/api/badge/")) return null;
   try {
     await (rbbSchemaReady ||= rbbEnsureSchema(env).catch((err) => { rbbSchemaReady = null; throw err; }));
     if (path === "/badge" && page) return await rbbPassPage(request, env);
     if (path === "/badge/terms" && page) return await rbbTermsPage(request, env);
+    if (path === "/app" && page) return await rbbAppPage(request, env);
+    if (path === "/app/manifest.webmanifest" && page) return new Response(RBB_MANIFEST, { headers: { "Content-Type": "application/manifest+json", "Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff" } });
     const g = await rbbLoad(env);
     if (path === "/api/badge/state" && method === "GET") return rbcJson(rbbPublicState(g));
     if (!g.on) return rbcJson({ ok: false, error: "RB Badge is coming soon." }, 403);
@@ -310,13 +372,15 @@ async function rbBadgeRoute(request, env, url) {
       return rbcJson({ ...(await rbbMe(env, g, m)), added, state: rbbPublicState(g) });
     }
     if (path === "/api/badge/pass" && method === "GET") return rbcJson({ ok: true, pass: await rbbPass(await rbbMember(request, env)) });
-    if (path === "/api/badge/redeem" && method === "POST") {
+    if ((path === "/api/badge/redeem" || path === "/api/badge/game/start" || path === "/api/badge/game/finish") && method === "POST") {
       const origin = request.headers.get("Origin");
       if (origin && origin !== url.origin) return rbcJson({ ok: false, error: "Not allowed from another site." }, 403);
       if (!/^application\/json/i.test(request.headers.get("Content-Type") || "")) return rbcJson({ ok: false, error: "Send JSON." }, 415);
       const body = await request.json().catch(() => ({}));
       const m = await rbbMember(request, env);
       if (!(await rbbRateOk(env, m.id))) return rbcJson({ ok: false, error: "Too many tries. Wait a minute and try again." }, 429, { "Retry-After": "60" });
+      if (path === "/api/badge/game/start") return await rbbGameStart(env, g, m);
+      if (path === "/api/badge/game/finish") return await rbbGameFinish(env, g, m, body);
       return await rbbRedeem(env, g, m, body);
     }
     return rbcJson({ ok: false, error: "Not found" }, path.startsWith("/api/") ? 404 : 405);

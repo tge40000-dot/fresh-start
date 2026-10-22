@@ -8,7 +8,7 @@ the bar and styles it. Where a page can't load that stylesheet (its CSP blocks i
 showing as bare links. On phones the row scrolls sideways.
 
 The current tab is the Worker's site; artist-router serves several (home, the store, RB Create), so its pages pick
-theirs from their <title> or data-route. RB Command's pages are for the team and get no bar.
+theirs from their <title> or data-route. RB Command's pages are for the team and get no bar, and a page whose <body> has data-rbtabs="off" (the RB app) keeps its own nav.
 Running it twice changes nothing; a later run brings an older bar up to date with TABS.
 """
 import json
@@ -84,6 +84,11 @@ def patch_text(s, worker):
         out.append(s[i:m.end()])
         i = m.end()
         old = NAV.match(s, i)
+        # A page that is its own app (the RB app at /app, with its own bottom nav) opts out with data-rbtabs="off".
+        if re.search(r'data-rbtabs=\\?"off', m.group(0)):
+            if old:
+                i = old.end(); n += 1
+            continue
         if old:
             if old.group(0) != want:
                 out.append(want)
