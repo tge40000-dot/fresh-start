@@ -1,22 +1,26 @@
-// RB World's city on real streets: Midtown Manhattan round Times Square, from OpenStreetMap (city_data.js, baked by
-// rb-tools/bake_city.mjs). This module reads the baked map and offers what the game needs (collision with real
+// RB World's city on real streets (now downtown Vallejo, California), from OpenStreetMap (city_data.js, baked by
+// rb-tools/bake_city.mjs; where the map has no building outlines the bake fills the blocks with houses, shops and
+// warehouses that fit the area). This module reads the baked map and offers what the game needs (collision with real
 // buildings, the road network for traffic and cops, street and neighbourhood names, real latitude/longitude for any
 // point), and builds the 3D city: buildings with window facades and storefronts, asphalt roads with lane markings
-// and crosswalks, sidewalks, parks, street lights, traffic lights, street trees, rooftop water towers, and the
-// Times Square billboards. Map data © OpenStreetMap contributors (ODbL).
+// and crosswalks, sidewalks and lawns, the bay, parks, street lights, traffic lights, street trees, houses with pitched
+// roofs, rooftop water towers, and RB's screens round RB Plaza. Map data © OpenStreetMap contributors (ODbL).
 import * as THREE from "three";
 import D from "./city_data.js";
 
 const dm = (v) => v / 10; // the bake stores decimetres
 export const HALF = D.half; // [x, z]: the drivable city
 export const ATTRIBUTION = D.attribution;
+export const NAME = D.name || "RB City", SHORT = D.short || "Downtown", PLAZA_NAME = D.plazaName || "RB Plaza";
+export const START = D.start || [0, 0, 0]; // [x, z, heading]: on the road by RB Plaza
+export const PLAZA = D.plaza || [0, 0];
 
 // ---------------------------------------------------------------- the map, read once
 export const buildings = D.buildings.map((b) => {
   const pts = []; for (let i = 4; i < b.length; i += 2) pts.push([dm(b[i]), dm(b[i + 1])]);
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, cx = 0, cz = 0;
   for (const [x, z] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); cx += x / pts.length; cz += z / pts.length; }
-  return { h: b[0], min: b[1], colour: b[2] || null, core: !!b[3], pts, box: [x0, z0, x1, z1], c: [cx, cz] };
+  return { h: b[0], min: b[1], colour: b[2] || null, core: !!(b[3] & 1), kind: b[3] >> 1, pts, box: [x0, z0, x1, z1], c: [cx, cz] }; // kind: 0 real outline, 1 shop, 2 house, 3 warehouse
 });
 export const nodes = []; for (let i = 0; i < D.nodes.length; i += 2) nodes.push([dm(D.nodes[i]), dm(D.nodes[i + 1])]);
 export const edges = [];
@@ -48,9 +52,13 @@ buildings.forEach((b, i) => {
 function inside(pts, x, z) { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const [xi, zi] = pts[i], [xj, zj] = pts[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) c = !c; } return c; }
 function edgeDist(pts, x, z) { let d = Infinity; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) d = Math.min(d, segDist(x, z, pts[j], pts[i])); return d; }
 export function segDist(x, z, a, b) { const dx = b[0] - a[0], dz = b[1] - a[1], L = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L)); return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz); }
-// Is this spot inside a building (or within r of a wall), or off the edge of the city?
+// the water (the bay, the strait), in the same grid: you can't drive into it
+const water = D.water.map((a) => { const pts = []; for (let i = 0; i < a.length; i += 2) pts.push([dm(a[i]), dm(a[i + 1])]); let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity; for (const [x, z] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); } return { pts, box: [x0, z0, x1, z1] }; });
+export function inWater(x, z) { for (const w of water) if (x >= w.box[0] && x <= w.box[2] && z >= w.box[1] && z <= w.box[3] && inside(w.pts, x, z)) return true; return false; }
+// Is this spot inside a building (or within r of a wall), in the water, or off the edge of the city?
 export function blocked(x, z, r = 1.1) {
   if (Math.abs(x) > HALF[0] + 25 || Math.abs(z) > HALF[1] + 25) return true;
+  if (water.length && inWater(x, z)) return true;
   const list = grid.get(Math.floor(x / CELL) * 100003 + Math.floor(z / CELL));
   if (!list) return false;
   for (const i of list) { const b = buildings[i]; if (x < b.box[0] - r || x > b.box[2] + r || z < b.box[1] - r || z > b.box[3] + r) continue; if (inside(b.pts, x, z) || edgeDist(b.pts, x, z) < r) return true; }
@@ -63,7 +71,7 @@ export function nearestEdge(x, z) {
   return { e: best, d: bd };
 }
 export function streetName(x, z) { const { e, d } = nearestEdge(x, z); return e && d < e.w / 2 + 10 ? e.name : null; }
-export function areaName(x, z) { let best = null, bd = Infinity; for (const p of places) { const d = Math.hypot(p.x - x, p.z - z); if (d < bd) { bd = d; best = p; } } return best ? best.name : "Midtown"; }
+export function areaName(x, z) { let best = null, bd = Infinity; for (const p of places) { const d = Math.hypot(p.x - x, p.z - z); if (d < bd) { bd = d; best = p; } } return best ? best.name : SHORT; }
 export function nodeNear(x, z) { let b = 0, bd = Infinity; nodes.forEach((n, i) => { const d = Math.hypot(n[0] - x, n[1] - z); if (d < bd && anyLinks[i].length) { bd = d; b = i; } }); return b; }
 // A random spot on a drivable road (not a service lane), optionally at least `minFrom` metres from a point and
 // within `maxFrom` of `near`.
@@ -133,6 +141,36 @@ function facade(style) {
   });
   return { map: tex(map), glow: tex(glow) };
 }
+// A wooden house: clapboard siding, windows with white trim, painted in the house's colour (the vertex colour).
+function siding() {
+  const W = 512, H = 512, cw = W / COLS, fh = H / FLOORS;
+  const map = canvas(W, H, (g) => {
+    g.fillStyle = "#e8e4dc"; g.fillRect(0, 0, W, H);
+    for (let y = 0; y < H; y += 8) { g.fillStyle = "rgba(0,0,0,.10)"; g.fillRect(0, y + 6, W, 2); g.fillStyle = "rgba(255,255,255,.12)"; g.fillRect(0, y, W, 1); }
+    noise(g, W, H, 10);
+    for (let f = 0; f < FLOORS; f++) for (let c = 0; c < COLS; c++) {
+      if ((c + f) % 2) continue; // houses have fewer windows than offices
+      const x = c * cw + cw * 0.2, y = f * fh + fh * 0.2, w = cw * 0.6, h = fh * 0.55;
+      g.fillStyle = "#fbfaf6"; g.fillRect(x - 5, y - 5, w + 10, h + 10);
+      const grd = g.createLinearGradient(x, y, x + w, y + h); grd.addColorStop(0, "#41505c"); grd.addColorStop(1, "#151b20"); g.fillStyle = grd; g.fillRect(x, y, w, h);
+      g.fillStyle = "#fbfaf6"; g.fillRect(x + w / 2 - 2, y, 4, h); g.fillRect(x, y + h / 2 - 2, w, 4);
+    }
+  });
+  const glow = canvas(W, H, (g) => { g.fillStyle = "#000"; g.fillRect(0, 0, W, H); for (let f = 0; f < FLOORS; f++) for (let c = 0; c < COLS; c++) { if ((c + f) % 2 || rand() > 0.45) continue; g.fillStyle = `hsl(${36 + rand() * 10},80%,${55 + rand() * 15}%)`; g.fillRect(c * cw + cw * 0.2, f * fh + fh * 0.2, cw * 0.6, fh * 0.55); } });
+  return { map: tex(map), glow: tex(glow) };
+}
+// Corrugated metal for warehouses, with a band of high windows.
+function metal() {
+  const W = 512, H = 512, fh = H / FLOORS;
+  const map = canvas(W, H, (g) => {
+    g.fillStyle = "#c9ccd0"; g.fillRect(0, 0, W, H);
+    for (let x = 0; x < W; x += 6) { g.fillStyle = "rgba(0,0,0,.12)"; g.fillRect(x, 0, 2, H); g.fillStyle = "rgba(255,255,255,.15)"; g.fillRect(x + 3, 0, 1, H); }
+    noise(g, W, H, 12);
+    for (let f = 0; f < FLOORS; f += 2) { g.fillStyle = "rgba(30,40,50,.85)"; g.fillRect(0, f * fh + fh * 0.15, W, fh * 0.25); }
+  });
+  const glow = canvas(W, H, (g) => { g.fillStyle = "#000"; g.fillRect(0, 0, W, H); for (let f = 0; f < FLOORS; f += 2) if (rand() < 0.5) { g.fillStyle = "#cfe0ff"; g.fillRect(0, f * fh + fh * 0.15, W, fh * 0.25); } });
+  return { map: tex(map), glow: tex(glow) };
+}
 function shopfront() { // the ground floor: shop windows, doors and a sign band, 6 m wide by 4.5 m
   const W = 256, H = 192;
   const map = canvas(W, H, (g) => {
@@ -159,6 +197,9 @@ function ground(kind) {
     else if (kind === "grass") { g.fillStyle = "#3d5a2a"; g.fillRect(0, 0, W, H); noise(g, W, H, 34); }
     else if (kind === "plaza") { g.fillStyle = "#7d6a62"; g.fillRect(0, 0, W, H); noise(g, W, H, 16); g.strokeStyle = "rgba(255,255,255,.08)"; for (let i = 0; i <= W; i += 32) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, H); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(W, i); g.stroke(); } }
     else if (kind === "roof") { g.fillStyle = "#59595a"; g.fillRect(0, 0, W, H); noise(g, W, H, 30); }
+    else if (kind === "shingle") { g.fillStyle = "#4a4440"; g.fillRect(0, 0, W, H); for (let y = 0; y < H; y += 16) for (let x = (y / 16) % 2 ? 0 : 12; x < W; x += 24) { g.fillStyle = `rgb(${60 + rand() * 30},${54 + rand() * 24},${50 + rand() * 20})`; g.fillRect(x, y, 22, 14); } }
+    else if (kind === "lawn") { g.fillStyle = "#556b34"; g.fillRect(0, 0, W, H); noise(g, W, H, 30); g.fillStyle = "rgba(120,100,60,.12)"; for (let i = 0; i < 30; i++) { g.beginPath(); g.ellipse(rand() * W, rand() * H, 20 + rand() * 60, 10 + rand() * 30, rand() * 3, 0, 7); g.fill(); } }
+    else if (kind === "water") { const grd = g.createLinearGradient(0, 0, W, H); grd.addColorStop(0, "#1d3a4f"); grd.addColorStop(1, "#264a5e"); g.fillStyle = grd; g.fillRect(0, 0, W, H); g.strokeStyle = "rgba(255,255,255,.07)"; for (let i = 0; i < 60; i++) { const x = rand() * W, y = rand() * H; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 15, y - 4, x + 30, y); g.stroke(); } }
   }));
 }
 
@@ -188,7 +229,34 @@ function flat(batch, pts, y, scale, col, up = true) {
     batch.tri([p[0], y, p[1]], [q[0], y, q[1]], [r[0], y, r[1]], [0, up ? 1 : -1, 0], [p[0] / scale, p[1] / scale, q[0] / scale, q[1] / scale, r[0] / scale, r[1] / scale], col);
   }
 }
+// A pitched roof on a four-cornered house: the ridge runs the long way, with gable ends in the walls' siding.
+function gable(b, tint, roofB, wallB) {
+  const P = b.pts, l01 = Math.hypot(P[1][0] - P[0][0], P[1][1] - P[0][1]), l12 = Math.hypot(P[2][0] - P[1][0], P[2][1] - P[1][1]);
+  const [a, bb, c, d] = l01 >= l12 ? [P[0], P[1], P[2], P[3]] : [P[1], P[2], P[3], P[0]]; // a-b and c-d are the long eaves
+  const span = Math.min(l01, l12), rise = span * 0.38, h = b.h, top = h + rise;
+  const m1 = [(bb[0] + c[0]) / 2, (bb[1] + c[1]) / 2], m0 = [(d[0] + a[0]) / 2, (d[1] + a[1]) / 2]; // ridge ends over the short sides
+  const rc = [0.55, 0.5, 0.47];
+  const slope = (p, q, r1, r0) => { // eave p-q up to ridge r1-r0
+    const v = [[p[0], h, p[1]], [q[0], h, q[1]], [r1[0], top, r1[1]], [r0[0], top, r0[1]]];
+    const e1 = [v[1][0] - v[0][0], 0, v[1][2] - v[0][2]], e2 = [v[3][0] - v[0][0], rise, v[3][2] - v[0][2]];
+    let nn = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]; const L = Math.hypot(...nn) || 1; nn = nn.map((x) => x / L);
+    if (nn[1] < 0) { roofB.quad(v[1], v[0], v[3], v[2], nn.map((x) => -x), [1, 0, 0, 0, 0, 1, 1, 1], rc); } else roofB.quad(v[0], v[1], v[2], v[3], nn, [0, 0, 1, 0, 1, 1, 0, 1], rc);
+  };
+  slope(a, bb, m1, m0); slope(c, d, m0, m1);
+  // the two triangles under the ridge, in siding
+  for (const [p, q, r] of [[bb, c, m1], [d, a, m0]]) {
+    const nx = -(q[1] - p[1]), nz = q[0] - p[0], L = Math.hypot(nx, nz) || 1, mx = (p[0] + q[0]) / 2, mz = (p[1] + q[1]) / 2;
+    let n = [nx / L, 0, nz / L]; if (inside(b.pts, mx + n[0] * 0.3, mz + n[2] * 0.3)) n = n.map((x) => -x);
+    const A = [p[0], h, p[1]], B = [q[0], h, q[1]], Cc = [r[0], top, r[1]];
+    const face = -(q[1] - p[1]) * n[0] + (q[0] - p[0]) * n[2] > 0;
+    const uv = [0, h / FLOOR_M, L / COL_M, h / FLOOR_M, L / COL_M / 2, top / FLOOR_M];
+    if (face) wallB.tri(A, B, Cc, n, uv, tint); else wallB.tri(B, A, Cc, n, uv, tint);
+  }
+}
 function styleOf(b) {
+  if (b.kind === 2) return "siding";
+  if (b.kind === 3) return "metal";
+  if (b.kind === 1) return rand() < 0.5 ? "brick" : "stone";
   if (!b.core) return "far";
   if (b.h > 90) return rand() < 0.75 ? "glass" : "dark";
   if (b.h > 45) return rand() < 0.45 ? "glass" : rand() < 0.5 ? "stone" : "dark";
@@ -196,7 +264,7 @@ function styleOf(b) {
   return hsl.s > 0.2 && hsl.h < 0.08 && hsl.l < 0.5 ? "brick" : rand() < 0.3 ? "brick" : "stone";
 }
 function tintOf(b, style) {
-  const c = new THREE.Color(b.colour || "#bfb5a8"); c.lerp(new THREE.Color(0xffffff), style === "glass" ? 0.85 : 0.45);
+  const c = new THREE.Color(b.colour || "#bfb5a8"); c.lerp(new THREE.Color(0xffffff), style === "glass" ? 0.85 : style === "siding" ? 0.05 : 0.45);
   const k = 0.85 + rand() * 0.25; return [c.r * k, c.g * k, c.b * k];
 }
 
@@ -207,17 +275,18 @@ function layer(mat, n) { mat.polygonOffset = true; mat.polygonOffsetFactor = -n;
 // ---------------------------------------------------------------- building the city
 export function buildCity(scene, opts = {}) {
   const out = { night: [], boards: [], lampMat: null, signalMats: null, tick: () => {} };
-  const fac = { glass: facade("glass"), stone: facade("stone"), brick: facade("brick"), dark: facade("dark") };
+  const fac = { glass: facade("glass"), stone: facade("stone"), brick: facade("brick"), dark: facade("dark"), siding: siding(), metal: metal() };
   const shops = [shopfront(), shopfront(), shopfront()];
   const mats = {}, batches = {}, CH = 220;
   const batch = (key, b) => { const k = b ? `${key}@${Math.floor(b.c[0] / CH)},${Math.floor(b.c[1] / CH)}` : key; return (batches[k] ||= Object.assign(new Batch(), { key })); };
   for (const [k, f] of Object.entries(fac)) {
-    mats[k] = new THREE.MeshStandardMaterial({ map: f.map, emissive: 0xffffff, emissiveMap: f.glow, emissiveIntensity: 0, vertexColors: true, roughness: k === "glass" ? 0.12 : 0.85, metalness: k === "glass" ? 0.55 : 0.05, envMapIntensity: k === "glass" ? 1.4 : 0.4 });
+    mats[k] = new THREE.MeshStandardMaterial({ map: f.map, emissive: 0xffffff, emissiveMap: f.glow, emissiveIntensity: 0, vertexColors: true, roughness: k === "glass" ? 0.12 : k === "metal" ? 0.5 : 0.85, metalness: k === "glass" ? 0.55 : k === "metal" ? 0.4 : 0.05, envMapIntensity: k === "glass" ? 1.4 : 0.4 });
     out.night.push(mats[k]);
   }
   shops.forEach((s, i) => { mats["shop" + i] = new THREE.MeshStandardMaterial({ map: s.map, emissive: 0xffffff, emissiveMap: s.glow, emissiveIntensity: 0, vertexColors: true, roughness: 0.5, metalness: 0.2 }); mats["shop" + i].userData.shop = true; out.night.push(mats["shop" + i]); });
   mats.far = new THREE.MeshStandardMaterial({ map: fac.dark.map, emissive: 0xffffff, emissiveMap: fac.glass.glow, emissiveIntensity: 0, vertexColors: true, roughness: 0.6, metalness: 0.3 }); out.night.push(mats.far);
   mats.roof = new THREE.MeshStandardMaterial({ map: ground("roof"), vertexColors: true, roughness: 0.95 });
+  mats.shingle = new THREE.MeshStandardMaterial({ map: ground("shingle"), vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
   // walls and roofs
   const SHOP_H = 4.5;
   buildings.forEach((b, bi) => {
@@ -238,21 +307,23 @@ export function buildCity(scene, opts = {}) {
         if (front) bt.quad(a, bb, c, d, [nx, 0, nz], [u0, va, u1, va, u1, vb, u0, vb], tint);
         else bt.quad(bb, a, d, c, [nx, 0, nz], [u1, va, u0, va, u0, vb, u1, vb], tint);
       };
-      if (style !== "far" && b.min < 0.5 && b.h > 7 && L > 3) { wall(0, SHOP_H, shop, 6, SHOP_H, 0); wall(SHOP_H, b.h, style, TILE_W, TILE_H, SHOP_H); }
+      const shopBand = style !== "far" && style !== "siding" && style !== "metal" && b.min < 0.5 && L > 3 && (b.kind === 1 ? b.h >= 4.4 : b.h > 7);
+      if (shopBand) { wall(0, SHOP_H, shop, 6, SHOP_H, 0); if (b.h > SHOP_H + 0.2) wall(SHOP_H, b.h, style, TILE_W, TILE_H, SHOP_H); }
       else wall(b.min, b.h, style, TILE_W, TILE_H, 0);
       along += L;
     }
-    flat(batch("roof", b), pts, b.h, 6, tint.map((v) => v * 0.8));
+    if (b.kind === 2 && n === 4) gable(b, tint, batch("shingle", b), batch(style, b));
+    else flat(batch("roof", b), pts, b.h, 6, tint.map((v) => v * 0.8));
   });
   for (const bt of Object.values(batches)) if (bt.p.length) scene.add(bt.mesh(mats[bt.key], bt.key !== "far"));
 
   // the ground: sidewalk everywhere, then parks, plazas and the roads on top
-  const side = ground("sidewalk"); side.repeat.set(4800 / 12, 4800 / 12); // slabs of 1.5 m
-  const g0 = new THREE.Mesh(new THREE.PlaneGeometry(4800, 4800), new THREE.MeshStandardMaterial({ map: side, roughness: 0.92 }));
+  const lawn = D.ground === "grass", side = ground(lawn ? "lawn" : "sidewalk"); side.repeat.set(4800 / (lawn ? 24 : 12), 4800 / (lawn ? 24 : 12)); // sidewalk slabs of 1.5 m
+  const g0 = new THREE.Mesh(new THREE.PlaneGeometry(4800, 4800), new THREE.MeshStandardMaterial({ map: side, roughness: 0.95 }));
   g0.rotation.x = -Math.PI / 2; g0.receiveShadow = true; scene.add(g0);
   const area = (list, y, kind, scale, col) => { const bt = new Batch(); for (const a of list) { const pts = []; for (let i = 0; i < a.length; i += 2) pts.push([dm(a[i]), dm(a[i + 1])]); flat(bt, pts, y, scale, col); } if (bt.p.length) { const m = bt.mesh(layer(new THREE.MeshStandardMaterial({ map: ground(kind), vertexColors: true, roughness: 0.95 }), 1), false); scene.add(m); } };
   area(D.green, 0.012, "grass", 8, [1, 1, 1]); area(D.plazas, 0.014, "plaza", 6, [1, 1, 1]);
-  if (D.water.length) area(D.water, 0.01, "plaza", 20, [0.15, 0.25, 0.35]);
+  if (D.water.length) { const bt = new Batch(); for (const a of D.water) { const pts = []; for (let i = 0; i < a.length; i += 2) pts.push([dm(a[i]), dm(a[i + 1])]); flat(bt, pts, 0.016, 30, [1, 1, 1]); } const wm = layer(new THREE.MeshStandardMaterial({ map: ground("water"), vertexColors: true, roughness: 0.18, metalness: 0.35, envMapIntensity: 1.2 }), 1); out.water = wm; scene.add(bt.mesh(wm, false)); }
   // roads: a strip per segment, a patch at each junction, world-space texture so the overlaps don't show
   const road = new Batch(), mark = new Batch(), yellow = new Batch();
   const W1 = [1, 1, 1];
@@ -267,6 +338,12 @@ export function buildCity(scene, opts = {}) {
   for (const e of edges) strip(road, nodes[e.a], nodes[e.b], e.w, 0.02, 8);
   nodes.forEach((n, i) => { const r = junction[i] / 2; if (!r) return; const pts = []; for (let k = 0; k < 16; k++) pts.push([n[0] + Math.cos((k / 16) * Math.PI * 2) * r, n[1] + Math.sin((k / 16) * Math.PI * 2) * r]); flat(road, pts, 0.021, 8, W1); });
   for (let i = 0; i < D.vroads.length; i += 5) strip(road, [dm(D.vroads[i]), dm(D.vroads[i + 1])], [dm(D.vroads[i + 2]), dm(D.vroads[i + 3])], D.widths[D.classes.indexOf(["motorway", "trunk", "primary", "secondary", "tertiary", "minor", "service"][D.vroads[i + 4]])] || 9, 0.02, 8);
+  // sidewalks: a concrete strip each side of every road, under the asphalt (on lawns and lots it's what you walk on)
+  const walk = new Batch();
+  for (const e of edges) if (e.cls !== "service" && e.cls !== "motorway") strip(walk, nodes[e.a], nodes[e.b], e.w + 6.4, 0.017, 12);
+  for (let i = 0; i < D.vroads.length; i += 5) strip(walk, [dm(D.vroads[i]), dm(D.vroads[i + 1])], [dm(D.vroads[i + 2]), dm(D.vroads[i + 3])], 15, 0.017, 12);
+  nodes.forEach((n, i) => { const r = junction[i] / 2 + 3.2; if (!junction[i]) return; const pts = []; for (let k = 0; k < 16; k++) pts.push([n[0] + Math.cos((k / 16) * Math.PI * 2) * r, n[1] + Math.sin((k / 16) * Math.PI * 2) * r]); flat(walk, pts, 0.0175, 12, W1); });
+  if (lawn) { const st = ground("sidewalk"); scene.add(walk.mesh(layer(new THREE.MeshStandardMaterial({ map: st, roughness: 0.92 }), 1), false)); }
   const asphalt = ground("asphalt"); scene.add(road.mesh(layer(new THREE.MeshStandardMaterial({ map: asphalt, roughness: 0.9, metalness: 0.05 }), 2), false));
   // lane lines (white dashes on one-way avenues, a double yellow down two-way roads), stop lines and crosswalks
   for (const e of edges) {
@@ -370,8 +447,8 @@ export function buildCity(scene, opts = {}) {
   return out;
 }
 
-// ---------------------------------------------------------------- Times Square: RB's billboards and the HQ
-// Animated screens on the buildings round the square, all RB's own: RB Radio, RB Studio, RB TV, RB Badge, RB World.
+// ---------------------------------------------------------------- RB Plaza: RB's screens and the HQ
+// Animated screens on the buildings round RB Plaza, all RB's own: RB Radio, RB Studio, RB TV, RB Badge, RB World.
 export function timesSquare(scene, out) {
   const ADS = [
     ["RELENTLESS", "BILLIONAIRE", "#C9A84C", "#000"], ["RB RADIO", "LIVE 24/7", "#ff3366", "#14000a"], ["RB STUDIO", "RECORD · MIX · MASTER", "#00e0ff", "#001018"],
@@ -401,6 +478,9 @@ export function timesSquare(scene, out) {
     const b = buildings[D.hq];
     const crown = new THREE.Mesh(new THREE.BoxGeometry(b.box[2] - b.box[0] + 1, 2, b.box[3] - b.box[1] + 1), new THREE.MeshBasicMaterial({ color: 0xC9A84C, toneMapped: false }));
     crown.position.set((b.box[0] + b.box[2]) / 2, b.h + 1, (b.box[1] + b.box[3]) / 2); scene.add(crown);
+    // a lit RB sign on the roof, seen from down the street
+    const sc = canvas(512, 160, (g, W, H) => { g.fillStyle = "#000"; g.fillRect(0, 0, W, H); g.strokeStyle = "#C9A84C"; g.lineWidth = 8; g.strokeRect(6, 6, W - 12, H - 12); g.fillStyle = "#F5E6A3"; g.font = "900 96px Inter, Arial, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("RB HQ", W / 2, H / 2 + 4); });
+    const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(sc, false), toneMapped: false })); sign.scale.set(16, 5, 1); sign.position.set(crown.position.x, b.h + 6.5, crown.position.z); scene.add(sign);
     out.hq = { x: crown.position.x, z: crown.position.z, h: b.h };
   }
 }

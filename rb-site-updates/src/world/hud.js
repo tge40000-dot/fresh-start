@@ -1,7 +1,7 @@
-// RB World HUD: the radar (GTA-style: drawn from the real Midtown map, turning with your car, with lots by owner, cops,
+// RB World HUD: the radar (GTA-style: drawn from the real city map, turning with your car, with lots by owner, cops,
 // drops, other players and the job or race target, which sits on the rim when it's off the radar), the street and
 // neighbourhood you're in, the speedometer with the nitro gauge, touch pedals, the help screen and a tidier layout.
-// Tap the radar for the real-world map (MapLibre) at your car's real spot in Manhattan, then (with location on) at you.
+// Tap the radar for the real-world map (MapLibre) at your car's real spot in the city, then (with location on) at you.
 import { LOTS, DISTRICTS } from "./empire_defs.js";
 import { pad } from "./empire.js";
 import * as CITY from "./city.js";
@@ -51,16 +51,16 @@ function drawMap() {
 function radar() {
   const box = document.createElement("div"); box.id = "rb-radar"; box.title = "Radar (tap for the real-world map)";
   cv = document.createElement("canvas"); cv.width = 336; cv.height = 336; cx = cv.getContext("2d");
-  const st = document.createElement("div"); st.id = "rb-street"; st.textContent = "Midtown";
+  const st = document.createElement("div"); st.id = "rb-street"; st.textContent = CITY.SHORT;
   const sp = document.createElement("div"); sp.id = "rb-speed"; sp.innerHTML = `<span id="rb-kmh">0</span><small>KM/H</small><div id="rb-nitro" title="Nitro"><i></i></div>`;
   box.append(cv, st, sp); document.body.appendChild(box);
   const osm = document.createElement("div"); osm.id = "rb-osm"; osm.innerHTML = `Map data <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> · OpenMapTiles · OpenFreeMap`; document.body.appendChild(osm);
   drawMap();
-  // tap: the real map where your car is in Manhattan, then (location on) where you are, then back to the radar
+  // tap: the real map where your car is in the city, then (location on) where you are, then back to the radar
   box.addEventListener("click", () => {
     realMode = (realMode + 1) % (C.gps() ? 3 : 2);
     document.body.classList.toggle("rb-real", realMode > 0);
-    E.toast(realMode === 1 ? "Real map: your car's spot in Midtown Manhattan. Tap again for " + (C.gps() ? "where you are." : "the radar.") : realMode === 2 ? "Real map: where you are, with drops near you." : "Radar.");
+    E.toast(realMode === 1 ? "Real map: your car's spot in " + CITY.NAME + ". Tap again for " + (C.gps() ? "where you are." : "the radar.") : realMode === 2 ? "Real map: where you are, with drops near you." : "Radar.");
     placeMap();
   });
   window.addEventListener("resize", placeMap);
@@ -158,7 +158,7 @@ export function help() {
     <tr><td>🏠 Lots</td><td>Stop by a FOR SALE sign. Own all four of a colour for +50% customers. Others pay you rent when they stop on yours.</td></tr>
     <tr><td>🏢 Businesses</td><td>Build on your lot, set the price, hire talent, upgrade to ★★★★★, run marketing. They earn while you play, and a little while you're away.</td></tr>
     <tr><td>💰💎🃏 Drops</td><td>Drive through them. With location on, drops appear near where you really are too.</td></tr>
-    <tr><td>🗺️ The city</td><td>Real Midtown Manhattan round Times Square, from OpenStreetMap: real streets, buildings and names. Taxis keep to the one-way streets and stop at red lights. Tap the radar for the real map at your car's spot (and, with location on, where you are).</td></tr>
+    <tr><td>🗺️ The city</td><td>Real ${CITY.NAME}, from OpenStreetMap: real streets, the waterfront and street names; RB Plaza is ${CITY.PLAZA_NAME.replace(/^RB Plaza \(|\)$/g, "")}. Where the map has no building outlines, the blocks are filled with houses, shops and warehouses that fit the area. Taxis keep to the one-way streets and stop at red lights. Tap the radar for the real map at your car's spot (and, with location on, where you are).</td></tr>
     <tr><td>🏁 Races</td><td>Host a race and everyone in the city gets an invite, or join one. Podium places win $25,000 / $15,000 / $8,000. Blue canisters fill your nitro; driving close behind another racer (slipstream) refills it and adds speed.</td></tr>
     <tr><td>🎨 Paint</td><td>In the race menu: colours for your car. Other players see it, with your name and level.</td></tr>
     <tr><td>📋 Goals</td><td>Daily rewards, three daily quests, achievements and your level.</td></tr>

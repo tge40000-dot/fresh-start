@@ -1,5 +1,5 @@
 // RB World empire: the city you drive, buy, build and collect in. Loaded by main.js after the 3D scene is up.
-//   Drive (GTA): your car on real Midtown Manhattan streets (city.js, from OpenStreetMap), traffic that keeps to the
+//   Drive (GTA): your car on real streets (city.js: downtown Vallejo, California, from OpenStreetMap), traffic that keeps to the
 //     one-way streets and stops at red lights, hustle jobs, heists that bring the cops and a wanted level.
 //   Property (Monopoly): 32 lots in 8 colour districts, shared by every player (server); rent when you stop at someone
 //     else's lot; own a whole district for the set bonus.
@@ -32,7 +32,7 @@ const JOBS = [
 let C = null; // what main.js hands over: scene, camera, controls, player, play, save, hud, mesh, minimap, gps
 const S = { biz: {}, cards: [], picked: {}, lastTick: Date.now(), clock: 9 * 60, stats: { earned: 0, jobs: 0, busts: 0, drops: 0 } };
 const lots = {}; // server: lot -> { owner_id, owner_name, business, level, name }
-const car = { x: -12, z: 118, heading: Math.PI, speed: 0, mesh: null }; // on 7th Avenue at 44th Street, facing uptown
+const car = { x: CITY.START[0], z: CITY.START[1], heading: CITY.START[2], speed: 0, mesh: null }; // on the road by RB Plaza
 // each lot is a real building: where its door is on the street, and the building itself
 for (const l of LOTS) { const g = CITY.lotGeo[l.id]; if (g) Object.assign(l, { x: g.door[0], z: g.door[1], face: g.face, building: g.building }); }
 const keys = {};
@@ -60,6 +60,8 @@ function save() { try { localStorage.setItem(SAVE, JSON.stringify(S)); } catch (
 
 // ---------------------------------------------------------------- the city (city.js: real streets and buildings)
 // junctions with traffic lights: three or more roads, one of them an avenue or a wide street
+// people crossing the road right now (peds.js fills it each frame): traffic stops for them
+export const walkers = [];
 const SIGNAL = CITY.nodes.map((_, i) => CITY.anyLinks[i].length >= 3 && Math.max(...CITY.anyLinks[i].map((l) => CITY.edges[l.e].w)) >= 9);
 function label(text, opts = {}) {
   const cv = document.createElement("canvas"), w = opts.w || 512, h = opts.h || 128;
@@ -110,7 +112,7 @@ function poolsTick() {
   const near = world.lamps.map((l) => [l, (l[0] - car.x) ** 2 + (l[1] - car.z) ** 2]).sort((a, b) => a[1] - b[1]).slice(0, pools.length);
   near.forEach(([[x, z, r]], i) => pools[i].position.set(x + Math.sin(r) * 1.6, 7.4, z + Math.cos(r) * 1.6));
 }
-// The sun's place in the sky for the game clock (rises in the east over Midtown, sets over the Hudson).
+// The sun's place in the sky for the game clock (rises in the east, sets in the west, over the real compass).
 function sunDir(h) {
   const a = ((h - 6) / 12) * Math.PI, el = Math.sin(a) * 1.05, az = Math.cos(a);
   const east = CITY.fromLngLat(CITY.toLngLat(0, 0)[0] + 0.01, CITY.toLngLat(0, 0)[1]), len = Math.hypot(...east);
@@ -332,6 +334,7 @@ function moveRoadCar(c, dt, chase) {
     if (SIGNAL[c.to] && ph !== axis && d > jr - 1 && d < jr + 9) want = 0;
     const ax = car.x - c.x, az = car.z - c.z, ahead = ax * hx + az * hz, sideways = Math.abs(ax * hz - az * hx);
     if (ahead > 0 && ahead < 10 && sideways < 3) want = 0;
+    for (const w of walkers) { const wx = w.x - c.x, wz = w.z - c.z, wa = wx * hx + wz * hz; if (wa > 0 && wa < 11 && Math.abs(wx * hz - wz * hx) < 4.5) { want = 0; break; } }
   } else want = 17 + wanted * 2.5;
   c.speed += Math.max(-14 * dt, Math.min(6 * dt, want - c.speed));
   // a cop that's close leaves the road and comes straight at you (unless a building is in the way)
@@ -814,6 +817,7 @@ export function initEmpire(ctx) {
   });
   window.addEventListener("beforeunload", () => { S.lastTick = Date.now(); save(); });
   return { openLot, openEmpire, openJobs, setWanted, state: S, lots, car, toast, panel, hidePanel, emit, money,
+    phase: () => world.signal(clockT), signalAt: (n) => SIGNAL[n], wanted: () => wanted,
     radar: () => ({ car, cops, traffic, drops, job, lots, wanted, mine: (l) => mine(l), lotOwner }), camName: () => CAMS[camMode], save, city: CITY, camera: C.camera,
     giveCard: (key) => giveCard("reward", RARITY.find((r) => r.key === key)) };
 }

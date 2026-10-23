@@ -63,6 +63,8 @@ ICON_SITES="artist-router rb-favicon rb-radio rb-radio-hub rb-tv rb-mastering-st
 for s in $ICON_SITES; do py "$ROOT/rb-tools/patch_icons.py" "$W/$s"; done
 # one row of tabs for every user site at the top of each (styled by rb-public-content's site-images.css)
 for s in $ICON_SITES; do py "$ROOT/rb-tools/patch_tabs.py" "$W/$s"; done
+# the sitemap, the beatstore's robots.txt, a baseline security header, and game.relentlessbillionaire.com going to RB World
+py "$ROOT/rb-tools/patch_seo.py" "$W/artist-router" "$W/beatstore" "$W/rb-events-page" "$W/rb-fund-campaign" "$W/rb-release"
 # Site images (RB Command > Site images): the screen in rb-command, the pictures and per-site CSS from rb-public-content
 py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-command"; py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-public-content"
 # RB Command > Badges (levels, rewards, achievements, settings) and the Badge desk for the door
@@ -85,6 +87,7 @@ node --no-warnings "$ROOT/rb-site-updates/test/rewards.test.mjs" "$W/artist-rout
 node --no-warnings "$ROOT/rb-site-updates/test/badge.test.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$T/badge-desk.test.mjs" "$W/rb-command"
 node --no-warnings "$ROOT/rb-site-updates/test/game-redirect.test.mjs" "$W/rb-game"
+node --no-warnings "$ROOT/rb-site-updates/test/seo.test.mjs" "$W/artist-router/artist-router-v14.js" "$W/beatstore/worker.js" "$W/rb-events-page/events-worker.js" "$W/rb-fund-campaign/worker.js" "$W/rb-release/rb-release-worker.js"
 node --no-warnings "$ROOT/rb-site-updates/test/ai-limit.test.mjs" "$W/relentless-billionaire-api/script.js"
 node --no-warnings "$ROOT/rb-site-updates/test/radio-tv.test.mjs" "$W/rb-radio" "$W/rb-tv"
 node "$ROOT/rb-site-updates/test/flow.test.mjs" "$W/rb-radio"

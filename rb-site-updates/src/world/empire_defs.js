@@ -71,10 +71,10 @@ export function upgradeCost(b, level) { return Math.round(b.cost * 0.6 * level);
 // checkpoint. Generated from the road network by rb-tools/bake_city.mjs: don't edit by hand, re-bake.
 // BEGIN BAKED TRACKS (rb-tools/bake_city.mjs)
 export const RACE_TRACKS = [
-  {"key":"loop","name":"Times Square Loop","par":72,"start":[-10.6,229.7],"cps":[[-9.9,-162],[263,-160.9],[262.3,241.4],[-10.6,241.7]]},
-  {"key":"zig","name":"Theater District Zigzag","par":84,"start":[-284.4,-545.9],"cps":[[-283.9,-239.2],[-10.2,-239.9],[-11.5,76.8],[262.7,76.9],[262.9,402.9]]},
-  {"key":"ring","name":"Midtown Ring","par":167,"start":[-272.4,-557.9],"cps":[[263.4,-557.6],[263.1,560.4],[-284.7,561.6],[-284.4,-557.9]]},
-  {"key":"gp","name":"RB Grand Prix (2 laps)","par":212,"start":[-271.9,-239.2],"cps":[[263,-239.8],[262.3,241.4],[-284.5,242],[-283.9,-239.2],[263,-239.8],[262.3,241.4],[-284.5,242],[-283.9,-239.2]]},
+  {"key":"vloop","name":"Downtown Loop","par":77,"start":[85.6,-198.4],"cps":[[78.5,183],[368.4,189.4],[377.8,-211],[85.8,-210.4]]},
+  {"key":"vzig","name":"Heritage District Zigzag","par":90,"start":[-343.2,-635.5],"cps":[[-343.6,-537.1],[93.3,-528.7],[88.2,-310.3],[379.9,-301.1],[373.5,-27.7],[526.3,-26.9]]},
+  {"key":"vring","name":"Vallejo Ring","par":220,"start":[-331.2,-647.2],"cps":[[536,-627],[506.5,627.4],[-195.2,452.6],[-343.2,-647.5]]},
+  {"key":"vgp","name":"RB Grand Prix (2 laps)","par":262,"start":[-39.4,-530.5],"cps":[[533,-517],[515,189.1],[-68.1,179.6],[-51.4,-530.7],[533,-517],[515,189.1],[-68.1,179.6],[-51.4,-530.7]]},
 ];
 // END BAKED TRACKS
 export const RACE_LOBBY_S = 20;        // a hosted race starts this long after it's made; others can join until then

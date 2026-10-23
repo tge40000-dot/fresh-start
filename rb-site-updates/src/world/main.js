@@ -10,6 +10,7 @@ import { initEmpire } from './empire.js';
 import { initHud } from './hud.js';
 import { initProgress } from './progress.js';
 import { initRace } from './race.js';
+import { initPeds } from './peds.js';
 
 // --- CORE ---
 const db = init();
@@ -21,7 +22,7 @@ const BASE_PRICE = 10000;
 // --- STATE ---
 let player = {
     id: id(), name: '', netWorth: 50000, empireValue: 0, tokens: 500,
-    pos: [-74.006, 40.7128], pov: '3rd', health: 100, armor: 0,
+    pos: [-122.2563, 38.1010], // downtown Vallejo until location says otherwise pov: '3rd', health: 100, armor: 0,
     weapons: [], equippedWeapon: null, kills: 0, deaths: 0, streak: 0,
     avatar: '🧑', subscription: null,
     settings: { nav: 'gps', pov: '3rd', audio: true, radio: true }
@@ -108,7 +109,7 @@ function init3D() {
     );
     composer.addPass(bloomPass);
 
-    // --- LIGHTING, GROUND, CITY --- (the empire builds the real city: Midtown Manhattan from OpenStreetMap, the sky,
+    // --- LIGHTING, GROUND, CITY --- (the empire builds the real city: downtown Vallejo from OpenStreetMap, the sky,
     // the sun and its shadows; see empire.js and city.js)
 
     // --- PLAYER ---
@@ -453,6 +454,7 @@ async function startGame() {
     const hud = initHud(window.RBEmpire, ectx);
     window.RBProgress = initProgress(window.RBEmpire, ectx);
     window.RBRace = initRace(window.RBEmpire, ectx, window.RBProgress);
+    window.RBPeds = initPeds(window.RBEmpire, ectx);
     fetchCalendarEvents();
 }
 

@@ -1,11 +1,14 @@
 // Bakes RB World's city from real map data: OpenStreetMap, as vector tiles from OpenFreeMap (OpenMapTiles schema).
-//   node rb-tools/bake_city.mjs <tiles dir> [out file]
+//   RB_CITY=vallejo node rb-tools/bake_city.mjs <tiles dir> [out file]      (vallejo is the default; or manhattan)
 // The tiles dir holds z14 .pbf tiles named 14_<x>_<y>.pbf covering the area (rb-tools/bake_city.mjs --fetch <dir>
 // downloads them). Writes rb-site-updates/src/world/city_data.js: buildings (footprint, height, colour), the road
 // network (a graph with classes, widths, one-way and street names), parks and plazas, neighbourhood names, the lots
 // (real buildings, one per RB lot id), the RB HQ and Times Square billboard spots, and the race tracks, which it also
 // writes into empire_defs.js between the BAKED TRACKS markers (the server checks races against them).
-// Everything is in metres in a local frame: x east-ish, z south-ish, turned so Manhattan's avenues run along z.
+// Everything is in metres in a local frame: x east-ish, z south-ish, turned so the street grid runs along the axes.
+// Where OpenStreetMap has few building outlines (most of Vallejo), the blocks are filled with buildings made up to fit
+// the place (seeded, so every bake is the same): shopfronts downtown, warehouses on industrial land, houses with
+// front yards and pitched roofs on the residential streets. The real outlines that exist are kept as they are.
 // Needs @mapbox/vector-tile and pbf (npm i @mapbox/vector-tile@2.0.3 pbf@4.0.1 in a scratch folder, then run with
 // NODE_PATH pointing at its node_modules).
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync } from "node:fs";
@@ -17,10 +20,27 @@ const { VectorTile } = require("@mapbox/vector-tile");
 const Protobuf = require("pbf").default || require("pbf");
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-// Times Square, between 7th Avenue and Broadway at 45th Street. The drivable city is ±HALF_X across the avenues
-// (about 9th to 5th Avenue) and ±HALF_Z along them (about 38th to 52nd Street); buildings out to ±SKY are the skyline.
-const ORIGIN = [-73.98545, 40.75790];
-const HALF_X = 470, HALF_Z = 600, SKY = 950;
+// The cities RB World can be. plaza: RB Plaza (the dearest lots are round it, the HQ and screens are by it).
+const CITIES = {
+  vallejo: {
+    name: "Vallejo, California", short: "Vallejo", key: "v", fill: true, ground: "grass",
+    // downtown Vallejo between the waterfront (Mare Island Way) and Sonoma Boulevard, Georgia Street through the middle
+    origin: [-122.2592, 38.1028], half: [520, 620], sky: 900, skyMinH: 12, plaza: [-122.2563, 38.1010], plazaName: "RB Plaza (Georgia & Marin)",
+    lotMinA: 70, lotMinH: 3, lotGap: 13, board: { radius: 300, minH: 7, max: 14, w: 12, h: 6, y: 3 },
+    places: [["Downtown Vallejo", -122.2565, 38.1012], ["Vallejo Waterfront", -122.2640, 38.1035], ["Heritage District", -122.2560, 38.1075], ["Sonoma Boulevard", -122.2545, 38.1060]],
+    tracks: { loop: "Downtown Loop", zig: "Heritage District Zigzag", ring: "Vallejo Ring", gp: "RB Grand Prix (2 laps)" },
+  },
+  manhattan: {
+    name: "Midtown Manhattan, New York", short: "Midtown", key: "", fill: false, ground: "sidewalk",
+    origin: [-73.98545, 40.75790], half: [470, 600], sky: 950, skyMinH: 32, plaza: [-73.98550, 40.75800], plazaName: "RB Plaza (Times Square)",
+    lotMinA: 250, lotMinH: 8, lotGap: 7, board: { radius: 230, minH: 22, max: 36, w: 26, h: 22, y: 5 },
+    places: [], tracks: { loop: "Times Square Loop", zig: "Theater District Zigzag", ring: "Midtown Ring", gp: "RB Grand Prix (2 laps)" },
+  },
+};
+const CFG = CITIES[process.env.RB_CITY || "vallejo"];
+if (!CFG) throw new Error("RB_CITY must be one of " + Object.keys(CITIES).join(", "));
+const ORIGIN = CFG.origin;
+const [HALF_X, HALF_Z] = CFG.half, SKY = CFG.sky;
 const Z = 14, EXT = 4096;
 
 if (process.argv[2] === "--fetch") {
@@ -84,7 +104,7 @@ function clipLine(line) { // keep the parts of a line inside the tile square
   return parts;
 }
 const CLS0 = ["motorway", "trunk", "primary", "secondary", "tertiary", "minor", "service"];
-const feats = { building: [], road: [], name: [], green: [], plaza: [], water: [], place: [] };
+const feats = { building: [], road: [], name: [], green: [], plaza: [], water: [], place: [], zone: [] };
 const DRIVE = { motorway: 16, trunk: 16, primary: 16, secondary: 14, tertiary: 12, minor: 9, service: 6 };
 for (const f of readdirSync(TILES).filter((x) => x.endsWith(".pbf"))) {
   const [, tx, ty] = f.replace(".pbf", "").split("_").map(Number);
@@ -111,7 +131,8 @@ for (const f of readdirSync(TILES).filter((x) => x.endsWith(".pbf"))) {
   });
   for (const layer of ["landcover", "park", "landuse"]) each(layer, (ft) => {
     const c = ft.properties.class, s = ft.properties.subclass;
-    if (ft.type !== 3 || !(c === "grass" || c === "park" || s === "park" || s === "garden" || c === "playground")) return;
+    if (ft.type === 3 && layer === "landuse" && ["retail", "commercial", "industrial", "residential", "school", "hospital"].includes(c)) for (const ring of ft.loadGeometry()) { const pts = clipPoly(ring.map((q) => [q.x, q.y])); if (pts.length > 2 && area(pts) > 0) feats.zone.push({ cls: c, ll: pts.map(ll) }); }
+    if (ft.type !== 3 || !(c === "grass" || c === "park" || s === "park" || s === "garden" || c === "playground" || c === "pitch")) return;
     for (const ring of ft.loadGeometry()) { const pts = clipPoly(ring.map((q) => [q.x, q.y])); if (pts.length > 2 && area(pts) > 0) feats.green.push(pts.map(ll)); }
   });
   each("water", (ft) => { for (const ring of ft.loadGeometry()) { const pts = clipPoly(ring.map((q) => [q.x, q.y])); if (pts.length > 2 && area(pts) > 0) feats.water.push(pts.map(ll)); } });
@@ -164,9 +185,9 @@ for (const b of feats.building) {
   const c = pts.reduce((s, p) => [s[0] + p[0] / pts.length, s[1] + p[1] / pts.length], [0, 0]);
   const core = inRect(c, HALF_X + 25, HALF_Z + 25);
   if (!inRect(c, SKY, SKY)) continue;
-  if (!core && b.h < 32) continue; // the skyline beyond the streets: only the taller ones
+  if (!core && b.h < CFG.skyMinH) continue; // beyond the streets: only the taller ones
   if (area(pts) > 0) pts.reverse(); // one winding for all (counter-clockwise seen from above, with z south)
-  buildings.push({ pts, h: Math.max(3, Math.min(480, b.h)), min: Math.max(0, b.min), colour: b.colour, c, a, core });
+  buildings.push({ pts, h: Math.max(3, Math.min(480, b.h)), min: Math.max(0, b.min), colour: b.colour, c, a, core, kind: 0 });
 }
 console.log("buildings", buildings.length, "core", buildings.filter((b) => b.core).length);
 
@@ -268,9 +289,76 @@ const N = used.map((n) => nodes[n]);
 edges.forEach((e) => { e.a = remap.get(e.a); e.b = remap.get(e.b); });
 console.log("road nodes", N.length, "edges", edges.length, "named", edges.filter((e) => e.name >= 0).length, "names", names.length);
 
+// ---------------------------------------------------------------- filling the blocks where the map has no outlines
+const seeded = (seed) => () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+const rnd = seeded(20261023);
+const R = (a, b) => a + rnd() * (b - a);
+const KIND = { real: 0, shop: 1, house: 2, warehouse: 3 };
+if (CFG.fill) {
+  const zones = feats.zone.map((z) => { const pts = z.ll.map(local); return { cls: z.cls, pts, box: [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1]))] }; });
+  const zoneAt = (x, z) => { for (const zn of zones) if (x >= zn.box[0] && x <= zn.box[2] && z >= zn.box[1] && z <= zn.box[3] && pointIn(zn.pts, x, z)) return zn.cls; return "residential"; };
+  const blockers = [...feats.water, ...feats.green].map((ll) => { const pts = ll.map(local); return { pts, box: [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1]))] }; });
+  const inBlocker = (x, z) => blockers.some((b) => x >= b.box[0] && x <= b.box[2] && z >= b.box[1] && z <= b.box[3] && pointIn(b.pts, x, z));
+  // roads (all of them, drawn ones too) in a coarse grid, for keeping buildings off them
+  const RC = 40, rgrid = new Map(), addR = (a, b, w) => { const x0 = Math.floor(Math.min(a[0], b[0]) / RC) - 1, x1 = Math.floor(Math.max(a[0], b[0]) / RC) + 1, z0 = Math.floor(Math.min(a[1], b[1]) / RC) - 1, z1 = Math.floor(Math.max(a[1], b[1]) / RC) + 1; for (let gx = x0; gx <= x1; gx++) for (let gz = z0; gz <= z1; gz++) { const k = gx * 100003 + gz; if (!rgrid.has(k)) rgrid.set(k, []); rgrid.get(k).push({ a, b, w }); } };
+  for (const e of edges) addR(N[e.a], N[e.b], e.w);
+  for (let i = 0; i < vroads.length; i++) { const [ax, az, bx, bz, c] = vroads[i]; addR([ax / 10, az / 10], [bx / 10, bz / 10], DRIVE[CLS0[c]] || 9); }
+  const roadClear = (x, z, m) => { const l = rgrid.get(Math.floor(x / RC) * 100003 + Math.floor(z / RC)); if (!l) return true; for (const r of l) if (segDist([x, z], r.a, r.b) - r.w / 2 < m) return false; return true; };
+  // buildings already placed, in a grid
+  const BC = 30, bgrid = new Map();
+  const addB = (b) => { const xs = b.pts.map((p) => p[0]), zs = b.pts.map((p) => p[1]); b.box = [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)]; for (let gx = Math.floor(b.box[0] / BC); gx <= Math.floor(b.box[2] / BC); gx++) for (let gz = Math.floor(b.box[1] / BC); gz <= Math.floor(b.box[3] / BC); gz++) { const k = gx * 100003 + gz; if (!bgrid.has(k)) bgrid.set(k, []); bgrid.get(k).push(b); } };
+  buildings.forEach(addB);
+  const overlaps = (pts) => {
+    const xs = pts.map((p) => p[0]), zs = pts.map((p) => p[1]), box = [Math.min(...xs) - 0.8, Math.min(...zs) - 0.8, Math.max(...xs) + 0.8, Math.max(...zs) + 0.8];
+    for (let gx = Math.floor(box[0] / BC); gx <= Math.floor(box[2] / BC); gx++) for (let gz = Math.floor(box[1] / BC); gz <= Math.floor(box[3] / BC); gz++) for (const o of bgrid.get(gx * 100003 + gz) || []) {
+      if (o.box[2] < box[0] || o.box[0] > box[2] || o.box[3] < box[1] || o.box[1] > box[3]) continue;
+      if (pts.some((p) => pointIn(o.pts, p[0], p[1])) || o.pts.some((p) => pointIn(pts, p[0], p[1]))) return true;
+      const c = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2]; if (pointIn(o.pts, c[0], c[1])) return true;
+    }
+    return false;
+  };
+  const plaza = local(CFG.plaza);
+  const HOUSE = ["#d9c8a9", "#b8c9c2", "#e3d3b5", "#c9a9a0", "#a9b9c9", "#e8e2d0", "#9fb39a", "#d6b99a", "#c7b7d0", "#e0c090"];
+  const SHOP = ["#c8b8a0", "#b0a090", "#d0c0b0", "#a08070", "#c0c8c8", "#b89a7a", "#9a8a7a"];
+  const SHED = ["#9aa0a6", "#b0b4b8", "#8a8f94", "#a8a090"];
+  const FILL = Math.max(HALF_X, HALF_Z) + 160;
+  let made = 0;
+  for (const e of edges.concat(vroads.map((v) => ({ v })))) {
+    let A, B, w, cls;
+    if (e.v) { A = [e.v[0] / 10, e.v[1] / 10]; B = [e.v[2] / 10, e.v[3] / 10]; cls = CLS0[e.v[4]]; w = DRIVE[cls] || 9; } else { A = N[e.a]; B = N[e.b]; w = e.w; cls = e.cls; }
+    if (cls === "motorway" || cls === "trunk" || cls === "service") continue;
+    const L = Math.hypot(B[0] - A[0], B[1] - A[1]); if (L < 18) continue;
+    if (!inRect(A, FILL, FILL) && !inRect(B, FILL, FILL)) continue;
+    const ux = (B[0] - A[0]) / L, uz = (B[1] - A[1]) / L, px = -uz, pz = ux;
+    for (const side of [-1, 1]) {
+      let sAt = 9;
+      while (sAt < L - 9) {
+        const fx = A[0] + ux * sAt + px * side * (w / 2 + 8), fz = A[1] + uz * sAt + pz * side * (w / 2 + 8);
+        const zone = zoneAt(fx, fz), dd = Math.hypot(fx - plaza[0], fz - plaza[1]);
+        const kind = zone === "industrial" ? "warehouse" : zone === "retail" || zone === "commercial" || dd < 260 ? "shop" : zone === "school" || zone === "hospital" ? "shop" : "house";
+        const P = kind === "shop" ? { fw: R(9, 18), d: R(14, 26), back: R(0.2, 0.8), gap: R(0, 1.2), h: 4.5 + Math.floor(R(0, dd < 140 ? 4 : 2.6)) * 3.5 }
+          : kind === "warehouse" ? { fw: R(20, 38), d: R(18, 32), back: R(4, 8), gap: R(4, 10), h: R(6, 9.5) }
+            : { fw: R(8, 11), d: R(9, 13), back: R(5, 8), gap: R(3, 6), h: rnd() < 0.35 ? 6.2 : 3.4 };
+        if (sAt + P.fw > L - 9) break;
+        const off = w / 2 + 3.2 + P.back, cx = A[0] + ux * (sAt + P.fw / 2) + px * side * (off + P.d / 2), cz = A[1] + uz * (sAt + P.fw / 2) + pz * side * (off + P.d / 2);
+        const pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [cx + ux * (a * P.fw) / 2 + px * side * (b * P.d) / 2, cz + uz * (a * P.fw) / 2 + pz * side * (b * P.d) / 2]);
+        const samples = [...pts, [cx, cz], ...pts.map((p, i) => [(p[0] + pts[(i + 1) % 4][0]) / 2, (p[1] + pts[(i + 1) % 4][1]) / 2])];
+        const ok = inRect([cx, cz], FILL, FILL) && samples.every(([x, z]) => roadClear(x, z, 3) && !inBlocker(x, z)) && !overlaps(pts);
+        if (!ok) { sAt += 3; continue; }
+        if (area(pts) > 0) pts.reverse();
+        const b = { pts, h: Math.round(P.h * 10) / 10, min: 0, colour: (kind === "house" ? HOUSE : kind === "shop" ? SHOP : SHED)[Math.floor(rnd() * 7.99) % (kind === "house" ? HOUSE.length : kind === "shop" ? SHOP.length : SHED.length)], c: [cx, cz], a: P.fw * P.d, core: inRect([cx, cz], HALF_X + 25, HALF_Z + 25), kind: KIND[kind] };
+        buildings.push(b); addB(b); made++;
+        sAt += P.fw + P.gap;
+      }
+    }
+  }
+  console.log("filled in", made, "buildings;", buildings.length, "in all");
+}
+
 // ---------------------------------------------------------------- parks, plazas, water, neighbourhoods
 const poly = (list) => list.map((ll) => ll.map(local)).filter((p) => p.some((x) => inRect(x, SKY, SKY))).map((p) => p.flatMap(([x, z]) => [q(x), q(z)]));
 const places = feats.place.map((p) => ({ name: p.name, p: local(p.ll), cls: p.cls })).filter((p) => inRect(p.p, 2500, 2500));
+for (const [n, lng, lat] of CFG.places) places.unshift({ name: n, p: local([lng, lat]), cls: "rb" });
 const uniqPlaces = []; for (const p of places) if (!uniqPlaces.some((u) => u.name === p.name)) uniqPlaces.push(p);
 console.log("places", uniqPlaces.map((p) => p.name).join(", "));
 
@@ -287,15 +375,18 @@ function roadGap(b) { // metres from the building's wall to the edge of the near
   return { gap: best, at, seg };
 }
 const lots = {}, taken = new Set();
-const MX = HALF_X - 60, MZ = HALF_Z - 60;
+const MX = HALF_X - 90, MZ = HALF_Z - 90;
 const core = buildings.filter((b) => b.core);
 LAYOUT.forEach((d, i) => {
   if (d < 0) return;
-  const gx = i % GRID, gz = Math.floor(i / GRID), target = [-MX + (gx + 0.5) * ((2 * MX) / GRID), -MZ + (gz + 0.5) * ((2 * MZ) / GRID)];
-  const cands = core.filter((b) => !taken.has(b) && b.a > 250 && b.a < 4500 && b.h >= 8 && b.h <= 120 && Math.hypot(b.c[0] - target[0], b.c[1] - target[1]) < 120)
+  // the board's grid centred on RB Plaza (kept inside the drivable city), so the dear lots are round it
+  const gx = i % GRID, gz = Math.floor(i / GRID), pc = local(CFG.plaza), cx0 = Math.max(-HALF_X + MX, Math.min(HALF_X - MX, pc[0])) * 0 + pc[0], cz0 = pc[1];
+  const target = [Math.max(-HALF_X + 30, Math.min(HALF_X - 30, cx0 - MX + (gx + 0.5) * ((2 * MX) / GRID))), Math.max(-HALF_Z + 30, Math.min(HALF_Z - 30, cz0 - MZ + (gz + 0.5) * ((2 * MZ) / GRID)))];
+  // the building nearest the spot (further out if the spot is in the water or a park)
+  const cands = core.filter((b) => !taken.has(b) && b.a > CFG.lotMinA && b.a < 4500 && b.h >= CFG.lotMinH && b.h <= 120 && Math.hypot(b.c[0] - target[0], b.c[1] - target[1]) < 420)
     .map((b) => ({ b, d: Math.hypot(b.c[0] - target[0], b.c[1] - target[1]) })).sort((x, y) => x.d - y.d);
   for (const { b } of cands) {
-    const r = roadGap(b); if (r.gap > 7) continue;
+    const r = roadGap(b); if (r.gap > CFG.lotGap) continue;
     taken.add(b);
     // the door: on the road edge in front of the building, where a car stops
     const dir = [r.at[0] - b.c[0], r.at[1] - b.c[1]], L = Math.hypot(...dir) || 1;
@@ -306,15 +397,15 @@ LAYOUT.forEach((d, i) => {
 });
 console.log("lots", Object.keys(lots).length);
 
-// ---------------------------------------------------------------- RB HQ (One Times Square) and the Times Square billboards
-const TSQ = local([-73.98615, 40.75680]); // the south end of Times Square, by One Times Square
-const hq = core.filter((b) => b.h > 60).sort((x, y) => Math.hypot(x.c[0] - TSQ[0], x.c[1] - TSQ[1]) - Math.hypot(y.c[0] - TSQ[0], y.c[1] - TSQ[1]))[0];
-const centre = local([-73.98550, 40.75800]);
+// ---------------------------------------------------------------- RB HQ and the screens round RB Plaza
+// HQ: the tallest building near RB Plaza (in Manhattan, One Times Square). Screens: on the walls that face the plaza.
+const centre = local(CFG.plaza);
+const hq = core.filter((b) => Math.hypot(b.c[0] - centre[0], b.c[1] - centre[1]) < 320).sort((x, y) => y.h - x.h)[0];
 const boards = [];
 // a wall with street or plaza in front of it (Manhattan buildings share party walls)
 const open = (x, z) => !core.some((o) => x >= Math.min(...o.pts.map((p) => p[0])) && x <= Math.max(...o.pts.map((p) => p[0])) && z >= Math.min(...o.pts.map((p) => p[1])) && z <= Math.max(...o.pts.map((p) => p[1])) && pointIn(o.pts, x, z));
 for (const b of core) {
-  const dc = Math.hypot(b.c[0] - centre[0], b.c[1] - centre[1]); if (dc > 230 || b.h < 22 || taken.has(b)) continue;
+  const dc = Math.hypot(b.c[0] - centre[0], b.c[1] - centre[1]); if (dc > CFG.board.radius || b.h < CFG.board.minH || taken.has(b) || b === hq) continue;
   // the wall that faces the square most squarely
   let best = null;
   for (let i = 0; i < b.pts.length; i++) {
@@ -324,9 +415,9 @@ for (const b of core) {
     const to = [centre[0] - mid[0], centre[1] - mid[1]], tl = Math.hypot(...to) || 1, dot = (nx * to[0] + nz * to[1]) / tl;
     if (dot > 0.55 && (!best || dot * len > best.s) && open(mid[0] + nx * 2, mid[1] + nz * 2) && open(mid[0] + nx * 9, mid[1] + nz * 9)) best = { s: dot * len, mid, nx, nz, len };
   }
-  if (best && boards.length < 400) boards.push([dc, q(best.mid[0] + best.nx * 0.4), q(best.mid[1] + best.nz * 0.4), Math.round(Math.atan2(best.nx, best.nz) * 1000) / 1000, Math.round(Math.min(best.len * 0.8, 26)), Math.round(Math.min(b.h * 0.45, 22)), Math.round(Math.min(b.h - 4, 5 + ((boards.length * 37) % 5)))]);
+  if (best && boards.length < 400) { const bh = Math.round(Math.min(b.h * 0.45, CFG.board.h)), by = Math.round(Math.max(1.5, Math.min(b.h - bh - 0.5, CFG.board.y + ((boards.length * 37) % 5)))); boards.push([dc, q(best.mid[0] + best.nx * 0.4), q(best.mid[1] + best.nz * 0.4), Math.round(Math.atan2(best.nx, best.nz) * 1000) / 1000, Math.round(Math.min(best.len * 0.8, CFG.board.w)), bh, by]); }
 }
-boards.sort((a, b) => a[0] - b[0]); boards.splice(36); boards.forEach((x) => x.shift());
+boards.sort((a, b) => a[0] - b[0]); boards.splice(CFG.board.max); boards.forEach((x) => x.shift());
 console.log("billboards", boards.length, "hq height", hq && hq.h);
 
 // the avenue (along z) and street (along x) lines, for the race tracks
@@ -354,21 +445,29 @@ function track(key, name, corners, laps = 1, open = false) { // open: a sprint f
   const start = [Math.round((start0[0] + Math.sin(h) * 12) * 10) / 10, Math.round((start0[1] + Math.cos(h) * 12) * 10) / 10];
   return { key, name, par: Math.round(dist / 21 + corners.length * laps * 2), start, cps, m: Math.round(dist) };
 }
-// corners named by real avenue and street ("7th Avenue" x "West 42nd Street")
-const at = (ave, st) => { const a = AV.find((x) => x[2] === ave), b = ST.find((x) => x[2] === st); if (!a || !b) throw new Error(`no ${ave} / ${st}`); return [a[0], b[0]]; };
-const A6 = "6th Avenue", A7 = "7th Avenue", A8 = "8th Avenue", S = (n) => `West ${n}th Street`.replace("1th", n === 41 ? "1st" : "1th").replace("2th", n === 42 || n === 52 ? "2nd" : "2th").replace("3th", n === 43 ? "3rd" : "3th");
+// Corners where the city's long straight roads cross: N-S lines (along z) and E-W lines (along x) that run most of the
+// way across, picked by where they fall (0 = west / north edge, 1 = east / south edge).
+const long = (ls, span) => { for (const f of [0.6, 0.45, 0.3]) { const l = ls.filter((x) => x[1] > f * span); if (l.length >= 4) return l; } return ls; };
+const NS = long(AV, 2 * HALF_Z), EW = long(ST, 2 * HALF_X);
+const ns = (f) => NS[Math.round(f * (NS.length - 1))][0], ew = (f) => EW[Math.round(f * (EW.length - 1))][0];
+const P = (fx, fz) => [ns(fx), ew(fz)];
+const K = CFG.key, T = CFG.tracks;
 const TR = [
-  track("loop", "Times Square Loop", [at(A7, S(42)), at(A7, S(47)), at(A6, S(47)), at(A6, S(42))]),
-  track("zig", "Theater District Zigzag", [at(A8, S(52)), at(A8, S(48)), at(A7, S(48)), at(A7, S(44)), at(A6, S(44)), at(A6, S(40))], 1, true),
-  track("ring", "Midtown Ring", [at(A8, S(52)), at(A6, S(52)), at(A6, S(38)), at(A8, S(38))]),
-  track("gp", "RB Grand Prix (2 laps)", [at(A8, S(48)), at(A6, S(48)), at(A6, S(42)), at(A8, S(42))], 2),
+  track(K + "loop", T.loop, [P(0.35, 0.55), P(0.35, 0.8), P(0.65, 0.8), P(0.65, 0.55)]),
+  track(K + "zig", T.zig, [P(0, 0), P(0, 0.2), P(0.33, 0.2), P(0.33, 0.45), P(0.66, 0.45), P(0.66, 0.7), P(1, 0.7)], 1, true),
+  track(K + "ring", T.ring, [P(0, 0), P(1, 0), P(1, 1), P(0, 1)]),
+  track(K + "gp", T.gp, [P(0.15, 0.2), P(0.85, 0.2), P(0.85, 0.8), P(0.15, 0.8)], 2),
 ];
 for (const t of TR) console.log("track", t.key, t.m + " m", "par", t.par, "cps", t.cps.length);
 
 // ---------------------------------------------------------------- write it out
-const pick = (b) => [b.h, b.min, b.colour || "", b.core ? 1 : 0, ...b.pts.flatMap(([x, z]) => [q(x), q(z)])];
+const pick = (b) => [b.h, b.min, b.colour || "", (b.core ? 1 : 0) | ((b.kind || 0) << 1), ...b.pts.flatMap(([x, z]) => [q(x), q(z)])];
+// where the car starts: on the drivable road nearest RB Plaza, pointing along it
+const startEdge = edges.filter((e) => e.cls !== "service").map((e) => ({ e, d: segDist(centre, N[e.a], N[e.b]) })).sort((a, b) => a.d - b.d)[0].e;
+const sA = N[startEdge.a], sB = N[startEdge.b], sMid = [(sA[0] + sB[0]) / 2, (sA[1] + sB[1]) / 2];
+const START = [Math.round(sMid[0] * 10) / 10, Math.round(sMid[1] * 10) / 10, Math.round(Math.atan2(sB[0] - sA[0], sB[1] - sA[1]) * 1000) / 1000];
 const data = {
-  v: 1,
+  v: 2, name: CFG.name, short: CFG.short, plazaName: CFG.plazaName, ground: CFG.ground, start: START, plaza: [Math.round(centre[0]), Math.round(centre[1])],
   attribution: "© OpenStreetMap contributors (ODbL) · © OpenMapTiles · OpenFreeMap",
   origin: ORIGIN, kx: KX, kz: KZ, rot: Math.round(ROT * 1e6) / 1e6, half: [HALF_X, HALF_Z],
   buildings: buildings.map(pick),
@@ -381,11 +480,11 @@ const data = {
   lots, hq: hq ? buildings.indexOf(hq) : -1, boards,
 };
 const json = JSON.stringify(data);
-writeFileSync(OUT, `// RB World's city: Midtown Manhattan round Times Square, baked from OpenStreetMap by rb-tools/bake_city.mjs.
+writeFileSync(OUT, `// RB World's city: ${CFG.name}, baked from OpenStreetMap by rb-tools/bake_city.mjs${CFG.fill ? " (blocks without\n// outlines in OpenStreetMap filled with made-up buildings that fit the area)" : ""}.
 // Map data © OpenStreetMap contributors, available under the Open Database License (ODbL 1.0,
 // https://opendatacommons.org/licenses/odbl/); this file is a derived database and is likewise under the ODbL.
 // Tiles: OpenFreeMap (https://openfreemap.org), OpenMapTiles schema © OpenMapTiles (CC-BY 4.0).
-// Lengths are decimetres in a local frame (x across the avenues, z along them); see rb-tools/bake_city.mjs.
+// Lengths are decimetres in a local frame (x east-ish, z south-ish, along the street grid); see rb-tools/bake_city.mjs.
 export default ${json};
 `);
 console.log("wrote", OUT, (json.length / 1024).toFixed(0) + " KB");

@@ -14,7 +14,7 @@
 // relentlessbillionaire.com/game/ keeps working); play-time points only start once RB Badge itself is switched on.
 const WORLD_PEER_SECONDS = 20;
 const WORLD_BEAT_CREDIT = 10;
-const WORLD_VERSION = "w7";
+const WORLD_VERSION = "w8";
 const WORLD_OWNER_DAYS = 14; // a lot whose owner hasn't played for this long is for sale again
 const WORLD_CAR_COLOR = /^#[0-9a-fA-F]{6}$/;
 
