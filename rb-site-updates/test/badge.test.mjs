@@ -259,13 +259,19 @@ USERS.u_bob = { email: "bob@example.com" };
   const csp = w.headers.get("Content-Security-Policy");
   assert.ok(/connect-src 'self'[^;]*basemaps\.cartocdn\.com/.test(csp) && !/esm\.sh|instantdb|stripe/i.test(csp), "the game's hosts only: no InstantDB, no Stripe");
   assert.ok(!/instantdb|esm\.sh|js\.stripe\.com|\$9\.99/i.test(wh), "no InstantDB, Stripe or the unbacked $9.99 offer");
-  assert.ok(wh.includes('src="/app/world/main.js?v=w12"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
+  assert.ok(wh.includes('src="/app/world/main.js?v=w13"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
   assert.ok(wh.includes("OPEN THE RB APP") && wh.includes("SEE MEMBERSHIPS"));
   // the car radio and the notice come from RB Command > RB World; "Enter as Admin" opens RB World's controls there
   assert.ok(wh.includes('window.RB_WORLD_CFG = {"radio":true,"notice":""}') && wh.includes("data-rb-radio-host") && wh.includes('id="radio-vol"'));
   assert.ok(wh.includes("https://team.relentlessbillionaire.com/world") && !wh.includes("location.href = '/admin'") && !wh.includes('getElementById("btn-radio"),R=window.RBRadio'));
   const rj = await (await go("/app/world/radio.js")).text();
   assert.ok(rj.includes("export function initRadio") && rj.includes("RBRadio") && rj.includes('"KeyM"'));
+  // the phone: everything else on screen in one place (📱 or T), with a Classic layout in Settings
+  const pj = await (await go("/app/world/phone.js")).text();
+  assert.ok(pj.includes("export function initPhone") && pj.includes('"KeyT"') && pj.includes("rb-phone-ui") && pj.includes('"set-screen"'));
+  for (const app of ["jobs", "empire", "races", "goals", "chat", "radio", "leaders", "events", "settings", "help"]) assert.ok(pj.includes(`["${app}", `), "phone app " + app);
+  assert.ok(wh.includes('id="set-screen"') && wh.includes("Classic: everything on screen"));
+  const mjs = await (await go("/app/world/main.js")).text(); assert.ok(mjs.includes("from './phone.js'") && mjs.includes("initPhone(window.RBEmpire, ectx)"));
   sql("UPDATE badge_config SET value='off' WHERE key='world_radio'"); sql("UPDATE badge_config SET value='Comedy night <Friday>' WHERE key='world_notice'");
   const wh2 = await (await go("/app/world/")).text();
   assert.ok(wh2.includes('"radio":false') && wh2.includes("Comedy night"), "radio off and the notice in the page");

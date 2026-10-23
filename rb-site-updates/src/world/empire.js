@@ -782,7 +782,7 @@ function buildUi() {
   document.head.appendChild(css);
   toastBox = Object.assign(document.createElement("div"), { className: "rb-toasts" }); document.body.appendChild(toastBox);
   ui.ctx = Object.assign(document.createElement("div"), { className: "rb-ctx" }); document.body.appendChild(ui.ctx);
-  ui.clock = Object.assign(document.createElement("div"), { className: "rb-chip" }); ui.clock.style.cssText += "top:120px;left:12px"; document.body.appendChild(ui.clock);
+  ui.clock = Object.assign(document.createElement("div"), { className: "rb-chip", id: "rb-clock" }); ui.clock.style.cssText += "top:120px;left:12px"; document.body.appendChild(ui.clock);
   ui.near = Object.assign(document.createElement("div"), { className: "rb-chip" }); ui.near.style.cssText += "top:146px;left:12px;display:none;max-width:60vw"; document.body.appendChild(ui.near);
   ui.job = Object.assign(document.createElement("div"), { className: "rb-chip" }); ui.job.style.cssText += "top:172px;left:12px;display:none;border-color:var(--red)"; document.body.appendChild(ui.job);
   ui.wanted = Object.assign(document.createElement("div"), { className: "rb-wanted" }); document.body.appendChild(ui.wanted);
