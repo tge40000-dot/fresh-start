@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+// The picture: HDR, ambient occlusion, bloom, grading, clouds, weather and photo mode (fx.js).
+import { initFx } from './fx.js';
+import { WET } from './city.js';
 // RB World runs on RB's own backend (rb_world.js), with the same calls the game used on InstantDB.
 import { init, id } from './rb_world.js';
 // The city you drive, buy, build and collect in (property, businesses, jobs, drops).
@@ -22,13 +22,14 @@ const BASE_PRICE = 10000;
 // --- STATE ---
 let player = {
     id: id(), name: '', netWorth: 50000, empireValue: 0, tokens: 500,
-    pos: [-122.2563, 38.1010], // downtown Vallejo until location says otherwise pov: '3rd', health: 100, armor: 0,
+    pos: [-122.2563, 38.1010], // downtown Vallejo until location says otherwise
+    pov: '3rd', health: 100, armor: 0,
     weapons: [], equippedWeapon: null, kills: 0, deaths: 0, streak: 0,
     avatar: '🧑', subscription: null,
     settings: { nav: 'gps', pov: '3rd', audio: true, radio: true }
 };
 
-let scene, camera, renderer, controls, minimap, composer;
+let scene, camera, renderer, controls, minimap, fx;
 let gameRoom, onlinePeers = {}, markers = new Map(), playerMarkers = new Map();
 let allAds = [], chatMessages = [], investments = [];
 let isAdmin = false, chatOpen = false, combatMode = false, wantedLevel = 0;
@@ -94,20 +95,10 @@ function init3D() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.8;
     renderer.xr.enabled = true;
 
-    // --- POST-PROCESSING (BLOOM) ---
-    composer = new EffectComposer(renderer);
-    composer.addPass(new RenderPass(scene, camera));
-    const bloomPass = new UnrealBloomPass(
-        new THREE.Vector2(window.innerWidth, window.innerHeight),
-        0.35,  // strength: only real lights glow (signs, lamps, lit windows at night)
-        0.5,   // radius
-        0.9    // threshold
-    );
-    composer.addPass(bloomPass);
+    // --- THE PICTURE --- (fx.js: quality levels, AO, bloom, grading, clouds, weather, photo mode)
+    fx = initFx({ renderer, scene, camera, wet: WET });
 
     // --- LIGHTING, GROUND, CITY --- (the empire builds the real city: downtown Vallejo from OpenStreetMap, the sky,
     // the sun and its shadows; see empire.js and city.js)
@@ -127,8 +118,6 @@ function init3D() {
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        composer.setSize(window.innerWidth, window.innerHeight);
     });
 
     animate();
@@ -336,22 +325,7 @@ function createPlayerMesh() {
     playerMesh = group;
 }
 
-// Automatic quality: if the frame rate drops, render at a lower resolution, then without shadows and bloom; if there's
-// room again, step back up. Checked every two seconds.
-let qT = 0, qN = 0, lowFx = false, qRatio = Math.min(window.devicePixelRatio, 2);
-const Q_MAX = Math.min(window.devicePixelRatio, 2);
-const Q_FIXED = /[?&]hq\b/.test(location.search); // ?hq keeps full quality (screenshots)
-function quality(dt) {
-    if (Q_FIXED) return;
-    qT += dt; qN++;
-    if (qT < 2) return;
-    const fps = qN / qT; qT = 0; qN = 0;
-    if (fps < 34 && qRatio > 0.6) qRatio = Math.max(0.6, qRatio - 0.2);
-    else if (fps < 24 && !lowFx) { lowFx = true; renderer.shadowMap.enabled = false; scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); }); }
-    else if (fps > 56 && qRatio < Q_MAX) qRatio = Math.min(Q_MAX, qRatio + 0.1);
-    else return;
-    renderer.setPixelRatio(qRatio); composer.setPixelRatio(qRatio);
-}
+// Quality (Settings > Graphics, or Auto, which keeps the frame rate up) is handled by fx.js.
 
 function animate() {
     renderer.setAnimationLoop(() => {
@@ -366,9 +340,7 @@ function animate() {
         }
 
         frameHooks.forEach(f => f(delta, elapsed));
-        // Render with bloom (or straight, if the device needs the speed)
-        quality(delta);
-        if (lowFx) renderer.render(scene, camera); else composer.render();
+        fx.render(Math.min(delta, 0.1));
     });
 }
 
@@ -446,7 +418,7 @@ async function startGame() {
     window.RBEmpire = initEmpire({
         scene, camera, player, play, renderer,
         controls: () => controls, mesh: () => playerMesh, minimap: () => minimap, gps: () => gpsFix,
-        onFrame: (f) => frameHooks.push(f),
+        onFrame: (f) => frameHooks.push(f), fx,
         sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); },
         help: () => hud && hud.help(),
     });
@@ -455,6 +427,8 @@ async function startGame() {
     window.RBProgress = initProgress(window.RBEmpire, ectx);
     window.RBRace = initRace(window.RBEmpire, ectx, window.RBProgress);
     window.RBPeds = initPeds(window.RBEmpire, ectx);
+    fx.build(); window.RBFx = fx;
+    bindGraphics();
     fetchCalendarEvents();
 }
 
@@ -508,6 +482,39 @@ function bindControls() {
     document.getElementById('btn-close-redeem').onclick = () => hide('ov-redeem');
     document.getElementById('btn-verify').onclick = verifyPurchase;
     document.getElementById('btn-skip-ad').onclick = () => hide('ov-video');
+}
+
+// --- GRAPHICS, WEATHER AND PHOTO MODE ---
+function bindGraphics() {
+    const g = document.getElementById('set-gfx'), w = document.getElementById('set-weather');
+    if (g) { g.value = fx.prefs.graphics; g.onchange = () => fx.setGraphics(g.value); }
+    if (w) { w.value = fx.prefs.weather; w.onchange = () => fx.setWeather(w.value); }
+    const btn = document.getElementById('btn-photo'); if (btn) btn.onclick = () => photo(true);
+    document.getElementById('ph-exit').onclick = () => photo(false);
+    document.getElementById('ph-blur').oninput = (e) => fx.setBlur(+e.target.value);
+    document.getElementById('ph-filter').onchange = (e) => fx.setFilter(e.target.value);
+    document.getElementById('ph-save').onclick = async () => {
+        const blob = await fx.snap(); if (!blob) return;
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `rb-world-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        play('cash', 0.4);
+    };
+    window.addEventListener('keydown', (e) => {
+        if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) return;
+        if (e.code === 'KeyP') photo(!document.body.classList.contains('rb-photo'));
+        else if (e.code === 'Escape' && document.body.classList.contains('rb-photo')) photo(false);
+    });
+}
+// Photo mode: the car holds still, the HUD hides, you orbit the car with the focus on it.
+function photo(on) {
+    const E = window.RBEmpire; if (!E) return;
+    document.body.classList.toggle('rb-photo', on);
+    E.car.photo = on;
+    if (on) {
+        controls.enabled = true; controls.target.set(E.car.x, 1.2, E.car.z); controls.minDistance = 2.5; controls.maxDistance = 60;
+        document.getElementById('ph-filter').value = 'none'; document.getElementById('ph-blur').value = '0.5';
+        fx.setPhoto(true, () => camera.position.distanceTo(controls.target));
+    } else { fx.setPhoto(false); controls.minDistance = 8; controls.maxDistance = 120; }
 }
 
 // --- OVERLAYS ---

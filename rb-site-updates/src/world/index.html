@@ -105,6 +105,16 @@
         /* CONTROLS */
         #controls { position: absolute; bottom: calc(var(--safe-bottom) + 12px); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 10; }
         .ctrl-btn { width: 52px; height: 52px; border-radius: 50%; background: rgba(0,0,0,0.9); border: 1px solid rgba(201,168,76,0.3); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; font-size: 18px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 20px rgba(0,0,0,0.6), 0 0 8px rgba(201,168,76,0.1); }
+        body.rb-photo > *:not(#game-container):not(#rb-photo-bar), body.rb-photo #game-container > *:not(#three-canvas) { visibility: hidden !important; }
+        @media (max-width: 920px) and (min-width: 641px) { #controls { gap: 5px; } .ctrl-btn { width: 44px; height: 44px; font-size: 16px; } }
+        #rb-photo-bar { display: none; position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); transform: translateX(-50%); z-index: 10060; width: min(94vw, 720px); flex-wrap: wrap; gap: 10px 14px; align-items: center; justify-content: center; padding: 12px 16px; border-radius: 16px; background: rgba(8,8,10,.78); border: 1px solid rgba(201,168,76,.45); backdrop-filter: blur(14px); color: #fff; font: 600 12px/1.3 Inter, system-ui, sans-serif; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+        body.rb-photo #rb-photo-bar { display: flex; }
+        #rb-photo-bar b { color: var(--gold); letter-spacing: 1.5px; font-weight: 900; }
+        #rb-photo-bar .ph-hint { color: rgba(255,255,255,.55); font-weight: 500; }
+        #rb-photo-bar label { display: flex; gap: 8px; align-items: center; }
+        #rb-photo-bar input[type=range] { accent-color: #C9A84C; width: 120px; }
+        #rb-photo-bar select, #rb-photo-bar button { background: rgba(255,255,255,.08); color: #fff; border: 1px solid rgba(201,168,76,.4); border-radius: 10px; padding: 8px 12px; font: 800 11px Inter, system-ui, sans-serif; letter-spacing: 1px; cursor: pointer; touch-action: manipulation; }
+        #rb-photo-bar #ph-save { background: linear-gradient(135deg,#6B4F0F,#C9A84C); color: #000; border: 0; }
         .ctrl-btn:active { transform: scale(0.9); background: rgba(201,168,76,0.15); }
         .ctrl-btn.active { border-color: var(--red); box-shadow: 0 0 15px rgba(255,59,59,0.4); }
         .ctrl-btn .badge { position: absolute; top: -2px; right: -2px; background: var(--red); color: white; font-size: 8px; width: 16px; height: 16px; border-radius: 50%; display: none; align-items: center; justify-content: center; font-weight: 900; }
@@ -240,6 +250,7 @@
             <button class="ctrl-btn" id="btn-invest">📈</button>
             <button class="ctrl-btn" id="btn-pov">🎮</button>
             <button class="ctrl-btn" id="btn-vr">🥽</button>
+            <button class="ctrl-btn" id="btn-photo" title="Photo mode (P)">📷</button>
             <button class="ctrl-btn" id="btn-settings">⚙️</button>
         </div>
 
@@ -300,6 +311,12 @@
         </div>
     </div>
 
+    <!-- Photo mode -->
+    <div id="rb-photo-bar"><b>📷 PHOTO MODE</b><span class="ph-hint">Drag to orbit · scroll or pinch to zoom</span>
+        <label>Focus blur <input type="range" id="ph-blur" min="0" max="1" step="0.05" value="0.5"></label>
+        <select id="ph-filter"><option value="none">No filter</option><option value="warm">Warm</option><option value="cool">Cool</option><option value="vivid">Vivid</option><option value="noir">Noir</option></select>
+        <button id="ph-save">📸 SAVE</button><button id="ph-exit">EXIT</button></div>
+
     <!-- Settings -->
     <div class="overlay" id="ov-settings">
         <div class="overlay-panel">
@@ -309,6 +326,8 @@
             <div class="form-group"><label>Default POV</label><select class="form-input" id="set-pov"><option value="3rd">3rd Person</option><option value="1st">1st Person</option></select></div>
             <div class="form-group"><label>Audio</label><select class="form-input" id="set-audio"><option value="on">On</option><option value="off">Off</option></select></div>
             <div class="form-group"><label>Global Radio</label><select class="form-input" id="set-radio"><option value="on">On</option><option value="off">Off</option></select></div>
+            <div class="form-group"><label>Graphics</label><select class="form-input" id="set-gfx"><option value="auto">Auto (keeps it smooth)</option><option value="ultra">Ultra</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low (fastest)</option></select></div>
+            <div class="form-group"><label>Weather</label><select class="form-input" id="set-weather"><option value="auto">Live (changes on its own)</option><option value="clear">Clear</option><option value="cloudy">Cloudy</option><option value="rain">Rain</option></select></div>
             <button class="btn-ghost" id="btn-close-settings">CLOSE</button>
         </div>
     </div>

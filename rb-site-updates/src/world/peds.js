@@ -5,6 +5,7 @@
 //   interest (one wanted star). They're drawn as instanced figures (body, head, legs and arms that swing), so a crowd
 //   of a hundred costs a handful of draw calls.
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { on, walkers } from "./empire.js";
 
 let E = null, C = null, CITY = null;
@@ -129,13 +130,18 @@ let M = null;
 const o3 = new THREE.Object3D(), mat4 = new THREE.Matrix4(), part = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), xAxis = new THREE.Vector3(1, 0, 0);
 function build(scene) {
   const g = (geo, y) => { geo.translate(0, y, 0); return geo; };
-  const std = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 });
-  const torso = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.2, 0.42, 3, 8), std(0xffffff), COUNT);
-  const head = new THREE.InstancedMesh(new THREE.SphereGeometry(0.13, 10, 8), std(0xffffff), COUNT);
-  const hair = new THREE.InstancedMesh(g(new THREE.SphereGeometry(0.135, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0.02), std(0x1a1410), COUNT);
-  const legL = new THREE.InstancedMesh(g(new THREE.BoxGeometry(0.13, 0.82, 0.15), -0.41), std(0xffffff), COUNT);
+  const std = (c, r = 0.85) => new THREE.MeshStandardMaterial({ color: c, roughness: r });
+  // a torso narrower at the waist, rounded limbs, shoes, and a head with hair
+  const tg = new THREE.CapsuleGeometry(0.19, 0.44, 4, 12), tp = tg.attributes.position;
+  for (let i = 0; i < tp.count; i++) { const y = tp.getY(i), k = y > 0.05 ? 1.08 : 0.86 + (y + 0.4) * 0.3; tp.setX(i, tp.getX(i) * k * 1.12); tp.setZ(i, tp.getZ(i) * k * 0.78); }
+  tg.computeVertexNormals();
+  const torso = new THREE.InstancedMesh(tg, std(0xffffff, 0.8), COUNT);
+  const head = new THREE.InstancedMesh(new THREE.SphereGeometry(0.12, 16, 12), std(0xffffff, 0.6), COUNT);
+  const hair = new THREE.InstancedMesh(g(new THREE.SphereGeometry(0.128, 16, 8, 0, Math.PI * 2, 0, Math.PI / 1.9), 0.015), std(0x1a1410, 0.7), COUNT);
+  const legGeo = mergeGeometries([g(new THREE.CapsuleGeometry(0.068, 0.7, 3, 8), -0.42), g(new THREE.BoxGeometry(0.11, 0.07, 0.24), -0.82).translate(0, 0, 0.04)]);
+  const legL = new THREE.InstancedMesh(legGeo, std(0xffffff), COUNT);
   const legR = new THREE.InstancedMesh(legL.geometry, legL.material, COUNT);
-  const armL = new THREE.InstancedMesh(g(new THREE.BoxGeometry(0.09, 0.6, 0.1), -0.3), std(0xffffff), COUNT);
+  const armL = new THREE.InstancedMesh(g(new THREE.CapsuleGeometry(0.045, 0.5, 3, 8), -0.3), std(0xffffff, 0.7), COUNT);
   const armR = new THREE.InstancedMesh(armL.geometry, armL.material, COUNT);
   M = { torso, head, hair, legL, legR, armL, armR };
   const col = new THREE.Color();

@@ -50,7 +50,7 @@ function label(text, sub) {
 function ghost(id, name, lvl, color) {
   let g = ghosts.get(id);
   if (!g) {
-    const mesh = makeCar(color ? new THREE.Color(color).getHex() : 0xbfc4cc, false, false);
+    const mesh = makeCar(color ? new THREE.Color(color).getHex() : 0xbfc4cc, false, false, "sport");
     g = { mesh, name, level: lvl, color, x: 0, z: 0, h: 0, s: 0, at: 0, fresh: true };
     g.label = label(name, `LV ${lvl}`); mesh.add(g.label);
     ghosts.set(id, g);
@@ -76,7 +76,7 @@ function ghostsTick(dt) {
     g.x += (px - g.x) * k; g.z += (pz - g.z) * k;
     g.mesh.position.set(g.x, 0, g.z);
     let dh = g.h - g.mesh.rotation.y; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); g.mesh.rotation.y += dh * k;
-    for (const w of g.mesh.userData.wheels) w.w.rotation.x += g.s * dt / 0.48;
+    for (const w of g.mesh.userData.wheels) w.w.rotation.x += g.s * dt / (g.mesh.userData.wheelR || 0.48);
     if (now - g.at > 25000) dropGhost(id);
   }
   window.__rbGhosts = [...ghosts.values()].map((g) => ({ x: g.x, z: g.z, racer: g.racer }));

@@ -9,6 +9,8 @@
 // All of it is game money: it stays in RB World and is never RB Badge points.
 import * as THREE from "three";
 import { Sky } from "three/addons/objects/Sky.js";
+import { buildCar, headlights as carLights } from "./cars.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import * as CITY from "./city.js";
 import { LOTS, DISTRICTS, BUSINESSES, MAX_LEVEL, MAX_LOTS_PER_PLAYER, RENT_COOLDOWN_S, businessByKey, lotById, rentFor, upgradeCost } from "./empire_defs.js";
 import { api, onBeat } from "./rb_world.js";
@@ -90,7 +92,9 @@ function buildCity() {
   // lit windows for the businesses players build
   windowMat = new THREE.MeshStandardMaterial({ color: 0x1b2026, metalness: 0.6, roughness: 0.3, emissive: 0xffd9a0, emissiveIntensity: 0.3 });
   // a real sky (sun, haze, sunsets), with stars at night
-  sky = new Sky(); sky.scale.setScalar(9000); scene.add(sky);
+  sky = new Sky(); sky.scale.setScalar(9000); scene.add(sky); sky.userData.noAO = true;
+  // keep the sun's disc bright but bounded, so its glow is a halo and not a white-out
+  sky.material.onBeforeCompile = (s) => { s.fragmentShader = s.fragmentShader.replace("gl_FragColor = vec4( retColor, 1.0 );", "gl_FragColor = vec4( min( retColor, vec3( 3.2 ) ), 1.0 );"); };
   Object.assign(sky.material.uniforms, { turbidity: { value: 2.5 }, rayleigh: { value: 1 }, mieCoefficient: { value: 0.003 }, mieDirectionalG: { value: 0.8 } });
   const sp = new Float32Array(1500 * 3);
   for (let i = 0; i < 1500; i++) { const th = Math.random() * Math.PI * 2, ph = Math.random() * 1.35; sp.set([Math.cos(th) * Math.sin(ph) * 4000, Math.cos(ph) * 9000, Math.sin(th) * Math.sin(ph) * 9000], i * 3); }
@@ -160,38 +164,29 @@ function renderLot(l) {
 }
 
 // ---------------------------------------------------------------- driving
-// A low wedge with a cabin, wheels that spin and steer, head and brake lights; cops get a light bar.
-export function makeCar(color, cop, glow) {
-  const g = new THREE.Group(), paint = new THREE.MeshStandardMaterial({ color, metalness: 0.7, roughness: 0.25, emissive: glow ? color : 0x000000, emissiveIntensity: glow ? 0.05 : 0 });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.7, 4.5), paint); body.position.y = 0.7; body.castShadow = true; g.add(body);
-  const nose = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.35, 1.2), paint); nose.position.set(0, 1.05, 1.5); nose.rotation.x = 0.18; g.add(nose);
-  const cab = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.65, 2.0), new THREE.MeshStandardMaterial({ color: 0x0a0d12, metalness: 0.95, roughness: 0.05 })); cab.position.set(0, 1.35, -0.35); g.add(cab);
-  const spoiler = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.12, 0.5), paint); spoiler.position.set(0, 1.45, -2.05); g.add(spoiler);
-  const wheelGeo = new THREE.CylinderGeometry(0.48, 0.48, 0.42, 14), tyre = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.9 }), rim = new THREE.MeshStandardMaterial({ color: 0xC9A84C, metalness: 1, roughness: 0.2 });
-  const wheels = [];
-  for (const [x, z, front] of [[-1.12, 1.45, 1], [1.12, 1.45, 1], [-1.12, -1.45, 0], [1.12, -1.45, 0]]) {
-    const pivot = new THREE.Group(); pivot.position.set(x, 0.48, z);
-    const w = new THREE.Mesh(wheelGeo, tyre); w.rotation.z = Math.PI / 2; pivot.add(w);
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.44, 8), rim); hub.rotation.z = Math.PI / 2; w.add(hub);
-    g.add(pivot); wheels.push({ pivot, w, front });
-  }
-  const head = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.16, 0.08), new THREE.MeshBasicMaterial({ color: 0xFFF6D0 })); head.position.set(0, 0.85, 2.27); g.add(head);
-  const tailMat = new THREE.MeshBasicMaterial({ color: 0x550000 });
-  const tail = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.18, 0.08), tailMat); tail.position.set(0, 0.9, -2.27); g.add(tail);
-  g.userData = { wheels, tailMat, paint };
+// A modelled car (cars.js): clearcoat paint, glass, LED lights, wheels that spin and steer. Yours has underglow and
+// nitro flames; cops get a light bar.
+export function makeCar(color, cop, glow, kind) {
+  const g = buildCar(color, { kind: kind || (glow ? "sport" : "sedan"), glow }), u = g.userData;
   if (glow) {
-    const under = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 5), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, depthWrite: false })); under.rotation.x = -Math.PI / 2; under.position.y = 0.06; g.add(under);
-    const flames = [-0.55, 0.55].map((x) => { const f = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.4, 8), new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.85 })); f.rotation.x = -Math.PI / 2; f.position.set(x, 0.55, -2.9); f.visible = false; g.add(f); return f; });
-    g.userData.flames = flames;
+    const under = new THREE.Mesh(new THREE.PlaneGeometry(2.4, u.len * 0.95), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, depthWrite: false })); under.rotation.x = -Math.PI / 2; under.position.y = 0.06; under.userData.noAO = true; g.add(under);
+    const flames = [-0.4, 0.4].map((x) => { const f = new THREE.Mesh(new THREE.ConeGeometry(0.16, 1.2, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(0x66ccff).multiplyScalar(3), transparent: true, opacity: 0.85, depthWrite: false })); f.rotation.x = -Math.PI / 2; f.position.set(x, 0.46, -u.len / 2 - 0.7); f.visible = false; f.userData.noAO = true; g.add(f); return f; });
+    u.flames = flames;
   }
   if (cop) {
-    const r = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.3, 0.4), new THREE.MeshBasicMaterial({ color: 0xff2020 })); r.position.set(-0.4, 1.8, -0.35); g.add(r);
-    const bl = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.3, 0.4), new THREE.MeshBasicMaterial({ color: 0x2060ff })); bl.position.set(0.4, 1.8, -0.35); g.add(bl);
-    g.userData.siren = [r, bl];
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.1, 0.32), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 })); bar.position.set(0, u.roofY + 0.07, -0.3); g.add(bar);
+    const r = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.16, 0.3), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff2020).multiplyScalar(4) })); r.position.set(-0.33, u.roofY + 0.18, -0.3); g.add(r);
+    const bl = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.16, 0.3), new THREE.MeshBasicMaterial({ color: new THREE.Color(0x2060ff).multiplyScalar(5) })); bl.position.set(0.33, u.roofY + 0.18, -0.3); g.add(bl);
+    u.siren = [r, bl];
   }
   C.scene.add(g);
   return g;
 }
+// brake lights: bright enough to glow when braking, dim tail lights otherwise (brighter at night)
+export function brakeLight(m, on) { m.color.setRGB(on ? 4 : 0.35 + nightK * 0.9, on ? 0.12 : 0.01, on ? 0.1 : 0.01); }
+let nightK = 0, beams = null;
+// what the traffic drives
+function trafficKind() { const r = Math.random(); return r < 0.5 ? "sedan" : r < 0.75 ? "suv" : r < 0.87 ? "van" : "sport"; }
 
 const blocked = (x, z) => CITY.blocked(x, z, 1.2);
 
@@ -232,7 +227,7 @@ function cycleCam() {
 car.vx = 0; car.vz = 0; car.boost = 1; car.steer = 0;
 function driveCar(dt) {
   let { t, s, boost, hand } = driveInput();
-  if (car.lock) { t = 0; boost = false; car.vx = car.vz = 0; } // held on the grid during a race countdown
+  if (car.lock || car.photo) { t = 0; boost = false; car.vx = car.vz = 0; } // held on the grid during a race countdown, or for a photo
   const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
   let fwd = car.vx * fx + car.vz * fz, side = car.vx * fz - car.vz * fx;
   const boosting = boost && car.boost > 0.02 && t > 0;
@@ -263,8 +258,8 @@ function driveCar(dt) {
   // the car on screen
   const m = car.mesh, u = m.userData;
   m.position.set(car.x, 0, car.z); m.rotation.y = car.heading; m.rotation.z = -car.steer * Math.min(1, Math.abs(fwd) / 30) * 0.05;
-  for (const w of u.wheels) { w.w.rotation.x += fwd * dt / 0.48; if (w.front) w.pivot.rotation.y = car.steer * 0.45; }
-  u.tailMat.color.setHex(t < 0 || hand ? 0xff2020 : 0x550000);
+  for (const w of u.wheels) { w.w.rotation.x += fwd * dt / u.wheelR; if (w.front) w.pivot.rotation.y = car.steer * 0.45; }
+  brakeLight(u.tailMat, t < 0 || hand);
   if (u.flames) u.flames.forEach((f) => { f.visible = boosting; f.scale.set(1, 0.8 + Math.random() * 0.6, 1); });
   if (car.drift > 6 && Math.abs(fwd) > 10) skid(car.x - nfx * 1.6, car.z - nfz * 1.6, car.heading);
   if (C.mesh()) C.mesh().position.set(car.x, 0, car.z);
@@ -272,7 +267,8 @@ function driveCar(dt) {
   const cam = C.camera, ctl = C.controls(), mode = CAMS[camMode], speed = Math.abs(fwd);
   cam.fov += ((boosting ? 74 : 55 + Math.min(12, speed * 0.35)) - cam.fov) * Math.min(1, dt * 3); cam.updateProjectionMatrix();
   shake *= Math.pow(0.02, dt);
-  if (mode !== "free") {
+  if (C.fx) C.fx.speed = car.photo ? 0 : boosting ? 1 : Math.max(0, (speed - 22) / 22) * 0.6;
+  if (mode !== "free" && !car.photo) {
     ctl.enabled = false;
     const tall = cam.aspect < 1 ? 1.45 : 1;
     const back = mode === "far" ? 30 * tall : mode === "hood" ? -0.4 : (12 + speed * 0.12) * tall, up = mode === "far" ? 22 * tall : mode === "hood" ? 1.7 : (6 + speed * 0.04) * tall;
@@ -307,8 +303,8 @@ function spawnRoadCar(color, cop, far) {
   let n = 0;
   for (let k = 0; k < 40; k++) { n = Math.floor(Math.random() * CITY.nodes.length); const d = Math.hypot(CITY.nodes[n][0] - car.x, CITY.nodes[n][1] - car.z); if (CITY.anyLinks[n].length && d > (far ? 90 : 40) && d < 320) break; }
   const opts = CITY.links[n].length ? CITY.links[n] : CITY.anyLinks[n], l = pick(opts), e = CITY.edges[l.e];
-  const mesh = makeCar(color, cop);
-  if (color === TAXI && !cop) { const sign = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.3, 0.35), new THREE.MeshBasicMaterial({ color: 0xfff3c0, toneMapped: false })); sign.position.set(0, 1.85, -0.35); mesh.add(sign); }
+  const mesh = makeCar(color, cop, false, cop || color === TAXI ? "sedan" : trafficKind());
+  if (color === TAXI && !cop) { const sign = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.24, 0.3), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff3c0).multiplyScalar(2) })); sign.position.set(0, mesh.userData.roofY + 0.14, -0.4); mesh.add(sign); }
   return { x: CITY.nodes[n][0], z: CITY.nodes[n][1], from: n, to: l.to, e: l.e, lane: e.oneway ? (Math.random() - 0.5) * Math.max(0, e.w - 4) : e.w / 4, speed: cop ? 17 + wanted * 2.5 : 0, top: cop ? 20 : rnd(9, 14), mesh, cop, h: 0 };
 }
 function nextLink(c, chase) {
@@ -345,8 +341,8 @@ function moveRoadCar(c, dt, chase) {
   const off = chase ? 0 : c.lane, ux = ax / ad, uz = az / ad;
   c.mesh.position.set(c.x - uz * off, 0, c.z + ux * off);
   let dh = Math.atan2(ux, uz) - c.mesh.rotation.y; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); c.mesh.rotation.y += dh * Math.min(1, dt * 8);
-  const u = c.mesh.userData; for (const w of u.wheels) { w.w.rotation.x += c.speed * dt / 0.48; if (w.front) w.pivot.rotation.y = Math.max(-0.5, Math.min(0.5, dh * 2)); }
-  u.tailMat.color.setHex(c.speed < want - 1 || want === 0 ? 0xff2020 : 0x550000);
+  const u = c.mesh.userData; for (const w of u.wheels) { w.w.rotation.x += c.speed * dt / u.wheelR; if (w.front) w.pivot.rotation.y = Math.max(-0.5, Math.min(0.5, dh * 2)); }
+  brakeLight(u.tailMat, c.speed < want - 1 || want === 0);
   if (u.siren) { const on = Math.floor(performance.now() / 180) % 2; u.siren[0].visible = !!on; u.siren[1].visible = !on; }
   if (!chase && Math.hypot(c.mesh.position.x - car.x, c.mesh.position.z - car.z) < 3.2) { car.vx *= 0.4; car.vz *= 0.4; shake = Math.max(shake, 0.4); }
 }
@@ -554,18 +550,27 @@ function tycoonTick(dt) {
   const h = S.clock / 60, sunUp = Math.max(0, Math.sin(((h - 6) / 12) * Math.PI)), dir = sunDir(h); sunV = dir.y > 0.05 ? dir.clone() : new THREE.Vector3(0.3, 0.9, 0.2); const dusk = Math.max(0, 1 - Math.abs(sunUp - 0.18) * 5);
   sky.material.uniforms.sunPosition.value.copy(dir);
   sky.material.uniforms.rayleigh.value = 0.9 + dusk * 1.6; sky.material.uniforms.turbidity.value = 2.2 + dusk * 5;
-  sun.intensity = sunUp > 0 ? 0.3 + sunUp * 2.4 : 0; sun.color.setRGB(1, 0.82 + sunUp * 0.18, 0.66 + sunUp * 0.3);
-  dayLight.intensity = 0.18 + sunUp * 0.75; dayLight.color.setRGB(0.55 + sunUp * 0.3, 0.62 + sunUp * 0.28, 0.85 + sunUp * 0.1);
-  moon.intensity = sunUp > 0.05 ? 0 : 0.35;
-  const lit = Math.max(0, 1 - sunUp * 2.2);
-  for (const m of world.night) m.emissiveIntensity = lit * (m.userData.shop ? 0.32 : 0.55);
-  for (const pl of pools) pl.intensity = lit * 55;
+  // the weather (fx.js): cloud cover dims and greys the sunlight, rain thickens the haze
+  const W = C.fx ? C.fx.weather : { cloud: 0.2, rain: 0 }, cov = W.cloud, rn = W.rain;
+  sky.material.uniforms.turbidity.value += cov * 7; sky.material.uniforms.rayleigh.value *= 1 - cov * 0.45; sky.material.uniforms.mieCoefficient.value = 0.003 + cov * 0.012;
+  sun.intensity = (sunUp > 0 ? 0.4 + sunUp * 3.2 : 0) * (1 - Math.pow(cov, 1.6) * 0.78); sun.color.setRGB(1, 0.82 + sunUp * 0.18, 0.66 + sunUp * 0.3);
+  dayLight.intensity = (0.18 + sunUp * 0.55) * (1 + cov * 0.25); dayLight.color.setRGB(0.55 + sunUp * 0.3, 0.62 + sunUp * 0.28, 0.85 + sunUp * 0.1).lerp(new THREE.Color(0.62, 0.64, 0.68), cov * 0.6);
+  sun.shadow.radius = 2 + cov * 6; // softer shadows under cloud
+  moon.intensity = sunUp > 0.05 ? 0 : 0.35 * (1 - cov * 0.6);
+  const lit = Math.max(0, Math.min(1, 1 - sunUp * 4 + cov * rn * 0.25)); // lights come on as the sun goes down
+  nightK = lit;
+  for (const m of world.night) m.emissiveIntensity = lit * (m.userData.shop ? 0.95 : 0.4);
+  for (const pl of pools) pl.intensity = lit * 60;
   windowMat.emissiveIntensity = 0.2 + lit;
-  C.scene.fog.density = 0.0009 + (1 - sunUp) * 0.0007;
-  C.scene.fog.color.setRGB(0.05 + sunUp * 0.6 + dusk * 0.2, 0.06 + sunUp * 0.62 + dusk * 0.08, 0.1 + sunUp * 0.66);
-  stars.material.opacity = Math.max(0, 1 - sunUp * 4); lampMat.color.setHex(lit > 0.3 ? 0xFFD9A0 : 0x6b665c);
-  if (headlight) headlight.intensity = lit > 0.3 ? 120 : 0;
-  if (C.renderer) C.renderer.toneMappingExposure = 0.5 + sunUp * 0.22;
+  C.scene.fog.density = 0.0008 + (1 - sunUp) * 0.0006 + cov * 0.0003 + rn * 0.0019;
+  C.scene.fog.color.setRGB(0.05 + sunUp * 0.6 + dusk * 0.2, 0.06 + sunUp * 0.62 + dusk * 0.08, 0.1 + sunUp * 0.66).lerp(new THREE.Color(0.08 + sunUp * 0.42, 0.09 + sunUp * 0.44, 0.1 + sunUp * 0.47), Math.min(1, cov * 0.9 + rn * 0.3));
+  stars.material.opacity = Math.max(0, 1 - sunUp * 4) * (1 - cov); if (lit > 0.3) lampMat.color.setRGB(4, 3.1, 2); else lampMat.color.setHex(0x6b665c);
+  if (world.cones) { world.cones.visible = lit > 0.3 && !(C.fx && C.fx.tier() === "low"); world.coneMat.uniforms.uOn.value = lit * (1 + rn * 0.8); }
+  if (beams) { beams.visible = lit > 0.3; beams.material.uniforms.uOn.value = lit * (1 + rn * 0.8); }
+  carLights(0.7 + lit * 3.6);
+  if (headlight) headlight.intensity = lit > 0.3 ? 140 : 0;
+  if (C.renderer) C.renderer.toneMappingExposure = (0.42 + sunUp * 0.16 + lit * 0.3) * (1 - cov * 0.08) * (C.fx ? C.fx.exposure : 1);
+  if (C.fx) C.fx.light(dir, sunUp, new THREE.Color(1, 0.75 + sunUp * 0.25, 0.55 + sunUp * 0.45).multiplyScalar(0.25 + Math.min(1, sunUp * 3) * 0.95), new THREE.Color(0.08 + sunUp * 0.55, 0.09 + sunUp * 0.6, 0.13 + sunUp * 0.7));
   // the sky in the reflections (glass towers, car paint), refreshed as the light changes
   const step = Math.round(h * 2);
   if (pmrem && step !== envAt) { envAt = step; const skyScene = new THREE.Scene(); const sk = new Sky(); sk.scale.setScalar(1000); sk.material.uniforms.sunPosition.value.copy(dir); for (const k of ["rayleigh", "turbidity", "mieCoefficient", "mieDirectionalG"]) sk.material.uniforms[k].value = sky.material.uniforms[k].value; skyScene.add(sk); const rt = pmrem.fromScene(skyScene); if (C.scene.environment) C.scene.environment.dispose(); C.scene.environment = rt.texture; sk.material.dispose(); }
@@ -793,9 +798,13 @@ export function initEmpire(ctx) {
   buildCity();
   for (const l of LOTS) renderLot(l);
   car.mesh = makeCar(0xC9A84C, false, true);
-  car.mesh.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  car.mesh.traverse((o) => { if (o.isMesh && !o.userData.noAO) o.castShadow = true; }); // not the underglow or the flames
   // headlights for the night
   headlight = new THREE.SpotLight(0xfff1d6, 0, 90, 0.55, 0.5, 1.3); headlight.position.set(0, 1.1, 2.0); headlight.target.position.set(0, 0, 18); car.mesh.add(headlight); car.mesh.add(headlight.target);
+  // the beams themselves, seen in the night air
+  const bg = mergeGeometries([-0.62, 0.62].map((x) => { const c = new THREE.CylinderGeometry(0.1, 3.2, 17, 16, 1, true); c.rotateX(-Math.PI / 2); c.rotateY(x * 0.06); c.translate(x, 0.62, 2.4 + 8.5); return c; }));
+  beams = new THREE.Mesh(bg, CITY.lightConeMaterial(0xfff1d6, 0.06)); beams.userData.noAO = true; beams.visible = false; car.mesh.add(beams);
+  if (C.fx) C.fx.onTier.push((t) => { sun.castShadow = t.shadow > 0; if (t.shadow && sun.shadow.mapSize.x !== t.shadow) { sun.shadow.mapSize.set(t.shadow, t.shadow); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } } });
   if (C.mesh()) C.mesh().visible = false;
   for (let i = 0; i < 24; i++) traffic.push(spawnRoadCar(pick(COLOURS), false, false));
   for (let i = 0; i < 14; i++) spawnDrop();

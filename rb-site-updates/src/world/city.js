@@ -6,6 +6,7 @@
 // and crosswalks, sidewalks and lawns, the bay, parks, street lights, traffic lights, street trees, houses with pitched
 // roofs, rooftop water towers, and RB's screens round RB Plaza. Map data © OpenStreetMap contributors (ODbL).
 import * as THREE from "three";
+import { mergeGeometries, mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import D from "./city_data.js";
 
 const dm = (v) => v / 10; // the bake stores decimetres
@@ -100,34 +101,66 @@ export function bearing(heading) { const dx = Math.sin(heading), dz = Math.cos(h
 export const ROT = D.rot;
 
 // ---------------------------------------------------------------- textures, drawn once
+// Every surface gets a colour map, a normal map (the relief: window recesses, frames, brick joints, slab grooves,
+// clapboards, the grain of the asphalt) and a roughness/metalness map (glossy glass, matte stone, satin paint), drawn
+// on canvases here, so there are no image files to download.
 const rand = (() => { let s = 1234567; return () => ((s = (s * 16807) % 2147483647) / 2147483647); })();
-function canvas(w, h, draw) { const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h); return c; }
+function canvas(w, h, draw) { const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d", { willReadFrequently: true }), w, h); return c; }
 function tex(c, repeat = true) { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t; }
+function dataTex(c, repeat = true) { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.NoColorSpace; if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t; }
 function noise(g, w, h, a, base) { const img = g.getImageData(0, 0, w, h); for (let i = 0; i < img.data.length; i += 4) { const n = (rand() - 0.5) * a; img.data[i] = Math.max(0, Math.min(255, (base ? base[0] : img.data[i]) + n)); img.data[i + 1] = Math.max(0, Math.min(255, (base ? base[1] : img.data[i + 1]) + n)); img.data[i + 2] = Math.max(0, Math.min(255, (base ? base[2] : img.data[i + 2]) + n)); } g.putImageData(img, 0, 0); }
+// noise in one channel only (0 R, 1 G, 2 B): for roughness variation without touching metalness
+function noiseCh(g, w, h, a, ch) { const img = g.getImageData(0, 0, w, h); for (let i = ch; i < img.data.length; i += 4) img.data[i] = Math.max(0, Math.min(255, img.data[i] + (rand() - 0.5) * a)); g.putImageData(img, 0, 0); }
+// a normal map from a height map (grey, light = raised), wrapping round the edges so it tiles
+function normalFrom(hc, strength) {
+  const w = hc.width, h = hc.height, src = hc.getContext("2d").getImageData(0, 0, w, h).data;
+  return dataTex(canvas(w, h, (g) => {
+    const img = g.createImageData(w, h), d = img.data, H = (x, y) => src[((((y + h) % h) * w + ((x + w) % w)) * 4)] / 255;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const nx = -(H(x + 1, y) - H(x - 1, y)) * strength, ny = (H(x, y + 1) - H(x, y - 1)) * strength, L = Math.hypot(nx, ny, 1), i = (y * w + x) * 4;
+      d[i] = (nx / L * 0.5 + 0.5) * 255; d[i + 1] = (ny / L * 0.5 + 0.5) * 255; d[i + 2] = (1 / L * 0.5 + 0.5) * 255; d[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  }));
+}
+// draw the colour, height and roughness/metalness (G = roughness, B = metalness) of a surface in one go
+function surface(W, H, draw, strength = 3) {
+  const col = canvas(W, H, () => {}), hgt = canvas(W, H, (g) => { g.fillStyle = "#808080"; g.fillRect(0, 0, W, H); }), orm = canvas(W, H, (g) => { g.fillStyle = "rgb(255,220,0)"; g.fillRect(0, 0, W, H); });
+  draw(col.getContext("2d"), hgt.getContext("2d"), orm.getContext("2d"), W, H);
+  return { map: tex(col), normal: normalFrom(hgt, strength), orm: dataTex(orm) };
+}
+const RM = (r, m) => `rgb(255,${Math.round(r * 255)},${Math.round(m * 255)})`; // a roughness/metalness colour
 // One facade tile is 8 window columns (3 m) by 8 floors (3.5 m): 24 m by 28 m.
 const COLS = 8, FLOORS = 8, COL_M = 3, FLOOR_M = 3.5, TILE_W = COLS * COL_M, TILE_H = FLOORS * FLOOR_M;
 function facade(style) {
   const W = 512, H = 512, cw = W / COLS, fh = H / FLOORS;
-  const map = canvas(W, H, (g) => {
+  const s = surface(W, H, (g, hg, o) => {
     if (style === "glass") {
-      const grd = g.createLinearGradient(0, 0, W, H); grd.addColorStop(0, "#5f7d93"); grd.addColorStop(0.5, "#2e4558"); grd.addColorStop(1, "#6b8aa0");
-      g.fillStyle = grd; g.fillRect(0, 0, W, H);
-      g.fillStyle = "rgba(20,28,36,.9)"; for (let f = 0; f < FLOORS; f++) g.fillRect(0, f * fh + fh - 7, W, 7);
-      g.fillStyle = "rgba(200,215,225,.25)"; for (let c = 0; c <= COLS; c++) g.fillRect(c * cw - 1, 0, 2, H);
-      noise(g, W, H, 10);
+      const grd = g.createLinearGradient(0, 0, W, H); grd.addColorStop(0, "#6f8ea4"); grd.addColorStop(0.5, "#3a5468"); grd.addColorStop(1, "#7a98ac");
+      g.fillStyle = grd; g.fillRect(0, 0, W, H); o.fillStyle = RM(0.05, 0.8); o.fillRect(0, 0, W, H); hg.fillStyle = "#707070"; hg.fillRect(0, 0, W, H);
+      for (let f = 0; f < FLOORS; f++) { // spandrel bands between the floors
+        g.fillStyle = "rgba(20,28,36,.92)"; g.fillRect(0, f * fh + fh - 9, W, 9); o.fillStyle = RM(0.3, 0.6); o.fillRect(0, f * fh + fh - 9, W, 9); hg.fillStyle = "#a0a0a0"; hg.fillRect(0, f * fh + fh - 9, W, 9);
+      }
+      for (let c = 0; c <= COLS; c++) { g.fillStyle = "rgba(210,222,232,.5)"; g.fillRect(c * cw - 2, 0, 4, H); o.fillStyle = RM(0.35, 1); o.fillRect(c * cw - 2, 0, 4, H); hg.fillStyle = "#e0e0e0"; hg.fillRect(c * cw - 2, 0, 4, H); }
+      noise(g, W, H, 8);
     } else {
       const base = style === "brick" ? [168, 150, 140] : style === "dark" ? [70, 72, 76] : [214, 206, 192];
       g.fillStyle = `rgb(${base})`; g.fillRect(0, 0, W, H); noise(g, W, H, 26, base);
-      if (style === "brick") { g.strokeStyle = "rgba(255,255,255,.08)"; for (let y = 0; y < H; y += 6) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); } }
+      o.fillStyle = RM(style === "dark" ? 0.55 : 0.88, style === "dark" ? 0.25 : 0); o.fillRect(0, 0, W, H);
+      if (style === "brick") { // courses and joints
+        for (let y = 0; y < H; y += 6) { g.fillStyle = "rgba(255,255,255,.08)"; g.fillRect(0, y, W, 1); hg.fillStyle = "#585858"; hg.fillRect(0, y, W, 1); for (let x = (y / 6) % 2 ? 0 : 7; x < W; x += 14) hg.fillRect(x, y, 1, 6); }
+      } else if (style === "stone") { for (let y = 0; y < H; y += fh / 2) { hg.fillStyle = "#606060"; hg.fillRect(0, y, W, 2); } }
       for (let f = 0; f < FLOORS; f++) for (let c = 0; c < COLS; c++) {
         const x = c * cw + cw * 0.18, y = f * fh + fh * 0.18, w = cw * 0.64, h = fh * 0.6;
         g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(x - 3, y - 3, w + 6, h + 8); // the frame's shadow
-        const grd = g.createLinearGradient(x, y, x + w, y + h); grd.addColorStop(0, "#3c4c5a"); grd.addColorStop(1, "#141b22");
-        g.fillStyle = grd; g.fillRect(x, y, w, h);
-        g.fillStyle = style === "dark" ? "#555" : "rgba(240,235,225,.8)"; g.fillRect(x - 2, y + h, w + 4, 3); // the sill
-        g.fillStyle = "rgba(0,0,0,.4)"; g.fillRect(x + w / 2 - 1, y, 2, h);
+        hg.fillStyle = "#c0c0c0"; hg.fillRect(x - 4, y - 4, w + 8, h + 8); hg.fillStyle = "#303030"; hg.fillRect(x, y, w, h); // the frame stands out, the glass is set back
+        const grd = g.createLinearGradient(x, y, x + w, y + h); grd.addColorStop(0, "#4a5d6c"); grd.addColorStop(1, "#151c23");
+        g.fillStyle = grd; g.fillRect(x, y, w, h); o.fillStyle = RM(0.04, 0.6); o.fillRect(x, y, w, h);
+        g.fillStyle = style === "dark" ? "#555" : "rgba(240,235,225,.85)"; g.fillRect(x - 2, y + h, w + 4, 3); hg.fillStyle = "#f0f0f0"; hg.fillRect(x - 3, y + h, w + 6, 4); // the sill
+        g.fillStyle = "rgba(0,0,0,.4)"; g.fillRect(x + w / 2 - 1, y, 2, h); hg.fillStyle = "#909090"; hg.fillRect(x + w / 2 - 1, y, 2, h); o.fillStyle = RM(0.5, 0.2); o.fillRect(x + w / 2 - 1, y, 2, h);
       }
       if (style !== "dark") { g.fillStyle = "rgba(0,0,0,.08)"; for (let f = 0; f < FLOORS; f++) g.fillRect(0, f * fh, W, 3); }
+      noiseCh(o, W, H, 30, 1);
     }
   });
   // which windows have the lights on at night
@@ -139,70 +172,128 @@ function facade(style) {
       if (style === "glass") g.fillRect(c * cw + 2, f * fh + 2, cw - 4, fh - 10); else g.fillRect(c * cw + cw * 0.18, f * fh + fh * 0.18, cw * 0.64, fh * 0.6);
     }
   });
-  return { map: tex(map), glow: tex(glow) };
+  return { ...s, glow: tex(glow) };
 }
 // A wooden house: clapboard siding, windows with white trim, painted in the house's colour (the vertex colour).
 function siding() {
   const W = 512, H = 512, cw = W / COLS, fh = H / FLOORS;
-  const map = canvas(W, H, (g) => {
-    g.fillStyle = "#e8e4dc"; g.fillRect(0, 0, W, H);
-    for (let y = 0; y < H; y += 8) { g.fillStyle = "rgba(0,0,0,.10)"; g.fillRect(0, y + 6, W, 2); g.fillStyle = "rgba(255,255,255,.12)"; g.fillRect(0, y, W, 1); }
+  const s = surface(W, H, (g, hg, o) => {
+    g.fillStyle = "#e8e4dc"; g.fillRect(0, 0, W, H); o.fillStyle = RM(0.7, 0); o.fillRect(0, 0, W, H);
+    for (let y = 0; y < H; y += 8) { g.fillStyle = "rgba(0,0,0,.10)"; g.fillRect(0, y + 6, W, 2); g.fillStyle = "rgba(255,255,255,.12)"; g.fillRect(0, y, W, 1); const gr = hg.createLinearGradient(0, y, 0, y + 8); gr.addColorStop(0, "#606060"); gr.addColorStop(1, "#b0b0b0"); hg.fillStyle = gr; hg.fillRect(0, y, W, 8); }
     noise(g, W, H, 10);
     for (let f = 0; f < FLOORS; f++) for (let c = 0; c < COLS; c++) {
       if ((c + f) % 2) continue; // houses have fewer windows than offices
       const x = c * cw + cw * 0.2, y = f * fh + fh * 0.2, w = cw * 0.6, h = fh * 0.55;
-      g.fillStyle = "#fbfaf6"; g.fillRect(x - 5, y - 5, w + 10, h + 10);
-      const grd = g.createLinearGradient(x, y, x + w, y + h); grd.addColorStop(0, "#41505c"); grd.addColorStop(1, "#151b20"); g.fillStyle = grd; g.fillRect(x, y, w, h);
-      g.fillStyle = "#fbfaf6"; g.fillRect(x + w / 2 - 2, y, 4, h); g.fillRect(x, y + h / 2 - 2, w, 4);
+      g.fillStyle = "#fbfaf6"; g.fillRect(x - 5, y - 5, w + 10, h + 10); hg.fillStyle = "#d0d0d0"; hg.fillRect(x - 5, y - 5, w + 10, h + 10); o.fillStyle = RM(0.45, 0); o.fillRect(x - 5, y - 5, w + 10, h + 10);
+      const grd = g.createLinearGradient(x, y, x + w, y + h); grd.addColorStop(0, "#4a5a66"); grd.addColorStop(1, "#151b20"); g.fillStyle = grd; g.fillRect(x, y, w, h);
+      hg.fillStyle = "#404040"; hg.fillRect(x, y, w, h); o.fillStyle = RM(0.04, 0.55); o.fillRect(x, y, w, h);
+      g.fillStyle = "#fbfaf6"; g.fillRect(x + w / 2 - 2, y, 4, h); g.fillRect(x, y + h / 2 - 2, w, 4); hg.fillStyle = "#c0c0c0"; hg.fillRect(x + w / 2 - 2, y, 4, h); hg.fillRect(x, y + h / 2 - 2, w, 4);
     }
-  });
+  }, 2.5);
   const glow = canvas(W, H, (g) => { g.fillStyle = "#000"; g.fillRect(0, 0, W, H); for (let f = 0; f < FLOORS; f++) for (let c = 0; c < COLS; c++) { if ((c + f) % 2 || rand() > 0.45) continue; g.fillStyle = `hsl(${36 + rand() * 10},80%,${55 + rand() * 15}%)`; g.fillRect(c * cw + cw * 0.2, f * fh + fh * 0.2, cw * 0.6, fh * 0.55); } });
-  return { map: tex(map), glow: tex(glow) };
+  return { ...s, glow: tex(glow) };
 }
 // Corrugated metal for warehouses, with a band of high windows.
 function metal() {
   const W = 512, H = 512, fh = H / FLOORS;
-  const map = canvas(W, H, (g) => {
-    g.fillStyle = "#c9ccd0"; g.fillRect(0, 0, W, H);
-    for (let x = 0; x < W; x += 6) { g.fillStyle = "rgba(0,0,0,.12)"; g.fillRect(x, 0, 2, H); g.fillStyle = "rgba(255,255,255,.15)"; g.fillRect(x + 3, 0, 1, H); }
-    noise(g, W, H, 12);
-    for (let f = 0; f < FLOORS; f += 2) { g.fillStyle = "rgba(30,40,50,.85)"; g.fillRect(0, f * fh + fh * 0.15, W, fh * 0.25); }
-  });
+  const s = surface(W, H, (g, hg, o) => {
+    g.fillStyle = "#c9ccd0"; g.fillRect(0, 0, W, H); o.fillStyle = RM(0.45, 0.65); o.fillRect(0, 0, W, H);
+    for (let x = 0; x < W; x += 6) { g.fillStyle = "rgba(0,0,0,.12)"; g.fillRect(x, 0, 2, H); g.fillStyle = "rgba(255,255,255,.15)"; g.fillRect(x + 3, 0, 1, H); const gr = hg.createLinearGradient(x, 0, x + 6, 0); gr.addColorStop(0, "#505050"); gr.addColorStop(0.5, "#c0c0c0"); gr.addColorStop(1, "#505050"); hg.fillStyle = gr; hg.fillRect(x, 0, 6, H); }
+    noise(g, W, H, 12); noiseCh(o, W, H, 40, 1);
+    for (let f = 0; f < FLOORS; f += 2) { g.fillStyle = "rgba(30,40,50,.85)"; g.fillRect(0, f * fh + fh * 0.15, W, fh * 0.25); o.fillStyle = RM(0.06, 0.5); o.fillRect(0, f * fh + fh * 0.15, W, fh * 0.25); hg.fillStyle = "#606060"; hg.fillRect(0, f * fh + fh * 0.15, W, fh * 0.25); }
+  }, 2);
   const glow = canvas(W, H, (g) => { g.fillStyle = "#000"; g.fillRect(0, 0, W, H); for (let f = 0; f < FLOORS; f += 2) if (rand() < 0.5) { g.fillStyle = "#cfe0ff"; g.fillRect(0, f * fh + fh * 0.15, W, fh * 0.25); } });
-  return { map: tex(map), glow: tex(glow) };
+  return { ...s, glow: tex(glow) };
 }
 function shopfront() { // the ground floor: shop windows, doors and a sign band, 6 m wide by 4.5 m
   const W = 256, H = 192;
-  const map = canvas(W, H, (g) => {
-    g.fillStyle = "#2a2622"; g.fillRect(0, 0, W, H);
+  const s = surface(W, H, (g, hg, o) => {
+    g.fillStyle = "#2a2622"; g.fillRect(0, 0, W, H); o.fillStyle = RM(0.6, 0.2); o.fillRect(0, 0, W, H);
     const awn = ["#7a1f1f", "#1f3d7a", "#1f5a3a", "#5a4a1f", "#333"][Math.floor(rand() * 5)];
-    g.fillStyle = "#111"; g.fillRect(0, 0, W, 40); // sign band
-    g.fillStyle = awn; g.fillRect(6, 40, W - 12, 18);
-    const grd = g.createLinearGradient(0, 60, 0, H); grd.addColorStop(0, "#41505c"); grd.addColorStop(1, "#1b2228");
-    g.fillStyle = grd; g.fillRect(12, 62, W - 24, H - 74);
-    g.fillStyle = "#0c0c0c"; g.fillRect(W / 2 - 22, 62, 44, H - 66); // the door
-    g.fillStyle = "#777"; g.fillRect(0, H - 10, W, 10);
-  });
+    g.fillStyle = "#111"; g.fillRect(0, 0, W, 40); hg.fillStyle = "#b0b0b0"; hg.fillRect(0, 0, W, 40); // sign band
+    g.fillStyle = awn; g.fillRect(6, 40, W - 12, 18); hg.fillStyle = "#e0e0e0"; hg.fillRect(6, 40, W - 12, 18); o.fillStyle = RM(0.95, 0); o.fillRect(6, 40, W - 12, 18);
+    const grd = g.createLinearGradient(0, 60, 0, H); grd.addColorStop(0, "#4a5a68"); grd.addColorStop(1, "#1b2228");
+    g.fillStyle = grd; g.fillRect(12, 62, W - 24, H - 74); hg.fillStyle = "#404040"; hg.fillRect(12, 62, W - 24, H - 74); o.fillStyle = RM(0.03, 0.4); o.fillRect(12, 62, W - 24, H - 74);
+    g.fillStyle = "#0c0c0c"; g.fillRect(W / 2 - 22, 62, 44, H - 66); hg.fillStyle = "#303030"; hg.fillRect(W / 2 - 22, 62, 44, H - 66); // the door
+    g.fillStyle = "#777"; g.fillRect(0, H - 10, W, 10); hg.fillStyle = "#c0c0c0"; hg.fillRect(0, H - 10, W, 10); o.fillStyle = RM(0.85, 0); o.fillRect(0, H - 10, W, 10);
+  }, 2.5);
   const glow = canvas(W, H, (g) => {
     g.fillStyle = "#000"; g.fillRect(0, 0, W, H);
     g.fillStyle = "#ffe3a8"; g.fillRect(12, 62, W / 2 - 34, H - 74); g.fillRect(W / 2 + 22, 62, W / 2 - 34, H - 74);
-    g.fillStyle = `hsl(${rand() * 360},80%,60%)`; g.fillRect(30, 12, W - 60, 16); // a lit sign
+    g.fillStyle = `hsl(${rand() * 360},90%,62%)`; g.fillRect(30, 12, W - 60, 16); // a lit sign
   });
-  return { map: tex(map), glow: tex(glow) };
+  return { ...s, glow: tex(glow) };
 }
 function ground(kind) {
-  return tex(canvas(512, 512, (g, W, H) => {
-    if (kind === "asphalt") { g.fillStyle = "#2b2c2e"; g.fillRect(0, 0, W, H); noise(g, W, H, 22); g.fillStyle = "rgba(0,0,0,.25)"; for (let i = 0; i < 18; i++) { g.beginPath(); g.ellipse(rand() * W, rand() * H, 10 + rand() * 40, 4 + rand() * 12, rand() * 3, 0, 7); g.fill(); } }
-    else if (kind === "sidewalk") { g.fillStyle = "#8d8a84"; g.fillRect(0, 0, W, H); noise(g, W, H, 18); g.strokeStyle = "rgba(0,0,0,.25)"; g.lineWidth = 2; for (let i = 0; i <= W; i += 64) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, H); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(W, i); g.stroke(); } }
-    else if (kind === "grass") { g.fillStyle = "#3d5a2a"; g.fillRect(0, 0, W, H); noise(g, W, H, 34); }
-    else if (kind === "plaza") { g.fillStyle = "#7d6a62"; g.fillRect(0, 0, W, H); noise(g, W, H, 16); g.strokeStyle = "rgba(255,255,255,.08)"; for (let i = 0; i <= W; i += 32) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, H); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(W, i); g.stroke(); } }
-    else if (kind === "roof") { g.fillStyle = "#59595a"; g.fillRect(0, 0, W, H); noise(g, W, H, 30); }
-    else if (kind === "shingle") { g.fillStyle = "#4a4440"; g.fillRect(0, 0, W, H); for (let y = 0; y < H; y += 16) for (let x = (y / 16) % 2 ? 0 : 12; x < W; x += 24) { g.fillStyle = `rgb(${60 + rand() * 30},${54 + rand() * 24},${50 + rand() * 20})`; g.fillRect(x, y, 22, 14); } }
-    else if (kind === "lawn") { g.fillStyle = "#556b34"; g.fillRect(0, 0, W, H); noise(g, W, H, 30); g.fillStyle = "rgba(120,100,60,.12)"; for (let i = 0; i < 30; i++) { g.beginPath(); g.ellipse(rand() * W, rand() * H, 20 + rand() * 60, 10 + rand() * 30, rand() * 3, 0, 7); g.fill(); } }
-    else if (kind === "water") { const grd = g.createLinearGradient(0, 0, W, H); grd.addColorStop(0, "#1d3a4f"); grd.addColorStop(1, "#264a5e"); g.fillStyle = grd; g.fillRect(0, 0, W, H); g.strokeStyle = "rgba(255,255,255,.07)"; for (let i = 0; i < 60; i++) { const x = rand() * W, y = rand() * H; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 15, y - 4, x + 30, y); g.stroke(); } }
+  return surface(512, 512, (g, hg, o, W, H) => {
+    if (kind === "asphalt") {
+      g.fillStyle = "#2b2c2e"; g.fillRect(0, 0, W, H); noise(g, W, H, 22); noise(hg, W, H, 70); o.fillStyle = RM(0.86, 0); o.fillRect(0, 0, W, H); noiseCh(o, W, H, 50, 1);
+      g.fillStyle = "rgba(0,0,0,.25)"; for (let i = 0; i < 18; i++) { g.beginPath(); g.ellipse(rand() * W, rand() * H, 10 + rand() * 40, 4 + rand() * 12, rand() * 3, 0, 7); g.fill(); }
+      hg.strokeStyle = "#303030"; hg.lineWidth = 2; g.strokeStyle = "rgba(0,0,0,.45)"; g.lineWidth = 1.5; // cracks
+      for (let i = 0; i < 6; i++) { let x = rand() * W, y = rand() * H; hg.beginPath(); g.beginPath(); hg.moveTo(x, y); g.moveTo(x, y); for (let k = 0; k < 8; k++) { x += (rand() - 0.5) * 40; y += (rand() - 0.5) * 40; hg.lineTo(x, y); g.lineTo(x, y); } hg.stroke(); g.stroke(); }
+    } else if (kind === "sidewalk") {
+      g.fillStyle = "#8d8a84"; g.fillRect(0, 0, W, H); noise(g, W, H, 18); noise(hg, W, H, 30); o.fillStyle = RM(0.9, 0); o.fillRect(0, 0, W, H); noiseCh(o, W, H, 30, 1);
+      g.strokeStyle = "rgba(0,0,0,.25)"; g.lineWidth = 2; hg.fillStyle = "#202020";
+      for (let i = 0; i <= W; i += 64) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, H); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(W, i); g.stroke(); hg.fillRect(i - 2, 0, 4, H); hg.fillRect(0, i - 2, W, 4); }
+    } else if (kind === "grass") { g.fillStyle = "#3d5a2a"; g.fillRect(0, 0, W, H); noise(g, W, H, 34); noise(hg, W, H, 90); o.fillStyle = RM(0.97, 0); o.fillRect(0, 0, W, H); }
+    else if (kind === "plaza") {
+      g.fillStyle = "#7d6a62"; g.fillRect(0, 0, W, H); noise(g, W, H, 16); o.fillStyle = RM(0.7, 0); o.fillRect(0, 0, W, H); noiseCh(o, W, H, 40, 1);
+      g.strokeStyle = "rgba(255,255,255,.08)"; hg.fillStyle = "#303030"; for (let i = 0; i <= W; i += 32) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, H); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(W, i); g.stroke(); hg.fillRect(i - 1, 0, 2, H); hg.fillRect(0, i - 1, W, 2); }
+    } else if (kind === "roof") { g.fillStyle = "#59595a"; g.fillRect(0, 0, W, H); noise(g, W, H, 30); noise(hg, W, H, 80); o.fillStyle = RM(0.95, 0); o.fillRect(0, 0, W, H); }
+    else if (kind === "shingle") {
+      g.fillStyle = "#4a4440"; g.fillRect(0, 0, W, H); o.fillStyle = RM(0.85, 0); o.fillRect(0, 0, W, H);
+      for (let y = 0; y < H; y += 16) for (let x = (y / 16) % 2 ? 0 : 12; x < W; x += 24) { g.fillStyle = `rgb(${60 + rand() * 30},${54 + rand() * 24},${50 + rand() * 20})`; g.fillRect(x, y, 22, 14); const gr = hg.createLinearGradient(0, y, 0, y + 16); gr.addColorStop(0, "#c0c0c0"); gr.addColorStop(1, "#404040"); hg.fillStyle = gr; hg.fillRect(x, y, 22, 16); }
+    } else if (kind === "lawn") {
+      g.fillStyle = "#556b34"; g.fillRect(0, 0, W, H); noise(g, W, H, 30); noise(hg, W, H, 100); o.fillStyle = RM(0.96, 0); o.fillRect(0, 0, W, H);
+      g.fillStyle = "rgba(120,100,60,.12)"; for (let i = 0; i < 30; i++) { g.beginPath(); g.ellipse(rand() * W, rand() * H, 20 + rand() * 60, 10 + rand() * 30, rand() * 3, 0, 7); g.fill(); }
+    } else if (kind === "leaves") {
+      g.fillStyle = "#5d7f3e"; g.fillRect(0, 0, W, H); o.fillStyle = RM(0.75, 0); o.fillRect(0, 0, W, H);
+      for (let i = 0; i < 2600; i++) { const x = rand() * W, y = rand() * H, r = 3 + rand() * 7, l = 30 + rand() * 45; g.fillStyle = `hsl(${85 + rand() * 30},${35 + rand() * 25}%,${l}%)`; g.beginPath(); g.ellipse(x, y, r, r * 0.55, rand() * 3, 0, 7); g.fill(); hg.fillStyle = `rgb(${l * 3},${l * 3},${l * 3})`; hg.beginPath(); hg.ellipse(x, y, r, r * 0.55, rand() * 3, 0, 7); hg.fill(); }
+    } else if (kind === "water") {
+      g.fillStyle = "#1b3646"; g.fillRect(0, 0, W, H);
+      hg.fillStyle = "#808080"; hg.fillRect(0, 0, W, H); // waves: soft blobs that wrap round the edges, so it tiles
+      for (let i = 0; i < 220; i++) { const x = rand() * W, y = rand() * H, r = 8 + rand() * 40, up = rand() < 0.5; for (const ox of [-W, 0, W]) for (const oy of [-H, 0, H]) { const gr = hg.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r); gr.addColorStop(0, up ? "rgba(255,255,255,.25)" : "rgba(0,0,0,.25)"); gr.addColorStop(1, "rgba(128,128,128,0)"); hg.fillStyle = gr; hg.fillRect(x + ox - r, y + oy - r, r * 2, r * 2); } }
+    }
+  }, kind === "water" ? 6 : kind === "asphalt" ? 1.6 : kind === "leaves" ? 2.5 : 2.2);
+}
+// where puddles form when it rains (a soft mask, tiling)
+function puddles() {
+  return dataTex(canvas(256, 256, (g, W, H) => {
+    g.fillStyle = "#000"; g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 26; i++) { const x = rand() * W, y = rand() * H, r = 6 + rand() * 30; for (const ox of [-W, 0, W]) for (const oy of [-H, 0, H]) { const gr = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.6, "rgba(255,255,255,.7)"); gr.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = gr; g.beginPath(); g.ellipse(x + ox, y + oy, r, r * (0.4 + rand() * 0.5), rand() * 3, 0, 7); g.fill(); } }
   }));
 }
-
+// Shared values the shaders read: how wet the streets are (fx.js sets it from the weather), and the time (for wind).
+export const WET = { value: 0 }, TIME = { value: 0 };
+// Wet streets: darker, glossy, and flat mirror-like puddles where the mask says so. Needs a material with a map.
+function wettable(mat, pud, scale = 0.37) {
+  mat.onBeforeCompile = (s) => {
+    s.uniforms.uWet = WET; s.uniforms.tPuddle = { value: pud };
+    s.fragmentShader = s.fragmentShader
+      .replace("#include <common>", "#include <common>\nuniform float uWet; uniform sampler2D tPuddle; float rbPud;")
+      .replace("#include <roughnessmap_fragment>", `#include <roughnessmap_fragment>
+        rbPud = smoothstep(0.25, 0.75, texture2D(tPuddle, vMapUv * ${scale.toFixed(3)}).r) * smoothstep(0.35, 0.9, uWet);
+        roughnessFactor = mix(roughnessFactor, 0.22, uWet * 0.85); roughnessFactor = mix(roughnessFactor, 0.02, rbPud);
+        diffuseColor.rgb *= mix(1.0, 0.55, uWet) * mix(1.0, 0.6, rbPud);`)
+      .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n normal = normalize(mix(normal, nonPerturbedNormal, rbPud));");
+  };
+  mat.customProgramCacheKey = () => "rbwet" + scale;
+  return mat;
+}
+// A soft cone of light (street lamps at night, headlight beams): additive, brightest at the lamp, fading out.
+export function lightConeMaterial(color, strength) {
+  return new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+    uniforms: { uOn: { value: 0 }, uCol: { value: new THREE.Color(color) }, uK: { value: strength } },
+    vertexShader: `varying float vY; varying vec3 vN, vV;
+      void main() {
+        vec4 w = modelMatrix * ${"#ifdef USE_INSTANCING\n instanceMatrix *\n#endif\n"} vec4(position, 1.0);
+        vY = uv.y; vN = normalize(mat3(modelMatrix) * ${"#ifdef USE_INSTANCING\n mat3(instanceMatrix) *\n#endif\n"} normal); vV = normalize(cameraPosition - w.xyz);
+        gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform float uOn, uK; uniform vec3 uCol; varying float vY; varying vec3 vN, vV;
+      void main() { float edge = pow(abs(dot(normalize(vN), normalize(vV))), 1.5); gl_FragColor = vec4(uCol * uOn * uK * edge * vY * vY, 1.0); }`,
+  });
+}
 // ---------------------------------------------------------------- geometry helpers (one merged mesh per material)
 class Batch {
   constructor() { this.p = []; this.n = []; this.uv = []; this.c = []; this.i = []; }
@@ -280,13 +371,14 @@ export function buildCity(scene, opts = {}) {
   const mats = {}, batches = {}, CH = 220;
   const batch = (key, b) => { const k = b ? `${key}@${Math.floor(b.c[0] / CH)},${Math.floor(b.c[1] / CH)}` : key; return (batches[k] ||= Object.assign(new Batch(), { key })); };
   for (const [k, f] of Object.entries(fac)) {
-    mats[k] = new THREE.MeshStandardMaterial({ map: f.map, emissive: 0xffffff, emissiveMap: f.glow, emissiveIntensity: 0, vertexColors: true, roughness: k === "glass" ? 0.12 : k === "metal" ? 0.5 : 0.85, metalness: k === "glass" ? 0.55 : k === "metal" ? 0.4 : 0.05, envMapIntensity: k === "glass" ? 1.4 : 0.4 });
+    mats[k] = new THREE.MeshStandardMaterial({ map: f.map, normalMap: f.normal, roughnessMap: f.orm, metalnessMap: f.orm, roughness: 1, metalness: 1, emissive: 0xffffff, emissiveMap: f.glow, emissiveIntensity: 0, vertexColors: true, envMapIntensity: k === "glass" ? 1.3 : 1 });
     out.night.push(mats[k]);
   }
-  shops.forEach((s, i) => { mats["shop" + i] = new THREE.MeshStandardMaterial({ map: s.map, emissive: 0xffffff, emissiveMap: s.glow, emissiveIntensity: 0, vertexColors: true, roughness: 0.5, metalness: 0.2 }); mats["shop" + i].userData.shop = true; out.night.push(mats["shop" + i]); });
-  mats.far = new THREE.MeshStandardMaterial({ map: fac.dark.map, emissive: 0xffffff, emissiveMap: fac.glass.glow, emissiveIntensity: 0, vertexColors: true, roughness: 0.6, metalness: 0.3 }); out.night.push(mats.far);
-  mats.roof = new THREE.MeshStandardMaterial({ map: ground("roof"), vertexColors: true, roughness: 0.95 });
-  mats.shingle = new THREE.MeshStandardMaterial({ map: ground("shingle"), vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
+  shops.forEach((s, i) => { mats["shop" + i] = new THREE.MeshStandardMaterial({ map: s.map, normalMap: s.normal, roughnessMap: s.orm, metalnessMap: s.orm, roughness: 1, metalness: 1, emissive: 0xffffff, emissiveMap: s.glow, emissiveIntensity: 0, vertexColors: true }); mats["shop" + i].userData.shop = true; out.night.push(mats["shop" + i]); });
+  mats.far = new THREE.MeshStandardMaterial({ map: fac.dark.map, roughnessMap: fac.dark.orm, metalnessMap: fac.dark.orm, roughness: 1, metalness: 1, emissive: 0xffffff, emissiveMap: fac.glass.glow, emissiveIntensity: 0, vertexColors: true }); out.night.push(mats.far);
+  const roofT = ground("roof"), shingleT = ground("shingle");
+  mats.roof = new THREE.MeshStandardMaterial({ map: roofT.map, normalMap: roofT.normal, roughness: 0.95, vertexColors: true });
+  mats.shingle = new THREE.MeshStandardMaterial({ map: shingleT.map, normalMap: shingleT.normal, roughnessMap: shingleT.orm, roughness: 1, vertexColors: true, side: THREE.DoubleSide });
   // walls and roofs
   const SHOP_H = 4.5;
   buildings.forEach((b, bi) => {
@@ -318,12 +410,16 @@ export function buildCity(scene, opts = {}) {
   for (const bt of Object.values(batches)) if (bt.p.length) scene.add(bt.mesh(mats[bt.key], bt.key !== "far"));
 
   // the ground: sidewalk everywhere, then parks, plazas and the roads on top
-  const lawn = D.ground === "grass", side = ground(lawn ? "lawn" : "sidewalk"); side.repeat.set(4800 / (lawn ? 24 : 12), 4800 / (lawn ? 24 : 12)); // sidewalk slabs of 1.5 m
-  const g0 = new THREE.Mesh(new THREE.PlaneGeometry(4800, 4800), new THREE.MeshStandardMaterial({ map: side, roughness: 0.95 }));
+  const pud = puddles();
+  const lawn = D.ground === "grass", side = ground(lawn ? "lawn" : "sidewalk"); for (const t of [side.map, side.normal, side.orm]) t.repeat.set(4800 / (lawn ? 24 : 12), 4800 / (lawn ? 24 : 12)); // sidewalk slabs of 1.5 m
+  const g0m = new THREE.MeshStandardMaterial({ map: side.map, normalMap: side.normal, roughnessMap: side.orm, roughness: 1 }); if (!lawn) wettable(g0m, pud, 0.5);
+  const g0 = new THREE.Mesh(new THREE.PlaneGeometry(4800, 4800), g0m);
   g0.rotation.x = -Math.PI / 2; g0.receiveShadow = true; scene.add(g0);
-  const area = (list, y, kind, scale, col) => { const bt = new Batch(); for (const a of list) { const pts = []; for (let i = 0; i < a.length; i += 2) pts.push([dm(a[i]), dm(a[i + 1])]); flat(bt, pts, y, scale, col); } if (bt.p.length) { const m = bt.mesh(layer(new THREE.MeshStandardMaterial({ map: ground(kind), vertexColors: true, roughness: 0.95 }), 1), false); scene.add(m); } };
+  const area = (list, y, kind, scale, col) => { const bt = new Batch(); for (const a of list) { const pts = []; for (let i = 0; i < a.length; i += 2) pts.push([dm(a[i]), dm(a[i + 1])]); flat(bt, pts, y, scale, col); } if (bt.p.length) { const t = ground(kind), mt = new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normal, roughnessMap: t.orm, roughness: 1, vertexColors: true }); if (kind === "plaza") wettable(mt, pud); const m = bt.mesh(layer(mt, 1), false); scene.add(m); } };
   area(D.green, 0.012, "grass", 8, [1, 1, 1]); area(D.plazas, 0.014, "plaza", 6, [1, 1, 1]);
-  if (D.water.length) { const bt = new Batch(); for (const a of D.water) { const pts = []; for (let i = 0; i < a.length; i += 2) pts.push([dm(a[i]), dm(a[i + 1])]); flat(bt, pts, 0.016, 30, [1, 1, 1]); } const wm = layer(new THREE.MeshStandardMaterial({ map: ground("water"), vertexColors: true, roughness: 0.18, metalness: 0.35, envMapIntensity: 1.2 }), 1); out.water = wm; scene.add(bt.mesh(wm, false)); }
+  if (D.water.length) { const bt = new Batch(); for (const a of D.water) { const pts = []; for (let i = 0; i < a.length; i += 2) pts.push([dm(a[i]), dm(a[i + 1])]); flat(bt, pts, 0.016, 30, [1, 1, 1]); } const wt = ground("water"), n2 = wt.normal.clone(); n2.repeat.set(0.6, 0.6); // two layers of waves, drifting different ways
+    const wm = layer(new THREE.MeshPhysicalMaterial({ color: 0x9fb4c0, map: wt.map, normalMap: wt.normal, normalScale: new THREE.Vector2(0.55, 0.55), clearcoat: 1, clearcoatRoughness: 0.04, clearcoatNormalMap: n2, clearcoatNormalScale: new THREE.Vector2(0.35, 0.35), roughness: 0.12, metalness: 0, ior: 1.33, envMapIntensity: 1.25, vertexColors: true }), 1);
+    out.water = wm; out.waterTick = (dt) => { wt.normal.offset.x += dt * 0.004; wt.normal.offset.y += dt * 0.0025; n2.offset.x -= dt * 0.0018; n2.offset.y += dt * 0.003; }; scene.add(bt.mesh(wm, false)); }
   // roads: a strip per segment, a patch at each junction, world-space texture so the overlaps don't show
   const road = new Batch(), mark = new Batch(), yellow = new Batch();
   const W1 = [1, 1, 1];
@@ -343,8 +439,8 @@ export function buildCity(scene, opts = {}) {
   for (const e of edges) if (e.cls !== "service" && e.cls !== "motorway") strip(walk, nodes[e.a], nodes[e.b], e.w + 6.4, 0.017, 12);
   for (let i = 0; i < D.vroads.length; i += 5) strip(walk, [dm(D.vroads[i]), dm(D.vroads[i + 1])], [dm(D.vroads[i + 2]), dm(D.vroads[i + 3])], 15, 0.017, 12);
   nodes.forEach((n, i) => { const r = junction[i] / 2 + 3.2; if (!junction[i]) return; const pts = []; for (let k = 0; k < 16; k++) pts.push([n[0] + Math.cos((k / 16) * Math.PI * 2) * r, n[1] + Math.sin((k / 16) * Math.PI * 2) * r]); flat(walk, pts, 0.0175, 12, W1); });
-  if (lawn) { const st = ground("sidewalk"); scene.add(walk.mesh(layer(new THREE.MeshStandardMaterial({ map: st, roughness: 0.92 }), 1), false)); }
-  const asphalt = ground("asphalt"); scene.add(road.mesh(layer(new THREE.MeshStandardMaterial({ map: asphalt, roughness: 0.9, metalness: 0.05 }), 2), false));
+  if (lawn) { const st = ground("sidewalk"); scene.add(walk.mesh(layer(wettable(new THREE.MeshStandardMaterial({ map: st.map, normalMap: st.normal, roughnessMap: st.orm, roughness: 1 }), pud, 0.5), 1), false)); }
+  const asphalt = ground("asphalt"); scene.add(road.mesh(layer(wettable(new THREE.MeshStandardMaterial({ map: asphalt.map, normalMap: asphalt.normal, normalScale: new THREE.Vector2(0.8, 0.8), roughnessMap: asphalt.orm, roughness: 1, metalness: 0 }), pud), 2), false));
   // lane lines (white dashes on one-way avenues, a double yellow down two-way roads), stop lines and crosswalks
   for (const e of edges) {
     if (e.cls === "service") continue;
@@ -393,12 +489,36 @@ export function buildCity(scene, opts = {}) {
   const P = new THREE.InstancedMesh(poleGeo, poleMat, lamps.length), Ar = new THREE.InstancedMesh(armGeo, poleMat, lamps.length), Hd = new THREE.InstancedMesh(headGeo, out.lampMat, lamps.length);
   lamps.forEach(([x, z, r], i) => { q4.setFromAxisAngle(up, r); m4.compose(v3.set(x, 0, z), q4, s3); P.setMatrixAt(i, m4); Ar.setMatrixAt(i, m4); Hd.setMatrixAt(i, m4); });
   P.castShadow = true; scene.add(P, Ar, Hd);
+  // at night each lamp throws a soft cone of light down to the pavement
+  const coneGeo = new THREE.CylinderGeometry(0.22, 3.6, 7.6, 18, 1, true); coneGeo.translate(0, 7.9 - 3.8, 1.6);
+  out.coneMat = lightConeMaterial(0xffc98a, 0.9);
+  const Cn = new THREE.InstancedMesh(coneGeo, out.coneMat, lamps.length); Cn.instanceMatrix = Hd.instanceMatrix; Cn.userData.noAO = true; Cn.frustumCulled = false; Cn.visible = false; scene.add(Cn); out.cones = Cn;
   const trunk = new THREE.CylinderGeometry(0.14, 0.2, 3, 6); trunk.translate(0, 1.5, 0);
-  const crown = new THREE.IcosahedronGeometry(2.1, 1); crown.translate(0, 4.4, 0);
+  // a crown of leaves: a few lumpy clumps merged into one shape, with a leaf texture, swaying in the wind
+  const lumps = [[0, 4.5, 0, 1.9], [0.9, 4.1, 0.4, 1.35], [-0.8, 4.2, -0.5, 1.4], [0.2, 5.4, -0.2, 1.3], [-0.3, 3.7, 0.8, 1.2]].map(([x, y, z, r]) => {
+    const gg = new THREE.IcosahedronGeometry(r, 2), pa = gg.attributes.position;
+    for (let i = 0; i < pa.count; i++) { const k = 0.82 + 0.3 * Math.abs(Math.sin(pa.getX(i) * 3.1 + pa.getY(i) * 2.3) * Math.cos(pa.getZ(i) * 2.7)); pa.setXYZ(i, pa.getX(i) * k, pa.getY(i) * k * 0.9, pa.getZ(i) * k); }
+    gg.translate(x, y, z); gg.deleteAttribute("normal"); return gg;
+  });
+  const crown = mergeVertices(mergeGeometries(lumps)); crown.computeVertexNormals();
+  const leaf = ground("leaves");
+  const leafMat = new THREE.MeshStandardMaterial({ map: leaf.map, normalMap: leaf.normal, roughnessMap: leaf.orm, roughness: 1, color: 0xffffff });
+  leafMat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = TIME;
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uTime;").replace("#include <begin_vertex>", `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+        vec2 ip = vec2(instanceMatrix[3][0], instanceMatrix[3][2]);
+      #else
+        vec2 ip = vec2(0.0);
+      #endif
+      float sway = max(0.0, position.y - 2.6);
+      transformed.x += sin(uTime * 1.7 + ip.x * 0.31 + ip.y * 0.17) * 0.07 * sway;
+      transformed.z += cos(uTime * 1.3 + ip.y * 0.29) * 0.05 * sway;`);
+  };
   const T = new THREE.InstancedMesh(trunk, new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 1 }), trees.length);
-  const Cr = new THREE.InstancedMesh(crown, new THREE.MeshStandardMaterial({ color: 0x3f6b33, roughness: 0.9, flatShading: true }), trees.length);
+  const Cr = new THREE.InstancedMesh(crown, leafMat, trees.length);
   const col = new THREE.Color();
-  trees.forEach(([x, z, s], i) => { q4.setFromAxisAngle(up, rand() * 6); m4.compose(v3.set(x, 0, z), q4, new THREE.Vector3(s, s, s)); T.setMatrixAt(i, m4); Cr.setMatrixAt(i, m4); Cr.setColorAt(i, col.setHSL(0.25 + rand() * 0.06, 0.45, 0.25 + rand() * 0.1)); });
+  trees.forEach(([x, z, s], i) => { q4.setFromAxisAngle(up, rand() * 6); m4.compose(v3.set(x, 0, z), q4, new THREE.Vector3(s, s, s)); T.setMatrixAt(i, m4); Cr.setMatrixAt(i, m4); Cr.setColorAt(i, col.setHSL(0.2 + rand() * 0.08, 0.35 + rand() * 0.2, 0.55 + rand() * 0.2)); });
   T.castShadow = Cr.castShadow = true; scene.add(T, Cr);
   // traffic lights: avenues (running along z) and streets take turns
   const signals = [];
@@ -412,6 +532,7 @@ export function buildCity(scene, opts = {}) {
   const sLamp = new THREE.SphereGeometry(0.15, 8, 6); sLamp.translate(0, 4.5, 0.22);
   const SP = new THREE.InstancedMesh(sPole, poleMat, signals.length), SB = new THREE.InstancedMesh(sBox, new THREE.MeshStandardMaterial({ color: 0x1d2a1d, roughness: 0.6 }), signals.length);
   out.signalMats = [new THREE.MeshBasicMaterial({ color: 0x00ff66 }), new THREE.MeshBasicMaterial({ color: 0xff2222 })];
+  const lampCol = (m, hex) => m.color.setHex(hex).multiplyScalar(3.2); // bright enough to glow
   const groups = [[], []];
   signals.forEach((s) => groups[s[3]].push(s));
   const heads = groups.map((gs, gi) => { const im = new THREE.InstancedMesh(sLamp, out.signalMats[gi], gs.length); gs.forEach(([x, z, r], i) => { q4.setFromAxisAngle(up, r); m4.compose(v3.set(x, 0, z), q4, s3); im.setMatrixAt(i, m4); }); scene.add(im); return im; });
@@ -419,7 +540,8 @@ export function buildCity(scene, opts = {}) {
   scene.add(SP, SB);
   // the cycle: 14 s green for the avenues, 3 s all red, 10 s green for the streets, 3 s all red
   out.signal = (t) => { const c = t % 30; return c < 14 ? 0 : c < 17 ? -1 : c < 27 ? 1 : -1; };
-  out.tick = (t) => { const ph = out.signal(t); out.signalMats[0].color.setHex(ph === 0 ? 0x00ff66 : 0xff2222); out.signalMats[1].color.setHex(ph === 1 ? 0x00ff66 : 0xff2222); for (const b of out.boards) b.tick(t); };
+  let last = 0;
+  out.tick = (t) => { const ph = out.signal(t); lampCol(out.signalMats[0], ph === 0 ? 0x00ff66 : 0xff2222); lampCol(out.signalMats[1], ph === 1 ? 0x00ff66 : 0xff2222); for (const b of out.boards) b.tick(t); TIME.value = t; if (out.waterTick) out.waterTick(Math.min(0.1, t - last)); last = t; };
   // rooftop water towers and AC units, the New York skyline's furniture
   const towers = [], acs = [];
   buildings.forEach((b) => { if (!b.core || b.h < 14 || b.h > 70) return; const a = (b.box[2] - b.box[0]) * (b.box[3] - b.box[1]); if (a < 150) return; const r = rand(); if (r < 0.22) towers.push(b); else if (r < 0.6) acs.push(b); });
@@ -465,7 +587,7 @@ export function timesSquare(scene, out) {
     return tex(c, false);
   });
   D.boards.forEach(([x, z, ang, w, h, y], i) => {
-    const mat = new THREE.MeshBasicMaterial({ map: textures[i % textures.length], toneMapped: false });
+    const mat = new THREE.MeshBasicMaterial({ map: textures[i % textures.length], color: new THREE.Color(1.6, 1.6, 1.6) }); // LED screens are bright
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
     m.position.set(dm(x), y + h / 2, dm(z)); m.rotation.y = ang; scene.add(m);
     const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, h + 0.6, 0.3), new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6 }));
@@ -476,11 +598,11 @@ export function timesSquare(scene, out) {
   // RB HQ: One Times Square, with a gold crown and the big RB screen
   if (D.hq >= 0) {
     const b = buildings[D.hq];
-    const crown = new THREE.Mesh(new THREE.BoxGeometry(b.box[2] - b.box[0] + 1, 2, b.box[3] - b.box[1] + 1), new THREE.MeshBasicMaterial({ color: 0xC9A84C, toneMapped: false }));
+    const crown = new THREE.Mesh(new THREE.BoxGeometry(b.box[2] - b.box[0] + 1, 2, b.box[3] - b.box[1] + 1), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xC9A84C).multiplyScalar(2.2) }));
     crown.position.set((b.box[0] + b.box[2]) / 2, b.h + 1, (b.box[1] + b.box[3]) / 2); scene.add(crown);
     // a lit RB sign on the roof, seen from down the street
     const sc = canvas(512, 160, (g, W, H) => { g.fillStyle = "#000"; g.fillRect(0, 0, W, H); g.strokeStyle = "#C9A84C"; g.lineWidth = 8; g.strokeRect(6, 6, W - 12, H - 12); g.fillStyle = "#F5E6A3"; g.font = "900 96px Inter, Arial, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("RB HQ", W / 2, H / 2 + 4); });
-    const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(sc, false), toneMapped: false })); sign.scale.set(16, 5, 1); sign.position.set(crown.position.x, b.h + 6.5, crown.position.z); scene.add(sign);
+    const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(sc, false), color: new THREE.Color(2, 2, 2) })); sign.scale.set(16, 5, 1); sign.position.set(crown.position.x, b.h + 6.5, crown.position.z); scene.add(sign);
     out.hq = { x: crown.position.x, z: crown.position.z, h: b.h };
   }
 }
