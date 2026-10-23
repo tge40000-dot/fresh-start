@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<base href="{{BASE}}">
+<title>RB Studio · Record, make beats and mix in your browser</title>
+<meta name="description" content="RB Studio: record vocals over RB beats, build drums and melodies, mix and export, free in your browser.">
+<meta name="theme-color" content="#0E0810">
+<link rel="canonical" href="{{CANONICAL}}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Relentless Billionaire">
+<meta property="og:title" content="RB Studio · Record, make beats and mix in your browser">
+<meta property="og:description" content="RB Studio: record vocals over RB beats, build drums and melodies, mix and export, free in your browser.">
+<meta property="og:url" content="{{CANONICAL}}">
+<meta property="og:image" content="https://relentlessbillionaire.com/api/content/site-image?site=studio&amp;slot=share&amp;fallback=https%3A%2F%2Fmedia.relentlessbillionaire.com%2Fbeats%2Fcovers%2F1-84dfd1e8.jpg">
+<meta property="og:image:width" content="1600">
+<meta property="og:image:height" content="1600">
+<meta property="og:image:alt" content="Midnight Gold, an RB beat">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="https://relentlessbillionaire.com/api/content/site-image?site=studio&amp;slot=icon&amp;v=4"><link rel="apple-touch-icon" href="https://relentlessbillionaire.com/api/content/site-image?site=studio&amp;slot=apple&amp;v=4"><link rel="stylesheet" href="https://relentlessbillionaire.com/api/content/site-images.css?site=studio">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,wght@0,500;0,600;1,500&family=JetBrains+Mono:wght@500&family=Manrope:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="daw/assets/daw.css?v={{BUILD}}">{{THEME_LINK}}
+<script type="module" src="daw/assets/main.js?v={{BUILD}}"></script>
+</head>
+<body><nav class="rbtabs" hidden aria-label="Relentless Billionaire sites"><a href="https://relentlessbillionaire.com/">Home</a><a href="https://relentlessbillionaire.com/events">Events</a><a href="https://relentlessbillionaire.com/store">Shop</a><a href="https://beatstore.relentlessbillionaire.com/">Beats</a><a href="https://relentlessbillionaire.com/studio/">Mix &amp; Master</a><a href="https://studio.relentlessbillionaire.com/" aria-current="page">Record</a><a href="https://relentlessbillionaire.com/create">Create</a><a href="https://relentlessbillionaire.com/tv">RB TV</a><a href="https://relentlessbillionaire.com/radio">Radio</a><a href="https://relentlessbillionaire.com/release">Release</a><a href="https://relentlessbillionaire.com/game/">Game</a><a href="https://relentlessbillionaire.com/jobs">Jobs</a><a href="https://relentlessbillionaire.com/memberships">Memberships</a><a href="https://relentlessbillionaire.com/fund">Fund</a></nav>
+<a class="skip" href="#scroller">Skip to the timeline</a>
+<header class="top">
+  <a class="brand" href="https://relentlessbillionaire.com/home" title="Relentless Billionaire"><span class="mark">RB</span><span class="word">STUDIO</span></a>
+  <label class="sr" for="song-name">Song name</label><input id="song-name" class="song" maxlength="80" autocomplete="off">
+  <span id="save-state" class="save-state" role="status"></span>
+  <span class="grow"></span>
+  <nav class="site" aria-label="Relentless Billionaire"><a href="https://beatstore.relentlessbillionaire.com/">Beats</a><a href="https://relentlessbillionaire.com/tv">RB TV</a><a href="https://relentlessbillionaire.com/studio/">Mastering</a><a href="https://relentlessbillionaire.com/memberships">Memberships</a></nav>
+  <button id="btn-cloud" class="btn" type="button">Save to cloud</button>
+  <button id="btn-export" class="btn gold" type="button">Export WAV</button>
+</header>
+<section class="transport" aria-label="Transport">
+  <div class="grp">
+    <button id="t-home" class="ib" type="button" title="Back to start (Home)" aria-label="Back to start">⏮</button>
+    <button id="t-play" class="ib play" type="button" title="Play / pause (Space)" aria-label="Play">▶</button>
+    <button id="t-stop" class="ib" type="button" title="Stop" aria-label="Stop">■</button>
+    <button id="t-rec" class="ib rec" type="button" title="Record (R)" aria-label="Record">●</button>
+  </div>
+  <div class="grp">
+    <button id="t-loop" class="tg" type="button" aria-pressed="false" title="Loop (L)">Loop</button>
+    <button id="t-metro" class="tg" type="button" aria-pressed="false" title="Metronome (M)">Click</button>
+    <button id="t-count" class="tg" type="button" aria-pressed="true" title="One-bar count-in before recording">Count-in</button>
+  </div>
+  <div class="grp lcd" aria-live="off"><span id="pos-bar">1.1</span><span id="pos-time">0:00.000</span></div>
+  <div class="grp"><label for="bpm">BPM</label><input id="bpm" type="number" min="40" max="240" step="1" inputmode="numeric"><button id="bpm-tap" class="tg" type="button" title="Tap along with the beat to set the tempo (T)">Tap</button></div>
+  <div class="grp"><label for="grid">Snap</label><select id="grid"><option value="4">Bar</option><option value="1">Beat</option><option value="0.5">1/8</option><option value="0.25" selected>1/16</option><option value="0">Off</option></select></div>
+  <div class="grp input"><label for="input-dev">Input</label><select id="input-dev"><option value="">Default microphone</option></select><span class="meter" aria-hidden="true"><i id="in-meter"></i></span></div>
+  <div class="grp"><button id="t-undo" class="ib" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button><button id="t-redo" class="ib" type="button" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button></div>
+  <div class="grp"><button id="z-out" class="ib" type="button" aria-label="Zoom out" title="Zoom out (-)">−</button><button id="z-in" class="ib" type="button" aria-label="Zoom in" title="Zoom in (+)">+</button></div>
+  <div class="grp master"><span class="meter big" aria-hidden="true"><i id="master-meter"></i></span></div>
+</section>
+<main id="scroller" class="scroller" tabindex="-1" aria-label="Timeline">
+  <div id="grid-root" class="gridroot"></div>
+</main>
+<section class="panel" aria-label="Editor and tools">
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="editor" aria-selected="true">Editor</button>
+    <button role="tab" data-tab="mixer" aria-selected="false">Mixer</button>
+    <button role="tab" data-tab="beats" aria-selected="false">RB Beats</button>
+    <button role="tab" data-tab="projects" aria-selected="false">Projects</button>
+    <button role="tab" data-tab="help" aria-selected="false">Shortcuts</button>
+  </nav>
+  <div id="panel-body" class="panel-body" role="tabpanel"></div>
+</section>
+<footer id="status" class="status" role="status" aria-live="polite">Loading the studio…</footer>
+<noscript><p class="noscript">RB Studio needs JavaScript turned on.</p></noscript>
+</body>
+</html>

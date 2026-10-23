@@ -1,0 +1,11 @@
+{
+  "script": "relentless-billionaire-gateway",
+  "entry": "index.js",
+  "version": "a095ede1-c1e7-483f-b557-f8d373937f4d",
+  "parts": [
+    {
+      "name": "index.js",
+      "type": "application/javascript+module"
+    }
+  ]
+}

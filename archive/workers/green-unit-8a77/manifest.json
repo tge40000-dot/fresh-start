@@ -1,0 +1,11 @@
+{
+  "script": "green-unit-8a77",
+  "entry": "index.js",
+  "version": "e63fd29e-6461-4f99-8eff-88d4129d5be5",
+  "parts": [
+    {
+      "name": "index.js",
+      "type": "application/javascript+module"
+    }
+  ]
+}

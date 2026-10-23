@@ -1,0 +1,33 @@
+{
+ "script": "rb-operations-admin",
+ "compatibility_date": "2024-07-17",
+ "compatibility_flags": [],
+ "bindings": [
+  {
+   "type": "plain_text",
+   "name": "ADMIN_EMAIL",
+   "value": "(not saved)"
+  },
+  {
+   "type": "plain_text",
+   "name": "CF_ACCESS_AUD",
+   "value": "(not saved)"
+  },
+  {
+   "type": "plain_text",
+   "name": "CF_ACCESS_TEAM_DOMAIN",
+   "value": "(not saved)"
+  },
+  {
+   "type": "d1",
+   "name": "DB",
+   "id": "820b8c2f-55b8-40ea-8ab8-2dfc74659fdb",
+   "database_id": "820b8c2f-55b8-40ea-8ab8-2dfc74659fdb"
+  },
+  {
+   "type": "kv_namespace",
+   "name": "PUBLIC_CONTENT_KV",
+   "namespace_id": "5cbf867caefd4a7094249ef2cb88a76d"
+  }
+ ]
+}

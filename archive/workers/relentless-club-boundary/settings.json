@@ -1,0 +1,27 @@
+{
+ "script": "relentless-club-boundary",
+ "compatibility_date": "2026-08-20",
+ "compatibility_flags": [],
+ "bindings": [
+  {
+   "type": "ai",
+   "name": "AI"
+  },
+  {
+   "type": "d1",
+   "name": "CLUB_DB",
+   "id": "8859ca4c-5d05-4a33-90f1-5d7d291c4d49",
+   "database_id": "8859ca4c-5d05-4a33-90f1-5d7d291c4d49"
+  },
+  {
+   "type": "r2_bucket",
+   "name": "CLUB_MEDIA",
+   "bucket_name": "rbb-assets"
+  },
+  {
+   "type": "kv_namespace",
+   "name": "CLUB_PUBLIC",
+   "namespace_id": "609ca92df09e46a0a19935e5f058aaf3"
+  }
+ ]
+}

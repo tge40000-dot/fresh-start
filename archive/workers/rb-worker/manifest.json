@@ -1,0 +1,11 @@
+{
+  "script": "rb-worker",
+  "entry": "worker-api-v2-fixed.js",
+  "version": "69360ab9-f5a5-4ccd-9499-7034456e93e0",
+  "parts": [
+    {
+      "name": "worker-api-v2-fixed.js",
+      "type": "application/javascript+module"
+    }
+  ]
+}

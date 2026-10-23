@@ -1,0 +1,11 @@
+{
+  "script": "dry-pond-c4b6",
+  "entry": "worker.js",
+  "version": "fc431005-6692-46bd-86c9-02dee5c838cb",
+  "parts": [
+    {
+      "name": "worker.js",
+      "type": "application/javascript+module"
+    }
+  ]
+}

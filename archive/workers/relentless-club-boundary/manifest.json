@@ -1,0 +1,11 @@
+{
+  "script": "relentless-club-boundary",
+  "entry": "index.js",
+  "version": "9adf9a1d-3db9-4157-bc15-baea091f3754",
+  "parts": [
+    {
+      "name": "index.js",
+      "type": "application/javascript+module"
+    }
+  ]
+}

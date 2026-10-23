@@ -1,0 +1,246 @@
+# RB Command: more site colours and Affiliate ads
+
+## More site colours
+
+RB Command's **Site colours** screen goes from 13 themes to 26. The original 13 were mostly warm golds, pinks and reds. The new 13 add blues, teals, cool greys and brights:
+
+Sapphire, Ocean, Teal, Mint, Indigo, Arctic, Steel & Silver, Neon Lime, Sunset, Coral, Fuchsia, Ruby, Royal Purple.
+
+Every theme goes through the same readability check the screen already used (`tones()` in `theme.js`). Body text, muted text, both accents and dark button text all reach at least 4.5:1 on the panels. `test/palettes.mjs` checks all 26 palettes and builds every site's stylesheet with each one.
+
+The colour list is copied into four Workers. A site ignores a theme its own copy doesn't know, so all four get the new palettes:
+
+| Worker | What it does with the list |
+| --- | --- |
+| `rb-command` | The picker. Also the homepage theme (`blocks.js`) and artist theme (`tables.js`, `ui.js`) lists. |
+| `rb-public-content` | Serves `/api/content/theme.css`, the stylesheet most sites load. |
+| `artist-router` | The homepage and artist pages (`THEMES` and its `theme.js`). |
+| `rb-radio` | RB Radio's own copy. |
+
+The new themes are also available as homepage and artist-page themes.
+
+`rb-operations-admin` has an old copy of the key list, but no route reaches it, so it's left alone.
+
+## Affiliate ads
+
+A new **Affiliate ads** screen in RB Command (in the nav for anyone who can edit Ads):
+
+1. **Paste the affiliate link** and press *Read the page*.
+   - RB Command opens the link, follows redirects, and reads the page's title, description, site name and picture (Open Graph and Twitter tags, then the `<title>`).
+   - If the page can't be read, the fields stay empty with a note, and you fill them in.
+2. **The words.** Advertiser, headline, a line of text and the button text come pre-filled from the page, and you can edit them. Use only what the product page says: no invented prices, results or promises.
+3. **The picture**, one of three:
+   - **The page's picture.** It's copied into RB media (`admin/ads/…`) so the ad doesn't depend on the merchant's server.
+   - **Upload my own.** This uses the existing upload, up to 15 MB.
+   - **Make a card for me.** A 1080×1080 SVG card in the homepage's current colours, with brand, headline, text line, button and domain. It previews live as you type.
+4. **Where it shows.**
+   - Placement: discovery rails, homepage spotlight, or rails and the live ticker.
+   - Shows on: everywhere, main site only, RB Radio only, or RB TV only.
+   - *Publish ad* makes it live straight away. *Save it paused* doesn't.
+
+**What publishing does:**
+- Adds a normal row to the `ads` table: format image, weight 1, daily cap 3 per visitor, and the `surface` you chose.
+- It appears in the ad rotation on every page that shows ads, marked **Sponsored**.
+- Views and clicks are counted like any other ad.
+- Clicks go through `/go/ad/<id>` to the affiliate link **exactly as pasted**, so the network's tracking is kept. The redirect only adds `utm_*` tags that aren't already in the link.
+- It's logged as a normal "added" change, so the toast's **Undo** removes it. Edit, pause or delete it any time under **Ads**.
+
+The **Ads** editor also gets a **Shows on** field, so the surface can be changed on any ad.
+
+**Limits:**
+- RB Radio and RB TV pages don't show ads yet. An ad set to them waits until those pages get an ad rail.
+- Pages that block automated readers come back empty. Type the words and use your own picture or a card.
+
+## Show planner
+
+A new **Show planner** screen in RB Command, in the nav for anyone with Events access. It plans RB shows from the **Talent** section and puts all the work for each show on a calendar.
+
+**What it suggests.** Each suggestion has:
+- **A lineup.** A headliner and two supports from the same genre family (hip-hop/R&B, house/electronic or other). Artists are ranked by the scout's score, plus extra weight for:
+  - being in the Bay Area (or, less, in California)
+  - having come to RB directly
+  - being signed, shortlisted or already in touch
+  - having an email
+- **Who's left out.** Passed artists, and anyone already on an open plan or on a plan from the last 30 days.
+- **A venue.** A live venue from Events > Venues, taking turns so the least-used one goes first.
+- **A date.** The first Friday or Saturday 3 to 13 weeks out that:
+  - doesn't clash with a live RB event or show
+  - is at least 6 days from another planned show.
+- **The reasons** for each artist, and a fit score.
+
+The planner keeps **three suggestions waiting** on its own. It checks when anyone opens the Overview or the planner, at most once a day. **Suggest a show** adds one now, with an optional date and venue.
+
+**What each plan includes:**
+- **Booking emails** for the venue (date hold, terms, capacity, curfew, sound), each artist (slot, set length, set time, what they need on stage), and a local promoter from Talent if there is one.
+  - Each email is edited in place. *Open in my email* starts it in your email app; *Copy* copies it.
+  - Fees are left as `[fee or door split]` for you to fill in.
+- **The full scope:**
+  - The night itself: run of show (load-in 6 PM, doors 8 PM, sets 9:00 / 9:45 / 10:30, done at midnight), roles and production needs.
+  - The money: ticket details and budget lines. Both stay blank until you fill them in, and the budget adds up its total.
+  - Risks and backups.
+- **A to-do list**: 12 dated tasks from the venue hold (6 weeks out) to settling up (the day after).
+- **A content calendar** with a caption for each post: announcement, lineup flyer, a spotlight for each artist, ticket push, countdown, show day and recap.
+
+**The calendar.**
+- A month view of planned shows (suggestions dashed), RB's live events and shows, and every dated email, task and post. On a phone it's a day-by-day list.
+- *Download for Google or Apple Calendar* gives an `.ics` file: shows at their Pacific times, work as all-day entries, suggestions left out.
+- The Overview's **Coming up** includes planned shows. **Needs you** shows what's due and how many suggestions are waiting.
+
+**Working a plan:**
+- **Plan it** or **Drop** a suggestion.
+- **Mark sent** on an artist's email also marks them *contacted* in Talent. This only happens for people who can edit Talent, and only if the artist was *new* or *shortlisted*.
+- **Move the date**: open emails, tasks and posts move with the show.
+- **Swap** an act who can't make it. The next best free artist takes the slot and gets a booking email, and their name replaces the old one in every email and post not yet sent.
+- **Confirm** the show, then **Add to Events as a draft**. It goes to `/events` as a **draft** with the lineup and set times. A person adds the flyer and ticket link and sets it live.
+
+**What it never does:**
+- Send an email.
+- Publish an event.
+- Invent prices, fees, capacities or claims.
+
+**Status: deployed 16 Oct 2026.** `rb-command` is now `2c5c5b92`; roll back to `f816a3f8`. The deploy script pulled the live code, applied every patch and passed every test before uploading. Afterwards:
+- the sign-in page loads
+- signed-out requests to the planner and its `.ics` are refused (401)
+- the main site and `/events` return 200.
+
+**Storage.** On first use, RB Command creates two new tables in `waitlist-db`: `show_plans` and `show_plan_items`. It does this with `CREATE TABLE IF NOT EXISTS`, so no existing table changes. Every change is written to the activity log.
+
+## Crash alerts, outside files, nav and the daily run (16 Oct 2026)
+
+- **Crash alerts.** The Overview's *Needs you* lists any Worker that crashed in the last 24 hours. A crash is an exception or a hit limit; visitors leaving early don't count. A Worker is flagged at 5 or more crashes, or at 2 or more when that's at least 1% of its requests. The data comes from Cloudflare Workers analytics, with the same token as Analytics.
+- **Daily run.** A cron trigger fires at 14:52 UTC every day. It tops up the Show planner, and writes any crashing Worker to Activity (`worker.crashes`), so there's a record after the 24-hour window moves on.
+- **Move outside files.** The Overview item about files.manuscdn.com opens this new screen.
+  - It copies each file into RB media (`admin/rehosted/…`) and points every row that used it at the copy: tracks, homepage slides, shop products, and links inside site settings.
+  - It works a few files at a time. Each changed row is a normal logged edit, so Activity's Undo puts the old link back.
+  - Files that fail are listed with the reason, and are retried up to 3 times.
+- **Post links.** Each post in a plan shows its counted link (see `../rb-site-updates`), a *Copy link* button and its click count. Clicks are stored in `show_plan_items.clicks`, a column added on first use.
+- **Nav.** The nav now has a top part and two sections:
+  - Top: Overview, Analytics and Inbox.
+  - *Shows & sites* and *Growth*: the tools.
+  - Table groups fold away. A group opens by itself when it holds the current page or has something waiting, and remembers if you left it open.
+- **Patch scripts fixed.** Every patch inserted its block before the same marker line, so a later patch's block could split an earlier one off its marker. The next run then didn't recognise the earlier block and added it again. As a result, live `rb-command` carried two copies of the Affiliate ads and Show planner screens, their styles and the affiliate routes. Each script now:
+  - recognises its own block wherever it sits;
+  - removes extra copies;
+  - is checked by `test/no-duplicates.mjs` on every deploy.
+
+  A build from the original `72afeff1` and a patched live copy came out identical, apart from the order of three route lines.
+
+| Worker | Now live | Previous (roll back to) |
+| --- | --- | --- |
+| `rb-command` | `e7396dfa` | `6d80463f` |
+| `artist-router` | `f62b9a7e` | `cbd9da43` |
+| `rb-radio` | `7ff6e5ae` | `5904e5fc` |
+| `rb-tv` | `6a7f3234` | `d42c5be0` |
+| `rb-email` | `41329d2a` | `1c367bc9` |
+| Pages `relentless-billionaire` | `7a5e056e` (redirect) | `c43f9ecc` |
+
+All of these were deployed by `../deploy-all.sh --deploy` after every test passed on freshly pulled code. RB Radio was checked first: no live show. Checked live afterwards:
+- The main site, `/home`, `/radio`, `/tv`, `/events`, studio and shop all return 200.
+- `/api/ads/slot.js` and `.css` serve.
+- RB Radio and RB TV each show 2 real ads in a browser, with no errors and no sideways scrolling on a phone.
+- `/go/post/<unknown>` redirects to `/events`.
+- `pages.dev` returns a 301 to the same path on the main site.
+- Signed-out requests to the new RB Command endpoints are refused.
+
+The daily cron is a trigger on the Worker. To remove it, go to Workers → rb-command → Settings → Triggers.
+
+## Analytics
+
+A new **Analytics** screen in RB Command, in the nav for every team member, the same people who see the Overview. It shows Cloudflare's numbers for every RB site. Cloudflare already collects them: Web Analytics is on for the RB sites, and Workers analytics covers every Worker.
+
+**What it shows**, for the last 24 hours, 7 days or 30 days, for all sites or one:
+- **Headline numbers:**
+  - visits and page views, each compared with the period before
+  - pages per visit and the share of views on phones
+  - the 75th-percentile "largest paint", with its Core Web Vitals band
+  - Worker errors and the error rate
+- **Visits by day** (or by hour for 24 hours). It's a bar chart: hover or tab to a bar for its numbers, or open it as a table. Quiet days show as zero.
+- **Worth knowing**: plain notes taken straight from the numbers:
+  - the change in visits
+  - the top page and the biggest outside source
+  - any site that's slow, has a jumpy layout or responds slowly to taps
+  - the Worker with the most errors
+- **Sites**: visits, views and real-visitor speed for each site.
+  - Speed covers largest paint, response to taps (INP), layout shift (CLS) and median load time.
+  - Each comes with a Good, Needs work or Poor label.
+  - Pick a site to see only its numbers.
+- **Top pages**, and **where visitors come from**. Links from one RB site to another are counted separately, so outside sources like Facebook and Instagram stand out.
+- **Countries, devices, browsers and systems.**
+- **Workers**: requests, errors, error rate and CPU time (median and p99) for every Worker on the account.
+
+The numbers leave out RB Command's own pages, and headless browsers (site checks and bots) unless you tick *Include automated browsers*. Answers are cached for 10 minutes. Cloudflare samples busy periods, so counts are close estimates.
+
+The Overview's **Visitors** tile now links here. It and this screen both use the same token.
+
+**Status: deployed 16 Oct 2026.** `rb-command` is now `8343f386`; roll back to `2c5c5b92`. The deploy script pulled the live code, applied every patch and passed every test before uploading. Afterwards:
+- the sign-in page loads
+- signed-out requests to `/api/analytics` and the planner are refused (401)
+- the main site and `/events` return 200
+- `CF_ANALYTICS_TOKEN` was then added in the dashboard (version `6d80463f`, same code). It went in as a plain-text variable; switching it to the Secret type keeps the value hidden in the dashboard and API.
+
+**One step only the owner can do: add the read-only token.** RB Command reads analytics with its own Cloudflare token, which has never been added (so the Visitors tile has always shown "—"). Until it is, the screen shows these steps:
+1. In Cloudflare, go to **My Profile → API Tokens → Create Token → Create Custom Token**. Name it *RB Command analytics*.
+2. Give it one permission, **Account → Account Analytics → Read**, and set Account Resources to the RB account.
+3. Create it and copy the token.
+4. Go to **Workers & Pages → rb-command → Settings → Variables and Secrets → Add**. Choose type **Secret**, name it **`CF_ANALYTICS_TOKEN`**, paste the token and deploy.
+
+The token can only read analytics; it can't change anything.
+
+## Files
+
+- `src/analytics.js`: the Analytics module (the GraphQL query, shaping the answer, caching).
+- `patch_analytics.py`: adds the module, `GET /api/analytics`, the screen, its styles and the Overview link to a pulled `rb-command`.
+- `test/analytics.test.mjs`: runs the module against a fake Cloudflare API, the route through RB Command's handler (owner, support and store roles), and checks the page script parses.
+- `deploy-analytics.sh`: pulls `rb-command`, applies every patch, runs every test, and with `--deploy` uploads the code only.
+- `src/showplanner.js`: the Show planner module (suggesting, the plan, calendar and `.ics`, changes).
+- `patch_show_planner.py`: adds the module, the `/api/shows/*` routes (viewing needs Events view, changes need Events edit), the Overview additions, the screen and its styles to a pulled `rb-command`.
+- `test/showplanner.test.mjs`: runs the planner through RB Command's own request handler against an in-memory copy of the tables, and checks the page script parses.
+- `deploy-show-planner.sh`: pulls `rb-command`, applies all the patches, runs every test, and with `--deploy` uploads the code only.
+- `src/affiliate.js`: the new RB Command module (reading the page, the card, publishing).
+- `patch_rb_command.py`: adds the module, three routes (`/api/affiliate/preview`, `/card`, `/create`, all needing edit rights on Ads), the screen, its styles, and the Ads table's **Shows on** field to a pulled `rb-command`.
+- `../rb-tools/palettes.py`: adds the 13 palettes to any pulled Worker that has the list.
+- `../rb-tools/cfworker.py`: `pull` a Worker into a folder, and `push` it back as code only. Push refuses if the live version changed since the pull.
+- `test/palettes.mjs`, `test/affiliate.test.mjs`: the checks.
+- `deploy.sh`: pulls all four Workers, patches them and runs every test, including the main-site ad tests in `../rb-surface/test`. With `--deploy` it then uploads them in order (sites first, RB Command last).
+
+All the patch scripts skip edits that are already in place, so running them twice changes nothing.
+
+## Status: deployed 16 Oct 2026
+
+| Worker | Now live | Previous (roll back to) |
+| --- | --- | --- |
+| `rb-public-content` | `2cb45aa9` | `bb391305` |
+| `rb-radio` | `5904e5fc` | `0f0a3556` |
+| `artist-router` | `cbd9da43` | `e2e799e6` |
+| `rb-command` | `f816a3f8` (since replaced by the Show planner's `2c5c5b92`) | `72afeff1` |
+
+All four were deployed in that order, after every test passed on freshly pulled code.
+
+Checked live afterwards:
+- `/`, `/home`, `/radio`, `/tv`, `/studio/`, `/fund`, `/api/signal`, the ad rail and the beat store return 200.
+- `theme.css` serves for TV, the beat store and Radio.
+- RB Command is behind Cloudflare Access, and a signed-out request to the new affiliate endpoint is refused.
+
+To undo, go to Cloudflare → Workers → each Worker → Deployments, and redeploy the previous version.
+
+## Live signal
+
+`patch_signal.py` adds a **Live signal** screen under Overview (every role except store staff). It shows only real data:
+- **Every Cloudflare Worker that ran in the last 24 hours**, grouped Money / Sites / Music and media / Operations / Partner sites: requests, errors, CPU, and each scheduled job's last run and failures. The list comes from Cloudflare analytics (`CF_ANALYTICS_TOKEN`), so a new Worker appears by itself. `ROLES` in `src/signal.js` only gives known Workers a plain name.
+  - A card is marked **Errors** at 5+ errors, or 2+ at a 1% rate or higher; **A scheduled job failed** if any cron run failed today.
+  - "Workers AI" marks the Workers bound to Cloudflare's AI models.
+- RB Radio on air and next (the public `/radio/api/now`).
+- Pulse, the calendar, the studio funnel and beats to record on, all from the existing `/api/overview` and `/api/loop`.
+
+`GET /api/signal` caches for two minutes, and the screen refreshes every two minutes while open. Nothing else in RB Command changes. Test: `test/signal.test.mjs`.
+
+### Deployed 17 Oct 2026
+
+| Worker | Live | Roll back to |
+| --- | --- | --- |
+| `rb-command` (Live signal) | `84915205` | `e7396dfa` |
+| `rb-radio` (RB Flow in embed.js) | `05cf663f` | `7ff6e5ae` |
+| `artist-router` (homepage Live watch line) | `610de438` | `f62b9a7e` |
+| `rb-mastering-studio` (suggested settings) | `9943faef` | `6cdb66f7` |
+
+Code only: bindings, secrets, routes and schedules unchanged. RB TV was not redeployed.

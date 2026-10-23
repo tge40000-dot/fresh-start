@@ -1,0 +1,11 @@
+{
+  "script": "rb-studio-root-proxy",
+  "entry": "worker.js",
+  "version": "bb1cd0be-8b8a-4dc2-83c7-41becec78f01",
+  "parts": [
+    {
+      "name": "worker.js",
+      "type": "application/javascript+module"
+    }
+  ]
+}

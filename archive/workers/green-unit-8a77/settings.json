@@ -1,0 +1,11 @@
+{
+ "script": "green-unit-8a77",
+ "compatibility_date": "2024-09-23",
+ "compatibility_flags": [],
+ "bindings": [
+  {
+   "type": "assets",
+   "name": "ASSETS"
+  }
+ ]
+}

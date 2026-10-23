@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>RB Collect · Relentless Billionaire</title>
+<meta name="description" content="RB Collect by Relentless Billionaire: play every day, collect the pieces of a set and claim its prize. No purchase or membership necessary.">
+<link rel="canonical" href="https://relentlessbillionaire.com/rewards">
+<meta name="theme-color" content="#07060A">
+<link rel="icon" href="/favicon.ico">
+<style nonce="__NONCE__">
+@font-face{font-family:"RB Cinzel";src:url(https://fonts.gstatic.com/s/cinzel/v26/8vIJ7ww63mVu7gt79mT7.woff2) format("woff2");font-weight:400 900;font-display:swap}
+@font-face{font-family:"RB Cormorant";src:url(https://fonts.gstatic.com/s/cormorantgaramond/v21/co3bmX5slCNuHLi8bLeY9MK7whWMhyjYqXtK.woff2) format("woff2");font-weight:300 700;font-display:swap}
+:root{--bg:#07060A;--panel:#110F0C;--panel2:#18150F;--line:#2B261C;--line2:#3D3527;--gold:#C9A227;--gold2:#E9CF83;--gold3:#8F6A22;--text:#EFE8D8;--muted:#A79E89;--crimson:#D2394B;--ok:#7CC48A;
+  --caps:"RB Cinzel",Cinzel,"Times New Roman",serif;--serif:"RB Cormorant","Cormorant Garamond",Georgia,serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;min-width:320px;background:radial-gradient(1100px 520px at 80% -10%,rgba(201,162,39,.12),transparent 62%),radial-gradient(800px 500px at -10% 110%,rgba(210,57,75,.08),transparent 60%),var(--bg);color:var(--text);font:15px/1.5 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--gold2)}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--gold2);outline-offset:2px;border-radius:8px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0}
+.brand{display:flex;align-items:center;gap:10px;color:var(--text);text-decoration:none;font:600 11px/1.2 var(--caps);letter-spacing:.18em}
+.mark{width:34px;height:34px;flex:none;border-radius:50%;border:1px solid var(--gold3);display:grid;place-items:center;font:700 12px/1 var(--caps);color:var(--gold2);box-shadow:0 0 18px rgba(201,162,39,.18)}
+.top nav{display:flex;gap:14px;font-size:13px}
+.top nav a{color:var(--muted);text-decoration:none}
+.top nav a:hover{color:var(--gold2)}
+.hero{padding:18px 0 8px}
+.eyebrow{font:600 11px/1 var(--caps);letter-spacing:.28em;color:var(--gold)}
+h1{font:600 clamp(32px,8.5vw,64px)/1.02 var(--caps);letter-spacing:.02em;margin:12px 0 10px;color:var(--text)}
+h1 em{font-style:normal;color:var(--gold2)}
+.lede{font:italic 400 clamp(19px,4.6vw,24px)/1.35 var(--serif);color:var(--muted);max-width:640px;margin:0}
+.free{display:inline-block;margin-top:14px;padding:6px 12px;border:1px solid var(--line2);border-radius:999px;font-size:13px;color:var(--gold2)}
+h2{font:600 18px/1.25 var(--caps);letter-spacing:.06em;color:var(--gold2);margin:0 0 10px}
+.panel{background:linear-gradient(180deg,rgba(201,162,39,.05),transparent 40%),var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px}
+.grid{display:grid;gap:14px;margin:18px 0}
+.soon{text-align:center;padding:34px 18px;border-color:var(--gold3)}
+.soon h2{font-size:clamp(22px,5.5vw,30px)}
+.soon p{color:var(--muted);max-width:520px;margin:8px auto 0}
+body[data-status=off] .live-only,body[data-status=soon] .live-only{display:none}
+.m{color:var(--muted);font-size:13px}
+body[data-status=live] .soon{display:none}
+.play{display:grid;gap:16px;align-items:center;overflow:hidden}
+.count{display:flex;align-items:baseline;gap:10px}
+.count b{font:700 52px/1 var(--caps);color:var(--gold2)}
+.count span{color:var(--muted)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border-radius:999px;border:1px solid var(--line2);background:var(--panel2);color:var(--text);text-decoration:none;font-weight:600;font-size:14px}
+.btn:hover{border-color:var(--gold3)}
+.btn.gold{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#140F05;border-color:var(--gold)}
+.btn.big{min-height:58px;padding:0 34px;font:700 17px/1 var(--caps);letter-spacing:.14em;width:100%}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.stage{position:relative;width:min(240px,70vw);aspect-ratio:3/4;margin:0 auto;perspective:900px}
+.piece,.foil{position:absolute;inset:0;border-radius:16px;display:grid;place-items:center;text-align:center;padding:16px}
+.piece{background:radial-gradient(circle at 50% 30%,rgba(233,207,131,.18),transparent 60%),var(--panel2);border:1px solid var(--gold3)}
+.piece .set{font:600 11px/1.2 var(--caps);letter-spacing:.2em;color:var(--gold)}
+.piece .name{font:700 30px/1.1 var(--caps);color:var(--text);margin:8px 0}
+.piece .rare{color:var(--gold2);font-size:13px;letter-spacing:.12em}
+.piece.is-rare{border-color:var(--gold2);box-shadow:0 0 34px rgba(233,207,131,.35)}
+.foil{background:repeating-linear-gradient(115deg,#8F6A22 0 10px,#C9A227 10px 22px,#E9CF83 22px 26px,#C9A227 26px 36px);color:#140F05;font:700 14px/1.2 var(--caps);letter-spacing:.24em;transform-origin:0 0;box-shadow:0 10px 30px rgba(0,0,0,.45);z-index:2}
+.foil.peel{animation:peel .9s cubic-bezier(.6,.05,.3,1) forwards}
+.foil.shake{animation:shake .5s ease-in-out}
+@keyframes peel{0%{transform:rotate(0) translate(0,0);opacity:1}35%{transform:rotate(-6deg) translate(4%,-2%)}100%{transform:rotate(-38deg) translate(70%,-60%);opacity:0}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.piece.pop{animation:pop .5s ease-out .5s both}
+@keyframes pop{0%{transform:scale(.94)}60%{transform:scale(1.04)}100%{transform:scale(1)}}
+.sets{display:grid;gap:14px;grid-template-columns:1fr}
+.set-card{display:grid;gap:12px}
+.set-card .label{font:600 11px/1 var(--caps);letter-spacing:.24em;color:var(--gold)}
+.set-card h3{font:600 20px/1.2 var(--serif);margin:4px 0 0;color:var(--text)}
+.set-card .desc{color:var(--muted);font-size:14px;margin:4px 0 0}
+.slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.slot{min-height:64px;border-radius:12px;border:1px dashed var(--line2);display:grid;place-items:center;text-align:center;padding:6px;font-size:13px;color:var(--muted)}
+.slot.have{border-style:solid;border-color:var(--gold3);color:var(--text);background:rgba(201,162,39,.08)}
+.slot.have.rare{border-color:var(--gold2);color:var(--gold2)}
+.slot small{display:block;font-size:11px;color:var(--muted)}
+.meta{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted)}
+.chip{display:inline-block;padding:3px 10px;border-radius:999px;border:1px solid var(--gold3);color:var(--gold2);font-size:12px}
+form.code{display:flex;gap:8px;flex-wrap:wrap}
+form.code input{flex:1 1 160px;min-width:0;min-height:44px;border-radius:12px;border:1px solid var(--line2);background:#0B0A08;padding:0 14px;text-transform:uppercase;letter-spacing:.08em}
+.ref{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ref code{flex:1 1 200px;min-width:0;overflow-wrap:anywhere;padding:10px 12px;border-radius:12px;border:1px solid var(--line2);background:#0B0A08;font-size:13px}
+ul.earn{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+ul.earn li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}
+ul.earn b{color:var(--text)}
+ul.earn .n{font:700 15px/1 var(--caps);color:var(--gold2);white-space:nowrap}
+ul.earn p{grid-column:1/-1;margin:0;color:var(--muted);font-size:13px}
+ul.earn .go{grid-column:1/-1;justify-self:start}
+.history{list-style:none;margin:0;padding:0;font-size:13px;color:var(--muted);display:grid;gap:4px}
+.note{min-height:1.5em;font-size:14px;color:var(--gold2);margin:0}
+.note.err{color:#FF8A96}
+footer{border-top:1px solid var(--line);margin-top:28px;padding:20px 0 90px;color:var(--muted);font-size:13px}
+footer p{margin:4px 0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (min-width:760px){.play{grid-template-columns:1fr 260px}.sets{grid-template-columns:repeat(2,minmax(0,1fr))}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.btn.big{width:auto}}
+@media (min-width:1080px){.sets{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.foil.peel{opacity:0}}
+</style>
+</head>
+<body data-status="__STATUS__">
+<div class="wrap">
+<header class="top">
+  <a class="brand" href="/" aria-label="Relentless Billionaire home"><span class="mark">RB</span><span>RELENTLESS<br>BILLIONAIRE</span></a>
+  <nav aria-label="RB Collect"><a href="/rewards/rules">Official rules</a><a href="/memberships">Memberships</a></nav>
+</header>
+<main>
+  <section class="hero">
+    <div class="eyebrow">RB COLLECT</div>
+    <h1>Collect the set.<br><em>Claim the prize.</em></h1>
+    <p class="lede">Every play reveals one piece. Collect every piece of a set, rare piece included, to claim that set's prize.</p>
+    <span class="free">No purchase or membership necessary. Free play every day.</span>
+  </section>
+
+  <section class="panel soon grid" id="soon" aria-live="polite">
+    <h2 id="soon-title">RB Collect is coming soon</h2>
+    <p id="soon-text">Prizes, dates and the official rules are posted here before the game opens.</p>
+    <p><a href="/rewards/rules">Official rules</a></p>
+  </section>
+
+  <section class="panel play live-only grid" aria-labelledby="play-h">
+    <div>
+      <h2 id="play-h">Your plays</h2>
+      <div class="count"><b id="plays">–</b><span id="plays-label">Sign in to see your plays</span></div>
+      <p class="note" id="note" role="status" aria-live="polite"></p>
+      <div class="actions">
+        <button class="btn big gold" id="play" type="button" disabled>Play</button>
+        <button class="btn" id="signin" type="button">Sign in</button>
+      </div>
+      <p class="m" id="who"></p>
+    </div>
+    <div class="stage" aria-live="polite">
+      <div class="piece" id="piece"><div><div class="set" id="piece-set">RB COLLECT</div><div class="name" id="piece-name">?</div><div class="rare" id="piece-rare"></div></div></div>
+      <div class="foil" id="foil" aria-hidden="true">PLAY TO REVEAL</div>
+    </div>
+  </section>
+
+  <section aria-labelledby="sets-h" class="grid">
+    <h2 id="sets-h">The sets</h2>
+    <div class="sets" id="sets"></div>
+  </section>
+
+  <div class="grid two live-only">
+    <section class="panel" aria-labelledby="code-h">
+      <h2 id="code-h">Have a code?</h2>
+      <p class="m">Codes from RB shows, photoshoots and events add plays. Each code works once per player.</p>
+      <form class="code" id="code-form">
+        <label class="sr" for="code">Code</label>
+        <input id="code" name="code" autocomplete="off" autocapitalize="characters" maxlength="40" placeholder="Enter code">
+        <button class="btn gold" type="submit">Redeem</button>
+      </form>
+    </section>
+    <section class="panel" aria-labelledby="ref-h">
+      <h2 id="ref-h">Invite a friend</h2>
+      <p class="m" id="ref-text">Sign in to get your invite link.</p>
+      <div class="ref" id="ref" hidden><code id="ref-link"></code><button class="btn" id="copy" type="button">Copy</button><button class="btn" id="share" type="button" hidden>Share</button></div>
+    </section>
+  </div>
+
+  <section class="panel live-only grid" aria-labelledby="earn-h">
+    <h2 id="earn-h">How to earn more plays</h2>
+    <ul class="earn" id="earn"></ul>
+  </section>
+
+  <section class="panel live-only grid" aria-labelledby="hist-h" id="hist-box" hidden>
+    <h2 id="hist-h">Recent</h2>
+    <ul class="history" id="history"></ul>
+  </section>
+</main>
+<footer>
+  <p><b>No purchase or membership necessary. Free play every day.</b> Every play has the same odds however it was earned.</p>
+  <p id="dates"></p>
+  <p><a href="/rewards/rules">Official rules</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · Run by Relentless Billionaire. Void where prohibited.</p>
+</footer>
+</div>
+<script type="application/json" id="rb-state" nonce="__NONCE__">__STATE__</script>
+<script nonce="__NONCE__">(function(){function script(src,key){return new Promise(function(resolve,reject){var tag=document.createElement('script');tag.src=src;tag.async=true;tag.crossOrigin='anonymous';if(key)tag.setAttribute('data-clerk-publishable-key',key);tag.onload=resolve;tag.onerror=function(){reject(new Error('Secure sign-in could not load. Please refresh or try again.'))};document.head.appendChild(tag)})}window.RBLoadClerk=window.RBLoadClerk||function(key){if(window.__rbClerkPromise)return window.__rbClerkPromise;window.__rbClerkPromise=Promise.resolve().then(function(){if(!key)throw new Error('Member identity is being activated. Please return shortly.');var encoded=String(key).split('_')[2];var domain=atob(encoded).slice(0,-1);return script('https://'+domain+'/npm/@clerk/ui@1/dist/ui.browser.js').then(function(){return script('https://'+domain+'/npm/@clerk/clerk-js@6/dist/clerk.browser.js',key)}).then(function(){if(!window.Clerk)throw new Error('Secure sign-in could not load. Please refresh or try again.');return window.Clerk.load({ui:{ClerkUI:window.__internal_ClerkUICtor}}).then(function(){return window.Clerk})})});return window.__rbClerkPromise}})();</script>
+<script nonce="__NONCE__">
+(function () {
+  "use strict";
+  var KEY = __CLERK_KEY__;
+  var state = JSON.parse(document.getElementById("rb-state").textContent || "{}");
+  var me = null, clerk = null, busy = false;
+  var $ = function (id) { return document.getElementById(id); };
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var SOURCES = { welcome: "Welcome plays", daily: "Free daily play", signup: "Joined the RB list", membership: "Membership request", member_daily: "Member daily plays", contribution: "Support RB", order: "Store order", referral: "Friend joined", code: "Code redeemed" };
+  var CLAIM = { requested: "Claim requested", approved: "Claim approved", fulfilled: "Prize delivered", rejected: "Claim not approved" };
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function say(text, err) { var n = $("note"); n.textContent = text || ""; n.className = "note" + (err ? " err" : ""); }
+
+  function api(path, opts) {
+    opts = opts || {};
+    var tokenP = clerk && clerk.session ? clerk.session.getToken() : Promise.resolve(null);
+    return tokenP.then(function (token) {
+      var headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = "Bearer " + token;
+      return fetch(path, { method: opts.method || "GET", headers: headers, body: opts.body ? JSON.stringify(opts.body) : undefined, credentials: "same-origin" });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) { if (!res.ok || body.ok === false) { var e = new Error(body.error || "Something went wrong. Please try again."); e.body = body; throw e; } return body; });
+    });
+  }
+
+  function renderStatus() {
+    document.body.setAttribute("data-status", state.status || "off");
+    var titles = { off: "RB Collect is coming soon", soon: "RB Collect opens soon", ended: "RB Collect has ended", claimed_out: "Every prize has been claimed" };
+    if (titles[state.status]) $("soon-title").textContent = titles[state.status];
+    var text = state.status === "soon" && state.starts_label ? "Plays open " + state.starts_label + "." : state.status === "off" ? "Prizes, dates and the official rules are posted here before the game opens." : state.message;
+    $("soon-text").textContent = text || "";
+    var d = [];
+    if (state.starts_label) d.push("Starts " + state.starts_label + ".");
+    if (state.ends_label) d.push("Ends " + state.ends_label + ".");
+    if (state.eligibility && state.status !== "off") d.push(state.eligibility);
+    $("dates").textContent = d.join(" ");
+  }
+
+  function claimFor(setKey) { return me && me.claims ? me.claims.filter(function (c) { return c.set_key === setKey; })[0] : null; }
+
+  function renderSets() {
+    var box = $("sets"); box.textContent = "";
+    (state.sets || []).forEach(function (s) {
+      var card = el("article", "panel set-card"), head = el("div");
+      head.appendChild(el("div", "label", s.set_label));
+      if (s.prize) {
+        head.appendChild(el("h3", null, s.prize.name));
+        if (s.prize.description) head.appendChild(el("p", "desc", s.prize.description));
+      }
+      card.appendChild(head);
+      var slots = el("div", "slots"), have = 0;
+      s.pieces.forEach(function (p) {
+        var n = me && me.pieces ? Number(me.pieces[p.piece_key] || 0) : 0;
+        if (n > 0) have++;
+        var slot = el("div", "slot" + (n > 0 ? " have" : "") + (p.rare ? " rare" : ""));
+        slot.appendChild(document.createTextNode(p.label + (p.rare ? " ★" : "")));
+        slot.appendChild(el("small", null, n > 0 ? (n > 1 ? "×" + n : "collected") : p.rare ? "rare" : "missing"));
+        slots.appendChild(slot);
+      });
+      card.appendChild(slots);
+      var meta = el("div", "meta");
+      meta.appendChild(el("span", null, have + " of " + s.pieces.length + " pieces"));
+      if (s.prize) meta.appendChild(el("span", null, s.prize.remaining + " of " + s.prize.quantity + " left"));
+      card.appendChild(meta);
+      var c = claimFor(s.set_key);
+      if (c) card.appendChild(el("span", "chip", CLAIM[c.status] || c.status));
+      else if (me && s.prize && have >= s.pieces.length) {
+        var b = el("button", "btn gold", s.prize.remaining > 0 ? "Claim prize" : "All claimed");
+        b.type = "button"; b.disabled = !(s.prize.remaining > 0);
+        b.addEventListener("click", function () { claim(s.set_key, b); });
+        card.appendChild(b);
+      }
+      box.appendChild(card);
+    });
+  }
+
+  function renderEarn() {
+    var ul = $("earn"); ul.textContent = "";
+    (state.earn || []).forEach(function (x) {
+      var li = el("li");
+      li.appendChild(el("b", null, x.label));
+      li.appendChild(el("span", "n", x.plays ? "+" + x.plays : ""));
+      li.appendChild(el("p", null, x.detail));
+      if (x.href) { var a = el("a", "btn go", x.key === "contribution" ? "Support RB" : x.key === "order" ? "Visit the store" : "Join a membership"); a.href = x.href; li.appendChild(a); }
+      if (x.key === "signup" && me && clerk && clerk.user) { var j = el("button", "btn go", "Join the RB list"); j.type = "button"; j.addEventListener("click", function () { joinList(j); }); li.appendChild(j); }
+      if (x.key === "referral" && me) { var r = el("a", "btn go", "Copy my invite link"); r.href = "#ref"; li.appendChild(r); }
+      ul.appendChild(li);
+    });
+  }
+
+  function renderMe() {
+    var signed = !!(clerk && clerk.user);
+    $("signin").hidden = signed;
+    if (!me) { $("plays").textContent = "–"; $("plays-label").textContent = signed ? "Loading your plays…" : "Sign in to see your plays"; }
+    else {
+      $("plays").textContent = String(me.plays);
+      $("plays-label").textContent = me.plays === 1 ? "play ready" : "plays ready";
+      $("who").textContent = me.player && me.player.email ? "Signed in as " + me.player.email : "";
+      var link = location.origin + "/rewards?ref=" + encodeURIComponent(me.player.ref_code);
+      $("ref-link").textContent = link; $("ref").hidden = false; $("ref-text").textContent = "Share your link. When someone new signs in through it, you get plays (see How to earn).";
+      $("share").hidden = !navigator.share;
+      var h = $("history"); h.textContent = "";
+      (me.history || []).slice(0, 12).forEach(function (x) {
+        h.appendChild(el("li", null, x.kind === "award" ? (SOURCES[x.source] || x.source) + " +" + x.plays : "Revealed " + (x.label || x.piece_key) + (x.rare ? " ★" : "")));
+      });
+      $("hist-box").hidden = !(me.history || []).length;
+    }
+    $("play").disabled = busy || !state.live || !me || me.plays < 1;
+  }
+
+  function render() { renderStatus(); renderSets(); renderEarn(); renderMe(); }
+
+  function loadMe() {
+    return api("/api/rewards/me").then(function (data) {
+      me = data; if (data.state) state = data.state;
+      if (data.added > 0) say("+" + data.added + (data.added === 1 ? " play" : " plays") + " added.");
+      render();
+    }).catch(function (e) { say(e.message, true); render(); });
+  }
+
+  function reveal(draw) {
+    var foil = $("foil"), piece = $("piece");
+    $("piece-set").textContent = draw.set_label || "";
+    $("piece-name").textContent = draw.label;
+    $("piece-rare").textContent = draw.rare ? "★ RARE PIECE" : "";
+    piece.classList.toggle("is-rare", !!draw.rare);
+    foil.classList.remove("peel", "shake"); piece.classList.remove("pop");
+    void foil.offsetWidth;
+    foil.classList.add("peel"); piece.classList.add("pop");
+    return new Promise(function (r) { setTimeout(r, reduce ? 0 : 950); });
+  }
+
+  function play() {
+    if (busy) return; busy = true; renderMe(); say("");
+    var foil = $("foil"); foil.classList.remove("peel"); foil.textContent = "PLAY TO REVEAL";
+    if (!reduce) foil.classList.add("shake");
+    api("/api/rewards/play", { method: "POST", body: {} }).then(function (data) {
+      me.plays = data.plays; me.pieces = me.pieces || {};
+      me.pieces[data.draw.piece_key] = (me.pieces[data.draw.piece_key] || 0) + 1;
+      me.history = [{ kind: "draw", label: data.draw.label, rare: data.draw.rare, piece_key: data.draw.piece_key }].concat(me.history || []);
+      return reveal(data.draw).then(function () {
+        say(data.draw.set_complete ? "Set complete: " + data.draw.set_label + ". You can claim its prize below." : "You revealed " + data.draw.label + (data.draw.rare ? " ★, a rare piece." : "."));
+      });
+    }).catch(function (e) { foil.classList.remove("shake"); say(e.message, true); }).then(function () { busy = false; render(); });
+  }
+
+  function claim(setKey, btn) {
+    btn.disabled = true;
+    api("/api/rewards/claim", { method: "POST", body: { set: setKey } }).then(function (data) { say("Claim sent. " + (data.message || "")); return loadMe(); })
+      .catch(function (e) { say(e.message, true); btn.disabled = false; });
+  }
+
+  function joinList(btn) {
+    var u = clerk.user, email = u.primaryEmailAddress && u.primaryEmailAddress.emailAddress;
+    if (!email) { say("Add an email to your account first.", true); return; }
+    btn.disabled = true;
+    fetch("/api/signup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: u.firstName || u.fullName || "RB Collect player", email: email, source: "rb-collect" }) })
+      .then(function (r) { return r.json(); }).then(function (b) { if (!b.ok) throw new Error(b.error || "Could not join the list."); say("You're on the RB list."); return loadMe(); })
+      .catch(function (e) { say(e.message, true); btn.disabled = false; });
+  }
+
+  function signIn() {
+    if (clerk) { clerk.openSignIn({ afterSignInUrl: location.href }); return; }
+    say("Loading secure sign-in…");
+    window.RBLoadClerk(KEY).then(function (c) { clerk = c; say(""); if (c.user) return loadMe(); c.openSignIn({ afterSignInUrl: location.href }); }).catch(function (e) { say(e.message, true); });
+  }
+
+  $("play").addEventListener("click", play);
+  $("signin").addEventListener("click", signIn);
+  $("code-form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var input = $("code"), code = input.value.trim();
+    if (!me) { signIn(); return; }
+    if (!code) return;
+    api("/api/rewards/code", { method: "POST", body: { code: code } }).then(function (data) { input.value = ""; me.plays = data.plays; say("+" + data.plays_added + (data.plays_added === 1 ? " play" : " plays") + " added."); return loadMe(); })
+      .catch(function (e) { say(e.message, true); });
+  });
+  $("copy").addEventListener("click", function () {
+    var t = $("ref-link").textContent;
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { say("Invite link copied."); }, function () { say("Select the link to copy it."); });
+  });
+  $("share").addEventListener("click", function () {
+    navigator.share({ title: "RB Collect", text: "Play RB Collect with me. Free play every day.", url: $("ref-link").textContent }).catch(function () {});
+  });
+
+  render();
+  if (state.status === "live" || state.status === "ended" || state.status === "claimed_out") {
+    if (!KEY) { $("signin").disabled = true; say("Sign-in is being set up. Please check back soon."); }
+    else window.RBLoadClerk(KEY).then(function (c) { clerk = c; if (c.user) return loadMe(); render(); }).catch(function (e) { say(e.message, true); });
+  }
+})();
+</script>
+</body>
+</html>
