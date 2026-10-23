@@ -47,6 +47,9 @@ world_main = (wsrc / "main.js").read_text(encoding="utf-8")
 # Every game module in src/world (main.js, rb_world.js, empire.js, ...) is served at /app/world/<name>.js.
 world_files = {f.name: f.read_text(encoding="utf-8") for f in sorted(wsrc.glob("*.js")) if f.name != "world-worker.js"}
 world_code = (wsrc / "world-worker.js").read_text(encoding="utf-8")
+# the game's sounds (src/world/audio/*.mp3), served at /app/world/audio/<name>.mp3
+import base64
+world_audio = {f.name: base64.b64encode(f.read_bytes()).decode("ascii") for f in sorted((wsrc / "audio").glob("*.mp3"))}
 world_defs = world_files["empire_defs.js"]
 # The server uses the same lot, district and business tables as the game, inside a namespace (RBE) so names like LOTS
 # can't clash with anything else in artist-router.
@@ -72,7 +75,7 @@ END = "// ---------------------------------------------------------------- end R
 qr_block = "const rbbQrcode = (function () {\n" + qr.rstrip("\n") + "\nreturn qrcode;\n})();\n"
 block = (START + "const RB_BADGE_HTML = " + json.dumps(page) + ";\n" + "const RB_APP_HTML = " + json.dumps(app) + ";\n"
          + "const RB_BADGE_SCHEMA = " + json.dumps(statements) + ";\n" + qr_block + goldrush.rstrip("\n") + "\n" + code.rstrip("\n") + "\n"
-         + "const RB_WORLD_HTML = " + json.dumps(world) + ";\nconst RB_WORLD_FILES = " + json.dumps(world_files) + ";\n" + rbe_block
+         + "const RB_WORLD_HTML = " + json.dumps(world) + ";\nconst RB_WORLD_FILES = " + json.dumps(world_files) + ";\nconst RB_WORLD_AUDIO = " + json.dumps(world_audio) + ";\n" + rbe_block
          + world_code.rstrip("\n") + "\n" + END)
 
 if START in s:

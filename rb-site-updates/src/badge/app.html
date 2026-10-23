@@ -107,7 +107,7 @@ body[data-status=live] .soon{display:none}
 
 <section class="panel live-only" id="signed-out" hidden>
   <h1>Show up.<br><em>Play. Level up.</em></h1>
-  <p class="lede">Earn points at RB shows, in the store and in RB Gold Rush. Spend them online or at the door.</p>
+  <p class="lede">Earn points at RB shows, in the store and in RB Gold Rush, and level up.</p>
   <p class="m">Sign in with your RB account. Points from what you've already done with the same verified email are added the first time.</p>
   <button class="btn gold wide" id="signin" type="button">Sign in</button>
   <p class="note" id="note0" role="status" aria-live="polite"></p>
@@ -120,7 +120,7 @@ body[data-status=live] .soon{display:none}
       <div class="who" id="who"></div>
       <img class="qr" id="qr" alt="Your RB Badge QR code. Show it to RB staff at the door." width="260" height="260">
       <div class="code" id="code"></div>
-      <div class="m">Show this at RB shows and events to check in and redeem rewards. It refreshes every few minutes.</div>
+      <div class="m">Show this at RB shows and events to check in. It refreshes every few minutes.</div>
       <div class="nums"><div><b id="bal">0</b><span>to spend</span></div><div><b id="life">0</b><span>lifetime</span></div><div><b id="chk">0</b><span>check-ins</span></div></div>
       <div class="bar" aria-hidden="true"><i id="barfill"></i></div>
       <div class="m" id="next"></div>
@@ -150,7 +150,7 @@ body[data-status=live] .soon{display:none}
   <section class="screen" id="s-rewards" aria-label="Rewards" hidden>
     <h2>Rewards</h2>
     <p class="m" id="redeem-how"></p>
-    <p class="m">At RB shows and events you can also spend points in person: show your pass and staff redeem it on the spot.</p>
+    <p class="m" id="redeem-door" hidden>At RB shows and events you can also spend points in person: show your pass and staff redeem it on the spot.</p>
     <div class="rewards" id="rewards"></div>
     <h2 class="sr">Your requests</h2>
     <ul class="history" id="redemptions"></ul>
@@ -250,6 +250,7 @@ body[data-status=live] .soon{display:none}
   function renderRewards() {
     var box = $("rewards"); box.textContent = "";
     $("redeem-how").textContent = state.redeem_how || "";
+    $("redeem-door").hidden = !(state.rewards || []).length;
     if (!(state.rewards || []).length) box.appendChild(el("p", "m", "Rewards are posted here when RB adds them."));
     (state.rewards || []).forEach(function (r) {
       var c = el("article", "card");

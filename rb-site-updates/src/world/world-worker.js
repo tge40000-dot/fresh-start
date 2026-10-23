@@ -14,7 +14,7 @@
 // relentlessbillionaire.com/game/ keeps working); play-time points only start once RB Badge itself is switched on.
 const WORLD_PEER_SECONDS = 20;
 const WORLD_BEAT_CREDIT = 10;
-const WORLD_VERSION = "w10";
+const WORLD_VERSION = "w11";
 const WORLD_OWNER_DAYS = 14; // a lot whose owner hasn't played for this long is for sale again
 const WORLD_CAR_COLOR = /^#[0-9a-fA-F]{6}$/;
 
@@ -307,6 +307,12 @@ async function worldAds(env) {
   return rbcJson({ ok: true, ads: out }, 200, { "Cache-Control": "public, max-age=60" });
 }
 
+const worldAudioCache = {};
+function worldAudioBytes(name) {
+  if (!worldAudioCache[name]) { const b = atob(RB_WORLD_AUDIO[name]), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); worldAudioCache[name] = u; }
+  return worldAudioCache[name];
+}
+
 function worldCsp(env) {
   const fapi = rbcPublishableDomain(env.CLERK_PUBLISHABLE_KEY);
   const clerk = [...new Set([fapi ? "https://" + fapi : null, "https://clerk.relentlessbillionaire.com", "https://*.clerk.accounts.dev"].filter(Boolean))].join(" ");
@@ -334,6 +340,14 @@ async function rbWorldRoute(request, env, url, path, method) {
   if (Object.hasOwn(files, path) && page) {
     if (!g.worldOpen) return new Response("// RB World is coming soon.\n", { status: 404, headers: { "Content-Type": "application/javascript; charset=utf-8" } });
     return new Response(files[path], { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff" } });
+  }
+  // The game's three sounds (theme, cash, alert), moved here from the old game's Worker (/game/assets/audio/) on
+  // 23 Oct 2026 so that Worker and its InstantDB app can be retired. RB_WORLD_AUDIO holds them base64-encoded.
+  const snd = /^\/app\/world\/audio\/([a-z-]+\.mp3)$/.exec(path)?.[1];
+  if (snd && page && Object.hasOwn(RB_WORLD_AUDIO, snd)) {
+    if (!g.worldOpen) return new Response("RB World is coming soon.", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    const bytes = worldAudioBytes(snd);
+    return new Response(request.method === "HEAD" ? null : bytes, { headers: { "Content-Type": "audio/mpeg", "Content-Length": String(bytes.length), "Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff" } });
   }
   if (!path.startsWith("/api/world/")) return null;
   if (!g.worldOpen) return rbcJson({ ok: false, error: "RB World is coming soon." }, 403);

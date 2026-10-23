@@ -59,9 +59,9 @@ const AVATARS = ['🧑','👨','👩','🧔','👱','🧑‍🦱','👩‍🦰',
 // --- AUDIO ---
 const sfx = { cash: null, alert: null, bgm: null };
 function initAudio() {
-    sfx.bgm = new Audio('/game/assets/audio/hustle-theme.mp3'); sfx.bgm.loop = true; sfx.bgm.volume = 0.3;
-    sfx.cash = new Audio('/game/assets/audio/cash-register-chime.mp3');
-    sfx.alert = new Audio('/game/assets/audio/mission-alert-ping.mp3');
+    sfx.bgm = new Audio('/app/world/audio/hustle-theme.mp3'); sfx.bgm.loop = true; sfx.bgm.volume = 0.3;
+    sfx.cash = new Audio('/app/world/audio/cash-register-chime.mp3');
+    sfx.alert = new Audio('/app/world/audio/mission-alert-ping.mp3');
 }
 function play(s, v=1) { if (!player.settings.audio || !sfx[s]) return; sfx[s].volume = v; sfx[s].play().catch(()=>{}); }
 

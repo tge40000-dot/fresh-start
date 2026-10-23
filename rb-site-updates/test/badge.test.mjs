@@ -127,6 +127,10 @@ sql("INSERT INTO rb_event_submissions (submitter_email, status) VALUES ('alice@e
   assert.equal(st.body.status, "live");
   assert.deepEqual(st.body.levels.map((l) => l.key), ["bronze", "gold"], "only live levels with real perks");
   assert.ok(st.body.earn.some((x) => x.label === "Show up"));
+  assert.ok(!st.body.earn.some((x) => x.label === "Win at RB Collect"), "RB Collect is off, so its prize claims aren't offered as a way to earn");
+  const t0 = await (await go("/badge/terms")).text();
+  assert.ok(!t0.includes("spend points in person") && t0.includes("Rewards you can spend points on are listed here once RB publishes them"), "no rewards yet: no promise of rewards in person");
+  assert.ok(t0.includes("Where a level comes with a perk at shows or events"), "door perks only where a level has one");
   const m = await me("u_alice");
   assert.equal(m.status, 200, JSON.stringify(m.body));
   // welcome 50 + daily 5 + list 25 + coach 50 + $25 order 250 + $9000 order capped 5000 + $10 gift 100 + member 100 + song 100 + event 50
@@ -255,7 +259,7 @@ USERS.u_bob = { email: "bob@example.com" };
   const csp = w.headers.get("Content-Security-Policy");
   assert.ok(/connect-src 'self'[^;]*basemaps\.cartocdn\.com/.test(csp) && !/esm\.sh|instantdb|stripe/i.test(csp), "the game's hosts only: no InstantDB, no Stripe");
   assert.ok(!/instantdb|esm\.sh|js\.stripe\.com|\$9\.99/i.test(wh), "no InstantDB, Stripe or the unbacked $9.99 offer");
-  assert.ok(wh.includes('src="/app/world/main.js?v=w10"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
+  assert.ok(wh.includes('src="/app/world/main.js?v=w11"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
   assert.ok(wh.includes("OPEN THE RB APP") && wh.includes("SEE MEMBERSHIPS"));
   const mj = await (await go("/app/world/main.js")).text(), cj = await (await go("/app/world/rb_world.js")).text();
   assert.ok(mj.includes("from './rb_world.js'") && !mj.includes("@instantdb") && mj.includes("const db = init();"));
@@ -415,6 +419,15 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.equal((await race(Cc, "sync", { race: "race_nope1234", cp: 0, car: [0, 0, 0, 0] })).status, 404);
   assert.equal((await race("bad", "host", { track: LOOP })).status, 400);
   for (const f of ["/app/world/race.js", "/app/world/city.js", "/app/world/city_data.js", "/app/world/peds.js", "/app/world/fx.js", "/app/world/cars.js", "/app/world/audio.js"]) assert.equal((await go(f)).status, 200, f);
+  // the game's sounds now come from RB World itself, not the old game's Worker (/game/assets/audio/)
+  const fs = await import("node:fs"), here = new URL("../src/world/audio/", import.meta.url);
+  for (const f of ["hustle-theme.mp3", "cash-register-chime.mp3", "mission-alert-ping.mp3"]) {
+    const res = await go("/app/world/audio/" + f), want = fs.readFileSync(new URL(f, here));
+    assert.equal(res.status, 200, f); assert.equal(res.headers.get("Content-Type"), "audio/mpeg", f);
+    assert.ok(Buffer.from(await res.arrayBuffer()).equals(want), f + " is byte-identical to the original");
+  }
+  assert.equal((await go("/app/world/audio/nope.mp3")).status === 200, false);
+  assert.ok(!(await (await go("/app/world/main.js")).text()).includes("/game/assets/"), "main.js no longer loads anything from the old game");
 }
 
 // ---------------------------------------------------------------- 4. sign-in rules and the switch
