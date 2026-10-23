@@ -12,7 +12,7 @@ W=$(mktemp -d)
 ACCOUNT=0a7be075f32d9d615349825b83ab8fcb
 py() { python3 -I "$@"; }
 
-for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-memberships rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners rb-game; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
+for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-memberships rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners rb-game rb-showcase yoshcoastmusic assassin-in-the-room-signal weed-relentless-billionaire; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
 # the AI Forge lives in the RB account
 CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" pull rb-studio "$W/rb-studio"
 # artist-router: colours (no-op once live), post links and the ad slot
@@ -45,6 +45,8 @@ py "$ROOT/rb-site-updates/patch_beat_publish.py" "$W/rb-studio"; py "$ROOT/rb-si
 node --no-warnings "$ROOT/rb-site-updates/test/beat-publish.test.mjs" "$W/rb-autopilot"
 py "$ROOT/rb-site-updates/patch_tv.py" "$W/rb-tv"
 py "$ROOT/rb-site-updates/patch_tv_a11y.py" "$W/rb-tv"
+# the email list where people listen and watch: a card on RB Radio, a last slide after the RB TV shorts
+py "$ROOT/rb-site-updates/patch_list_signup.py" "$W/rb-radio" "$W/rb-tv"
 py "$ROOT/rb-site-updates/patch_studio.py" "$W/rb-mastering-studio"
 # studio plug-ins: the test compares against the unpatched engine (bit-identical when no plug-in is ticked), then the patch
 node "$ROOT/rb-site-updates/test/studio-plugins.test.mjs" "$W/rb-mastering-studio" | tail -1
@@ -67,18 +69,25 @@ for s in $ICON_SITES; do py "$ROOT/rb-tools/patch_tabs.py" "$W/$s"; done
 py "$ROOT/rb-tools/patch_seo.py" "$W/artist-router" "$W/beatstore" "$W/rb-events-page" "$W/rb-fund-campaign" "$W/rb-release"
 # RB Command > Create: a publish queue the owner can fill (creative_publish_queue), run on the 10-minute schedule
 py "$ROOT/rb-tools/patch_publish_queue.py" "$W/rb-autopilot"
+# the AI Forge's daily mix follows RB TV's watch data (more shorts while shorts hold people best)
+py "$ROOT/rb-tools/patch_idea_mix.py" "$W/rb-autopilot"
+# the baseline security header on the last pages without one (before the guard, so the guard stays outermost)
+EXTRA_SITES="rb-showcase yoshcoastmusic assassin-in-the-room-signal weed-relentless-billionaire"
+py "$ROOT/rb-tools/patch_csp_more.py" $(for s in $EXTRA_SITES; do echo "$W/$s"; done)
 # crash guard: a passing database/storage error gets one retry and then a "please try again" page, never an error page
-GUARD_SITES="rb-radio rb-tv rb-memberships beatstore rb-events-page rb-fund-campaign rb-release rb-jobs rb-partners rb-game rb-public-content relentless-hub rb-radio-hub rb-command relentless-billionaire-api rb-autopilot"
+GUARD_SITES="rb-radio rb-tv rb-memberships beatstore rb-events-page rb-fund-campaign rb-release rb-jobs rb-partners rb-game rb-public-content relentless-hub rb-radio-hub rb-command relentless-billionaire-api rb-autopilot $EXTRA_SITES"
 py "$ROOT/rb-tools/patch_resilience.py" "$W/artist-router" "$W/rb-mastering-studio" $(for s in $GUARD_SITES; do echo "$W/$s"; done)
 for s in $ICON_SITES; do py "$ROOT/rb-tools/patch_icons.py" "$W/$s" >/dev/null; done # the RB icon on the guard's page too
 # Site images (RB Command > Site images): the screen in rb-command, the pictures and per-site CSS from rb-public-content
 py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-command"; py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-public-content"
 # RB Command > Badges (levels, rewards, achievements, settings) and the Badge desk for the door
 py "$ROOT/rb-command-updates/patch_badges_admin.py" "$W/rb-command"
+# the weekly health report (daily run + Overview)
+py "$ROOT/rb-command-updates/patch_health.py" "$W/rb-command"
 # rb-email: the forwarder replaces Cloudflare's sample
 cp "$ROOT/rb-email/src/index.js" "$W/rb-email/index.js"
 
-for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-studio rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners rb-game; do for f in "$W/$s"/*.js; do node --check "$f"; done; done
+for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-studio rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners rb-game $EXTRA_SITES; do for f in "$W/$s"/*.js; do node --check "$f"; done; done
 T="$ROOT/rb-command-updates/test"
 node "$T/no-duplicates.mjs" "$W/rb-command"
 node --no-warnings "$T/palettes.mjs" "$W/rb-command/theme.js" | tail -1
@@ -97,6 +106,9 @@ node --no-warnings "$ROOT/rb-site-updates/test/seo.test.mjs" "$W/artist-router/a
 node --no-warnings "$ROOT/rb-site-updates/test/resilience.test.mjs" "$W/artist-router/artist-router-v14.js" "$W/rb-mastering-studio"
 node --no-warnings "$ROOT/rb-site-updates/test/guard-all.test.mjs" $(for s in $GUARD_SITES; do echo "$W/$s"; done)
 node --no-warnings "$ROOT/rb-site-updates/test/publish-queue.test.mjs" "$W/rb-autopilot" 2>/dev/null | tail -1
+node --no-warnings "$ROOT/rb-site-updates/test/idea-mix.test.mjs" "$W/rb-autopilot"
+node --no-warnings "$T/health.test.mjs" "$W/rb-command"
+node --no-warnings "$ROOT/rb-site-updates/test/list-signup.test.mjs" "$W/rb-radio" "$W/rb-tv"
 node --no-warnings "$ROOT/rb-site-updates/test/ai-limit.test.mjs" "$W/relentless-billionaire-api/script.js"
 node --no-warnings "$ROOT/rb-site-updates/test/radio-tv.test.mjs" "$W/rb-radio" "$W/rb-tv"
 node "$ROOT/rb-site-updates/test/flow.test.mjs" "$W/rb-radio"
@@ -126,6 +138,7 @@ py "$ROOT/rb-tools/cfworker.py" push artist-router "$W/artist-router"
 for s in rb-favicon rb-release beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners; do py "$ROOT/rb-tools/cfworker.py" push "$s" "$W/$s"; done
 # after artist-router, which serves RB World
 py "$ROOT/rb-tools/cfworker.py" push rb-game "$W/rb-game"
+for s in $EXTRA_SITES; do py "$ROOT/rb-tools/cfworker.py" push "$s" "$W/$s"; done
 if curl -fsS -m 20 https://relentlessbillionaire.com/radio/api/now | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("live") else 1)'; then
   echo "rb-radio: a live show is on air, so it's skipped. Run this again after the show."
 else
