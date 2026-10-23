@@ -34,7 +34,11 @@ const keys = {};
 const joy = { x: 0, y: 0, on: false };
 let lotMeshes = {}, traffic = [], cops = [], drops = [], gpsDrops = [], gpsMarkers = [], job = null, beacon = null;
 let wanted = 0, bustT = 0, escapeT = 0, freeCam = false, lastRent = {}, nearLot = null, stopT = 0, toastBox = null, ui = {};
-let dayLight = null, sun = null, windowMat = null;
+let dayLight = null, sun = null, windowMat = null, sky = null, stars = null, lampMat = null;
+// What happened in the game, for progress.js (levels, quests, achievements, the tutorial) and the HUD.
+const listeners = {};
+export function on(name, cb) { (listeners[name] ||= []).push(cb); }
+function emit(name, data) { (listeners[name] || []).forEach((cb) => { try { cb(data); } catch (e) { console.error(e); } }); }
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -120,6 +124,28 @@ function buildCity() {
     m.compose(new THREE.Vector3(Math.cos(ang) * r, h / 2, Math.sin(ang) * r), new THREE.Quaternion(), new THREE.Vector3(w, h, w)); towers.setMatrixAt(i, m);
   }
   scene.add(towers);
+  // the sky: a gradient dome that follows the time of day, with stars at night
+  sky = new THREE.Mesh(new THREE.SphereGeometry(700, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: { top: { value: new THREE.Color(0x0b1a3a) }, bottom: { value: new THREE.Color(0xC9A84C) } },
+    vertexShader: "varying float h; void main(){ h = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+    fragmentShader: "uniform vec3 top; uniform vec3 bottom; varying float h; void main(){ gl_FragColor = vec4(mix(bottom, top, smoothstep(-0.05, 0.45, h)), 1.0); }" }));
+  scene.add(sky);
+  const sp = new Float32Array(900 * 3);
+  for (let i = 0; i < 900; i++) { const th = Math.random() * Math.PI * 2, ph = Math.random() * 1.3; sp.set([Math.cos(th) * Math.sin(ph) * 650, Math.cos(ph) * 650, Math.sin(th) * Math.sin(ph) * 650], i * 3); }
+  const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.BufferAttribute(sp, 3));
+  stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, transparent: true, opacity: 0, fog: false, depthWrite: false })); scene.add(stars);
+  // street lights on every corner, lit at night
+  lampMat = new THREE.MeshBasicMaterial({ color: 0xFFE2A0 });
+  const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.16, 7, 6), new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8 }), roadLines.length ** 2);
+  const lamps = new THREE.InstancedMesh(new THREE.SphereGeometry(0.45, 10, 8), lampMat, roadLines.length ** 2);
+  let li = 0;
+  for (const rx of roadLines) for (const rz of roadLines) { m.makeTranslation(rx + ROAD / 2 + 0.6, 3.5, rz + ROAD / 2 + 0.6); poles.setMatrixAt(li, m); m.makeTranslation(rx + ROAD / 2 + 0.6, 7.1, rz + ROAD / 2 + 0.6); lamps.setMatrixAt(li++, m); }
+  scene.add(poles); scene.add(lamps);
+  // the plaza garden
+  const trees = new THREE.InstancedMesh(new THREE.ConeGeometry(1.6, 5, 8), new THREE.MeshStandardMaterial({ color: 0x0f3d24, emissive: 0x06210f, emissiveIntensity: 0.4 }), 16);
+  for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; m.makeTranslation(Math.cos(a) * 26, 2.9, Math.sin(a) * 26); trees.setMatrixAt(i, m); }
+  scene.add(trees);
+  const fountain = new THREE.Mesh(new THREE.CylinderGeometry(5, 5.5, 1, 32), new THREE.MeshStandardMaterial({ color: 0x14202a, metalness: 0.9, roughness: 0.1, emissive: 0x1d4f7a, emissiveIntensity: 0.4 })); fountain.position.set(0, 0.9, 22); scene.add(fountain);
   dayLight = new THREE.HemisphereLight(0xfff2d0, 0x101010, 0.0); scene.add(dayLight);
   sun = new THREE.DirectionalLight(0xffffff, 0.0); sun.position.set(-60, 120, 40); scene.add(sun);
 }
@@ -143,7 +169,7 @@ function renderLot(l) {
     const sign = sprite(`${s.owner_id === C.player.id ? "YOUR LOT" : esc(s.owner_name)}\nready to build`, { size: 44, sx: 9, sy: 3.4, border: d.css }); sign.position.set(0, 5, 0); g.add(sign);
   } else {
     const lvl = Math.max(1, Math.min(MAX_LEVEL, s.level || 1)), h = b.h * (0.7 + 0.3 * lvl), w = BLOCK - 10 + lvl;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), new THREE.MeshStandardMaterial({ color: 0x0c0c0c, metalness: 0.7, roughness: 0.3, emissive: b.color, emissiveIntensity: 0.08 }));
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), windowMat);
     body.position.y = h / 2; body.castShadow = true; g.add(body);
     const trim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 0.6, w + 0.4), new THREE.MeshBasicMaterial({ color: b.color })); trim.position.y = h; g.add(trim);
     for (let i = 0; i < lvl; i++) { const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.8), new THREE.MeshBasicMaterial({ color: 0xF5D547 })); star.position.set((i - (lvl - 1) / 2) * 2.2, h + 2, 0); g.add(star); }
@@ -159,16 +185,33 @@ function renderLot(l) {
 }
 
 // ---------------------------------------------------------------- driving
+// A low wedge with a cabin, wheels that spin and steer, head and brake lights; cops get a light bar.
 function makeCar(color, cop, glow) {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.9, 4.4), new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.3, emissive: glow ? color : 0x000000, emissiveIntensity: glow ? 0.35 : 0 })); body.position.y = 0.75; body.castShadow = true; g.add(body);
-  const cab = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.7, 2.2), new THREE.MeshStandardMaterial({ color: 0x050505, metalness: 0.9, roughness: 0.1 })); cab.position.set(0, 1.45, -0.2); g.add(cab);
-  const wheel = new THREE.CylinderGeometry(0.45, 0.45, 0.4, 12), wm = new THREE.MeshStandardMaterial({ color: 0x080808 });
-  for (const [x, z] of [[-1.1, 1.4], [1.1, 1.4], [-1.1, -1.4], [1.1, -1.4]]) { const w = new THREE.Mesh(wheel, wm); w.rotation.z = Math.PI / 2; w.position.set(x, 0.45, z); g.add(w); }
-  const lights = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.2, 0.1), new THREE.MeshBasicMaterial({ color: 0xFFF6D0 })); lights.position.set(0, 0.85, 2.21); g.add(lights);
+  const g = new THREE.Group(), paint = new THREE.MeshStandardMaterial({ color, metalness: 0.7, roughness: 0.25, emissive: glow ? color : 0x000000, emissiveIntensity: glow ? 0.25 : 0 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.7, 4.5), paint); body.position.y = 0.7; body.castShadow = true; g.add(body);
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.35, 1.2), paint); nose.position.set(0, 1.05, 1.5); nose.rotation.x = 0.18; g.add(nose);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.65, 2.0), new THREE.MeshStandardMaterial({ color: 0x0a0d12, metalness: 0.95, roughness: 0.05 })); cab.position.set(0, 1.35, -0.35); g.add(cab);
+  const spoiler = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.12, 0.5), paint); spoiler.position.set(0, 1.45, -2.05); g.add(spoiler);
+  const wheelGeo = new THREE.CylinderGeometry(0.48, 0.48, 0.42, 14), tyre = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.9 }), rim = new THREE.MeshStandardMaterial({ color: 0xC9A84C, metalness: 1, roughness: 0.2 });
+  const wheels = [];
+  for (const [x, z, front] of [[-1.12, 1.45, 1], [1.12, 1.45, 1], [-1.12, -1.45, 0], [1.12, -1.45, 0]]) {
+    const pivot = new THREE.Group(); pivot.position.set(x, 0.48, z);
+    const w = new THREE.Mesh(wheelGeo, tyre); w.rotation.z = Math.PI / 2; pivot.add(w);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.44, 8), rim); hub.rotation.z = Math.PI / 2; w.add(hub);
+    g.add(pivot); wheels.push({ pivot, w, front });
+  }
+  const head = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.16, 0.08), new THREE.MeshBasicMaterial({ color: 0xFFF6D0 })); head.position.set(0, 0.85, 2.27); g.add(head);
+  const tailMat = new THREE.MeshBasicMaterial({ color: 0x550000 });
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.18, 0.08), tailMat); tail.position.set(0, 0.9, -2.27); g.add(tail);
+  g.userData = { wheels, tailMat };
+  if (glow) {
+    const under = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 5), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, depthWrite: false })); under.rotation.x = -Math.PI / 2; under.position.y = 0.06; g.add(under);
+    const flames = [-0.55, 0.55].map((x) => { const f = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.4, 8), new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.85 })); f.rotation.x = -Math.PI / 2; f.position.set(x, 0.55, -2.9); f.visible = false; g.add(f); return f; });
+    g.userData.flames = flames;
+  }
   if (cop) {
-    const r = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.3, 0.4), new THREE.MeshBasicMaterial({ color: 0xff2020 })); r.position.set(-0.4, 1.95, -0.2); g.add(r);
-    const bl = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.3, 0.4), new THREE.MeshBasicMaterial({ color: 0x2060ff })); bl.position.set(0.4, 1.95, -0.2); g.add(bl);
+    const r = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.3, 0.4), new THREE.MeshBasicMaterial({ color: 0xff2020 })); r.position.set(-0.4, 1.8, -0.35); g.add(r);
+    const bl = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.3, 0.4), new THREE.MeshBasicMaterial({ color: 0x2060ff })); bl.position.set(0.4, 1.8, -0.35); g.add(bl);
     g.userData.siren = [r, bl];
   }
   C.scene.add(g);
@@ -181,40 +224,103 @@ function blocked(x, z) {
   return false;
 }
 
+// Keyboard, touch (stick + pedals) and any standard game controller.
+export const pad = { gas: false, brake: false, boost: false, hand: false };
+let padWas = {};
 function driveInput() {
-  let t = 0, s = 0;
-  if (keys.ArrowUp || keys.KeyW) t += 1;
-  if (keys.ArrowDown || keys.KeyS) t -= 1;
+  let t = 0, s = 0, boost = !!(keys.ShiftLeft || keys.ShiftRight || keys.KeyN || pad.boost), hand = !!(keys.Space || pad.hand);
+  if (keys.ArrowUp || keys.KeyW || pad.gas) t += 1;
+  if (keys.ArrowDown || keys.KeyS || pad.brake) t -= 1;
   if (keys.ArrowLeft || keys.KeyA) s += 1;
   if (keys.ArrowRight || keys.KeyD) s -= 1;
-  if (joy.on) { t = -joy.y; s = -joy.x; }
-  return { t, s, brake: !!keys.Space };
+  if (joy.on) { s = -joy.x; if (!pad.gas && !pad.brake) t = Math.abs(joy.y) > 0.2 ? -joy.y : 0; }
+  const gp = navigator.getGamepads ? [...navigator.getGamepads()].find((g) => g && g.connected) : null;
+  if (gp) {
+    const ax = gp.axes[0] || 0, rt = gp.buttons[7]?.value || 0, lt = gp.buttons[6]?.value || 0;
+    if (Math.abs(ax) > 0.15) s = -ax;
+    if (rt > 0.05 || lt > 0.05) t = rt - lt;
+    if (gp.buttons[0]?.pressed) boost = true;
+    if (gp.buttons[1]?.pressed) hand = true;
+    const y = gp.buttons[3]?.pressed, start = gp.buttons[9]?.pressed, sel = gp.buttons[8]?.pressed;
+    if (y && !padWas.y && nearLot) openLot(nearLot);
+    if (sel && !padWas.sel) cycleCam();
+    if (start && !padWas.start && C.help) C.help();
+    padWas = { y, start, sel };
+  }
+  return { t, s, boost, hand };
 }
 
+// Arcade physics: velocity is separate from where the nose points, so the handbrake lets the back slide out.
+const CAMS = ["chase", "far", "hood", "free"];
+let camMode = 0, shake = 0;
+function cycleCam() {
+  camMode = (camMode + 1) % CAMS.length; freeCam = CAMS[camMode] === "free";
+  const b = document.getElementById("btn-pov"); if (b) b.innerText = ["🎮", "🛰️", "🚘", "🖐️"][camMode];
+  toast({ chase: "Camera: chase", far: "Camera: high", hood: "Camera: bonnet", free: "Camera: free (drag to look round)" }[CAMS[camMode]]);
+}
+car.vx = 0; car.vz = 0; car.boost = 1; car.steer = 0;
 function driveCar(dt) {
-  const { t, s, brake } = driveInput(), max = 28;
-  car.speed += t * (t * car.speed < 0 ? 40 : 18) * dt;
-  if (brake) car.speed *= Math.pow(0.05, dt);
-  if (!t) car.speed *= Math.pow(0.35, dt);
-  car.speed = Math.max(-10, Math.min(max, car.speed));
-  car.heading += s * dt * 2.4 * Math.min(1, Math.abs(car.speed) / 6) * Math.sign(car.speed || 1);
-  const nx = car.x + Math.sin(car.heading) * car.speed * dt, nz = car.z + Math.cos(car.heading) * car.speed * dt;
+  const { t, s, boost, hand } = driveInput();
+  const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
+  let fwd = car.vx * fx + car.vz * fz, side = car.vx * fz - car.vz * fx;
+  const boosting = boost && car.boost > 0.02 && t > 0;
+  car.boost = Math.max(0, Math.min(1, car.boost + (boosting ? -0.35 : 0.09) * dt));
+  const max = boosting ? 44 : 30, accel = boosting ? 34 : 19;
+  if (t > 0) fwd += accel * dt * (fwd < max ? 1 : 0);
+  else if (t < 0) fwd -= (fwd > 0 ? 42 : 14) * dt;
+  else fwd *= Math.pow(0.45, dt);
+  fwd = Math.max(-12, Math.min(max, fwd));
+  // steering: easier at low speed, a little less sharp flat out; the handbrake tightens it and lets the back go
+  car.steer += (s - car.steer) * Math.min(1, dt * 8);
+  const grip = hand ? 1.4 : 9, turn = car.steer * dt * (hand ? 3.2 : 2.3) * Math.min(1, Math.abs(fwd) / 7) * (1 - Math.min(0.35, Math.abs(fwd) / 120)) * Math.sign(fwd || 1);
+  car.heading += turn;
+  side *= Math.pow(0.5, dt * grip);
+  if (hand) fwd *= Math.pow(0.7, dt);
+  const nfx = Math.sin(car.heading), nfz = Math.cos(car.heading);
+  car.vx = nfx * fwd + nfz * side; car.vz = nfz * fwd - nfx * side;
+  car.speed = fwd; car.drift = Math.abs(side);
+  const nx = car.x + car.vx * dt, nz = car.z + car.vz * dt;
   if (!blocked(nx, nz)) { car.x = nx; car.z = nz; }
-  else if (!blocked(nx, car.z)) { car.x = nx; car.speed *= 0.6; }
-  else if (!blocked(car.x, nz)) { car.z = nz; car.speed *= 0.6; }
-  else car.speed *= -0.3;
-  car.mesh.position.set(car.x, 0, car.z); car.mesh.rotation.y = car.heading;
+  else {
+    const hit = Math.hypot(car.vx, car.vz);
+    if (!blocked(nx, car.z)) { car.x = nx; car.vz *= -0.2; }
+    else if (!blocked(car.x, nz)) { car.z = nz; car.vx *= -0.2; }
+    else { car.vx *= -0.3; car.vz *= -0.3; }
+    if (hit > 12) { shake = Math.min(1, hit / 30); C.play("alert", 0.25); }
+  }
+  // the car on screen
+  const m = car.mesh, u = m.userData;
+  m.position.set(car.x, 0, car.z); m.rotation.y = car.heading; m.rotation.z = -car.steer * Math.min(1, Math.abs(fwd) / 30) * 0.05;
+  for (const w of u.wheels) { w.w.rotation.x += fwd * dt / 0.48; if (w.front) w.pivot.rotation.y = car.steer * 0.45; }
+  u.tailMat.color.setHex(t < 0 || hand ? 0xff2020 : 0x550000);
+  if (u.flames) u.flames.forEach((f) => { f.visible = boosting; f.scale.set(1, 0.8 + Math.random() * 0.6, 1); });
+  if (car.drift > 6 && Math.abs(fwd) > 10) skid(car.x - nfx * 1.6, car.z - nfz * 1.6, car.heading);
   if (C.mesh()) C.mesh().position.set(car.x, 0, car.z);
-  // camera: chase behind the car unless free camera is on
-  const cam = C.camera, ctl = C.controls();
-  if (!freeCam) {
+  // camera
+  const cam = C.camera, ctl = C.controls(), mode = CAMS[camMode], speed = Math.abs(fwd);
+  cam.fov += ((boosting ? 74 : 55 + Math.min(12, speed * 0.35)) - cam.fov) * Math.min(1, dt * 3); cam.updateProjectionMatrix();
+  shake *= Math.pow(0.02, dt);
+  if (mode !== "free") {
     ctl.enabled = false;
-    const tall = cam.aspect < 1 ? 1.5 : 1, back = (13 + Math.abs(car.speed) * 0.15) * tall;
-    const want = new THREE.Vector3(car.x - Math.sin(car.heading) * back, (7 + Math.abs(car.speed) * 0.05) * tall, car.z - Math.cos(car.heading) * back);
-    cam.position.lerp(want, 1 - Math.pow(0.02, dt));
-    cam.lookAt(car.x + Math.sin(car.heading) * 6, 1.5, car.z + Math.cos(car.heading) * 6);
+    const tall = cam.aspect < 1 ? 1.45 : 1;
+    const back = mode === "far" ? 30 * tall : mode === "hood" ? -0.4 : (12 + speed * 0.12) * tall, up = mode === "far" ? 22 * tall : mode === "hood" ? 1.7 : (6 + speed * 0.04) * tall;
+    const want = new THREE.Vector3(car.x - nfx * back, up, car.z - nfz * back);
+    if (mode === "hood") cam.position.copy(want); else cam.position.lerp(want, 1 - Math.pow(0.015, dt));
+    if (shake > 0.01) cam.position.add(new THREE.Vector3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(shake * 0.6));
+    const ahead = mode === "hood" ? 30 : 6;
+    cam.lookAt(car.x + nfx * ahead, mode === "hood" ? 1.4 : 1.5, car.z + nfz * ahead);
   } else { ctl.enabled = true; ctl.target.set(car.x, 2, car.z); }
 }
+// tyre marks that fade
+const skids = [];
+let skidGeo = null, skidMat = null;
+function skid(x, z, h) {
+  skidGeo ||= new THREE.PlaneGeometry(2.2, 0.5); skidMat ||= new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, depthWrite: false });
+  if (skids.length && Math.hypot(skids[skids.length - 1].position.x - x, skids[skids.length - 1].position.z - z) < 0.6) return;
+  const k = new THREE.Mesh(skidGeo, skidMat.clone()); k.rotation.set(-Math.PI / 2, 0, h); k.position.set(x, 0.06, z); C.scene.add(k); skids.push(k);
+  if (skids.length > 160) { const o = skids.shift(); C.scene.remove(o); o.material.dispose(); }
+}
+function skidsTick(dt) { for (const k of skids) k.material.opacity = Math.max(0, k.material.opacity - dt * 0.03); }
 
 // cars on the road network: they move between intersections
 function nodeNear(x, z) { const f = (v) => roadLines.reduce((a, r) => (Math.abs(r - v) < Math.abs(a - v) ? r : a), roadLines[0]); return [f(x), f(z)]; }
@@ -249,7 +355,7 @@ function moveRoadCar(c, dt, chase) {
   c.mesh.position.set(c.x - hz * side * (chase ? 0 : 1), 0, c.z + hx * side * (chase ? 0 : 1));
   c.mesh.rotation.y = Math.atan2(hx, hz);
   if (c.mesh.userData.siren) { const on = Math.floor(performance.now() / 180) % 2; c.mesh.userData.siren[0].visible = !!on; c.mesh.userData.siren[1].visible = !on; }
-  if (!chase && Math.hypot(c.x - car.x, c.z - car.z) < 3.2) car.speed *= 0.4;
+  if (!chase && Math.hypot(c.x - car.x, c.z - car.z) < 3.2) { car.vx *= 0.4; car.vz *= 0.4; shake = Math.max(shake, 0.4); }
 }
 
 // ---------------------------------------------------------------- cops and the wanted level
@@ -269,13 +375,13 @@ function copsTick(dt) {
   if (near < 3.6) { bustT += dt; if (bustT > 1.2) return busted(); } else bustT = Math.max(0, bustT - dt);
   if (near > 32) escapeT += dt; else escapeT = Math.max(0, escapeT - dt * 0.5);
   const e = document.getElementById("rb-escape"); if (e) e.textContent = Math.round(Math.min(100, (escapeT / 18) * 100)) + "%";
-  if (escapeT > 18) { toast(wanted > 1 ? "Lost them for now. One star down." : "You lost the cops."); setWanted(wanted - 1); }
+  if (escapeT > 18) { toast(wanted > 1 ? "Lost them for now. One star down." : "You lost the cops."); if (wanted === 1) emit("escaped"); setWanted(wanted - 1); }
 }
 function busted() {
   const fine = Math.max(2000, Math.round(C.player.netWorth * 0.1));
   C.player.netWorth = Math.max(0, C.player.netWorth - fine); S.stats.busts++;
   if (job && job.kind === "heist") endJob(false, "Busted. The briefcase is gone.");
-  setWanted(0); car.speed = 0; C.play("alert"); toast(`BUSTED. Fine: ${money(fine)}.`, true); C.sync(); save();
+  setWanted(0); car.speed = 0; car.vx = car.vz = 0; C.play("alert"); emit("busted"); toast(`BUSTED. Fine: ${money(fine)}.`, true); C.sync(); save();
 }
 
 // ---------------------------------------------------------------- hustle jobs
@@ -323,7 +429,7 @@ function endJob(ok, why) {
   if (ok) {
     const tip = job.kind === "vip" ? Math.round(job.reward * Math.max(0, job.left / job.limit) * 0.5) : 0;
     C.player.netWorth += job.reward + tip; C.player.tokens += Math.round(job.reward / 400); S.stats.jobs++; S.stats.earned += job.reward + tip;
-    C.play("cash"); toast(`${job.icon} Done: +${money(job.reward + tip)}${tip ? " (tip " + money(tip) + ")" : ""}`);
+    C.play("cash"); toast(`${job.icon} Done: +${money(job.reward + tip)}${tip ? " (tip " + money(tip) + ")" : ""}`); emit("job", { kind: job.kind, reward: job.reward + tip });
     if (Math.random() < 0.25) giveCard("job");
   } else toast(why || "Job failed.", true);
   job = null; setBeacon(null); ui.job.style.display = "none"; C.sync(); save();
@@ -342,7 +448,7 @@ function giveCard(source, rarity) {
   const rar = rarity || rollRarity(source === "gps" ? 0.05 : 0);
   const role = pick(Object.keys(ROLES));
   const card = { id: Math.random().toString(36).slice(2, 10), role, rarity: rar.key, name: `${pick(FIRST)} the ${ROLES[role]}`, at: Date.now() };
-  S.cards.push(card); save();
+  S.cards.push(card); save(); emit("card", card);
   toast(`🃏 New talent: ${card.name} (${rar.name})`, false, rar.css);
   return card;
 }
@@ -359,7 +465,7 @@ function spawnDrop() {
   const d = { x: p[0], z: p[1], kind, mesh: dropMesh(kind) }; d.mesh.position.set(d.x, 0, d.z); drops.push(d);
 }
 function collect(kind, source) {
-  S.stats.drops++;
+  S.stats.drops++; emit("drop", { kind, source });
   if (kind === "cash") { const v = Math.round(rnd(5, 30)) * 100 * (source === "gps" ? 2 : 1); C.player.netWorth += v; C.play("cash"); toast(`💰 +${money(v)}`); }
   else if (kind === "token") { const v = Math.round(rnd(5, 20)) * (source === "gps" ? 2 : 1); C.player.tokens += v; C.play("cash"); toast(`💎 +${v} tokens`); }
   else giveCard(source);
@@ -445,12 +551,17 @@ function tycoonTick(dt) {
     }
   }
   C.player.netWorth = Math.max(0, C.player.netWorth + total);
-  if (total > 0) S.stats.earned += total;
+  if (total > 0) { S.stats.earned += total; emit("income", total); }
   C.player.empireValue = myLots().reduce((a, l) => { const s = lots[l.id], b = businessByKey(s.business); return a + l.price + (b ? b.cost + Array.from({ length: (s.level || 1) - 1 }, (_, i) => upgradeCost(b, i + 1)).reduce((x, y) => x + y, 0) : 0); }, 0);
   // day and night
   const h = S.clock / 60, sunUp = Math.max(0, Math.sin(((h - 6) / 12) * Math.PI));
   dayLight.intensity = 0.35 + sunUp * 1.3; sun.intensity = 0.15 + sunUp * 1.6; windowMat.emissiveIntensity = 0.2 + (1 - sunUp) * 0.8;
-  C.scene.fog.density = 0.004 + (1 - sunUp) * 0.004;
+  C.scene.fog.density = 0.003 + (1 - sunUp) * 0.004;
+  const dusk = Math.max(0, 1 - Math.abs(sunUp - 0.25) * 4);
+  sky.material.uniforms.top.value.setRGB(0.02 + sunUp * 0.18, 0.03 + sunUp * 0.32, 0.08 + sunUp * 0.55);
+  sky.material.uniforms.bottom.value.setRGB(0.05 + sunUp * 0.45 + dusk * 0.5, 0.04 + sunUp * 0.4 + dusk * 0.2, 0.03 + sunUp * 0.45);
+  C.scene.fog.color.setRGB(0.03 + sunUp * 0.25, 0.03 + sunUp * 0.25, 0.04 + sunUp * 0.3);
+  stars.material.opacity = Math.max(0, 1 - sunUp * 3); lampMat.color.setHex(sunUp > 0.35 ? 0x555044 : 0xFFE2A0);
   ui.clock.textContent = `${sunUp > 0.05 ? "☀️" : "🌙"} ${String(Math.floor(h)).padStart(2, "0")}:${String(Math.floor(S.clock % 60)).padStart(2, "0")} · ${Math.round(Math.abs(car.speed) * 3.6)} km/h`;
 }
 // While you were away: a quarter of the rate, for up to four hours.
@@ -490,7 +601,7 @@ async function payRent(l) {
   lastRent[l.id] = Date.now();
   try {
     const d = await api("/api/world/rent", { id: C.player.id, lot: l.id });
-    if (d.paid > 0) { C.player.netWorth = Math.max(0, C.player.netWorth - d.paid); C.sync(); C.play("alert"); toast(`🏠 Rent: paid ${money(d.paid)} to ${d.owner} for stopping on their lot.`, true); }
+    if (d.paid > 0) { C.player.netWorth = Math.max(0, C.player.netWorth - d.paid); C.sync(); C.play("alert"); emit("rent-paid", d.paid); toast(`🏠 Rent: paid ${money(d.paid)} to ${d.owner} for stopping on their lot.`, true); }
   } catch (e) {}
 }
 
@@ -534,7 +645,7 @@ function openLot(l) {
       ${count >= MAX_LOTS_PER_PLAYER ? `<div class="rb-muted">You own ${MAX_LOTS_PER_PLAYER} lots, the most anyone can.</div>` : C.player.netWorth < l.price ? `<div class="rb-muted">You need ${money(l.price - C.player.netWorth)} more. Run some jobs.</div>` : ""}
       <button class="btn-ghost" data-e="close">CLOSE</button>`, {
       close: hidePanel,
-      buy: async () => { if (C.player.netWorth < l.price) return; const r = await lotAction(l.id, "buy"); if (r && r.ok) { C.player.netWorth -= l.price; C.sync(); C.play("cash"); toast(`🏠 You bought lot ${l.id} in ${d.name}.`); if (ownsSet(l.district)) toast(`🎉 MONOPOLY! You own all of ${d.name}.`); save(); openLot(l); } },
+      buy: async () => { if (C.player.netWorth < l.price) return; const r = await lotAction(l.id, "buy"); if (r && r.ok) { C.player.netWorth -= l.price; C.sync(); C.play("cash"); toast(`🏠 You bought lot ${l.id} in ${d.name}.`); emit("buy", l); if (ownsSet(l.district)) { toast(`🎉 MONOPOLY! You own all of ${d.name}.`); emit("set", l.district); } save(); openLot(l); } },
     });
   }
   if (s.owner_id !== C.player.id) {
@@ -542,7 +653,7 @@ function openLot(l) {
   }
   if (!b) {
     const tier = d.tier, acts = { close: hidePanel, sell: () => sellLot(l) };
-    const rows = BUSINESSES.map((x) => { const ok = x.tier <= tier, afford = C.player.netWorth >= x.cost; acts["b_" + x.key] = async () => { if (!ok || !afford) return; const r = await lotAction(l.id, "build", { business: x.key }); if (r && r.ok) { C.player.netWorth -= x.cost; bizState(l.id).price = x.fair; C.sync(); C.play("cash"); toast(`${x.icon} ${x.name} is open!`); save(); openLot(l); } };
+    const rows = BUSINESSES.map((x) => { const ok = x.tier <= tier, afford = C.player.netWorth >= x.cost; acts["b_" + x.key] = async () => { if (!ok || !afford) return; const r = await lotAction(l.id, "build", { business: x.key }); if (r && r.ok) { C.player.netWorth -= x.cost; bizState(l.id).price = x.fair; C.sync(); C.play("cash"); toast(`${x.icon} ${x.name} is open!`); emit("build", x.key); save(); openLot(l); } };
       return `<div class="rb-card ${ok ? "" : "rb-off"}"><div><b>${x.icon} ${x.name}</b><div class="rb-muted">${ok ? `about ${money(x.cap * 0.75 * x.fair - x.upkeep)}/h at a fair ${money(x.fair)} · ${x.night > 1.2 ? "busiest at night" : x.night < 0.6 ? "a daytime business" : "steady all day"}` : `needs a ${["", "", "Arts or Market", "Midtown or Uptown", "Financial or Billionaire Row"][x.tier]} lot or better`}</div></div><button class="rb-btn" data-e="b_${x.key}" ${ok && afford ? "" : "disabled"}>${money(x.cost)}</button></div>`; }).join("");
     return panel(`${head}<div class="subtitle">Build a business. Pricier districts unlock bigger ones.</div>${rows}<button class="btn-ghost" data-e="sell">SELL THE LOT (half back)</button><button class="btn-ghost" data-e="close">CLOSE</button>`, acts);
   }
@@ -554,7 +665,7 @@ function openLot(l) {
   const acts = {
     close: hidePanel,
     price: (ev, el) => { st.price = Math.max(1, Math.round(Number(el.value))); save(); openLot(l); },
-    up: async () => { if (lvl >= MAX_LEVEL || C.player.netWorth < up) return; const r = await lotAction(l.id, "upgrade", { level: lvl + 1 }); if (r && r.ok) { C.player.netWorth -= up; C.sync(); C.play("cash"); toast(`${b.icon} Upgraded to ${"★".repeat(lvl + 1)}`); save(); openLot(l); } },
+    up: async () => { if (lvl >= MAX_LEVEL || C.player.netWorth < up) return; const r = await lotAction(l.id, "upgrade", { level: lvl + 1 }); if (r && r.ok) { C.player.netWorth -= up; C.sync(); C.play("cash"); toast(`${b.icon} Upgraded to ${"★".repeat(lvl + 1)}`); emit("upgrade", lvl + 1); save(); openLot(l); } },
     mkt: () => { const c = Math.round(b.cost * 0.05); if (C.player.netWorth < c) return; C.player.netWorth -= c; st.mkt = Date.now() + 5 * 60000; C.sync(); toast(`📣 Marketing campaign running: +30% customers for 5 minutes.`); save(); openLot(l); },
     hire: (ev, el) => { if (!el.value || st.staff.length >= 2) return; st.staff.push(el.value); save(); openLot(l); },
     rename: () => { const n = prompt("Name your business", s.name || b.name); if (n && n.trim()) lotAction(l.id, "rename", { title: n.trim().slice(0, 28) }).then(() => openLot(l)); },
@@ -642,7 +753,7 @@ function buildUi() {
   const knob = j.firstChild, move = (e) => { const r = j.getBoundingClientRect(), t = e.touches ? e.touches[0] : e; let x = (t.clientX - r.left - 60) / 50, y = (t.clientY - r.top - 60) / 50; const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; } joy.x = x; joy.y = y; joy.on = true; knob.style.transform = `translate(${x * 35}px,${y * 35}px)`; e.preventDefault(); };
   const end = () => { joy.on = false; joy.x = joy.y = 0; knob.style.transform = ""; };
   j.addEventListener("touchstart", move, { passive: false }); j.addEventListener("touchmove", move, { passive: false }); j.addEventListener("touchend", end); j.addEventListener("touchcancel", end);
-  window.addEventListener("keydown", (e) => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) return; keys[e.code] = true; if (e.code === "KeyE" && nearLot) openLot(nearLot); if (/Arrow|Space/.test(e.code)) e.preventDefault(); });
+  window.addEventListener("keydown", (e) => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) return; keys[e.code] = true; if (e.code === "KeyE" && nearLot) openLot(nearLot); if (e.code === "KeyC") cycleCam(); if (e.code === "KeyH" && C.help) C.help(); if (e.code === "KeyR") emit("race-key"); if (e.code === "Escape") hidePanel(); if (/Arrow|Space/.test(e.code)) e.preventDefault(); });
   window.addEventListener("keyup", (e) => { keys[e.code] = false; });
   // the existing buttons get the new systems; two new ones for the empire and the talent book
   const ctr = document.getElementById("controls");
@@ -652,7 +763,8 @@ function buildUi() {
   document.getElementById("btn-hustle").onclick = openJobs;
   document.getElementById("btn-hustle").title = "Hustle: jobs and heists";
   document.getElementById("btn-invest").onclick = openEmpire;
-  document.getElementById("btn-pov").onclick = () => { freeCam = !freeCam; document.getElementById("btn-pov").innerText = freeCam ? "🚗" : "🎮"; toast(freeCam ? "Free camera: drag to look around. Tap 🚗 to follow your car." : "Following your car."); };
+  document.getElementById("btn-pov").onclick = cycleCam;
+  document.getElementById("btn-pov").title = "Camera view";
   const hint = window.matchMedia("(pointer:fine)").matches ? "Drive with WASD or the arrow keys, Space to brake, E at a lot." : "Drive with the stick bottom-left. Stop by a lot to buy or build.";
   // The chips sit just under the stats, wherever those end (two rows on a phone).
   const place = () => {
@@ -688,11 +800,13 @@ export function initEmpire(ctx) {
     dt = Math.min(dt, 0.1);
     driveCar(dt);
     for (const c of traffic) moveRoadCar(c, dt, false);
-    copsTick(dt); jobTick(dt); dropsTick(dt, t); lotTick(dt);
+    copsTick(dt); jobTick(dt); dropsTick(dt, t); lotTick(dt); skidsTick(dt); emit("frame", dt);
     for (const g of Object.values(lotMeshes)) for (const o of g.children) if (o.userData.spin) o.rotation.y += dt;
     acc += dt; if (acc >= 1) { tycoonTick(acc); acc = 0; S.lastTick = Date.now(); }
     gpsAcc += dt; if (gpsAcc >= 5) { gpsAcc = 0; gpsTick(); save(); }
   });
   window.addEventListener("beforeunload", () => { S.lastTick = Date.now(); save(); });
-  return { openLot, openEmpire, openJobs, setWanted, state: S, lots, car };
+  return { openLot, openEmpire, openJobs, setWanted, state: S, lots, car, toast, panel, hidePanel, emit, money,
+    radar: () => ({ car, cops, traffic, drops, job, lots, wanted, roadLines, mine: (l) => mine(l), lotOwner }), camName: () => CAMS[camMode], save,
+    giveCard: (key) => giveCard("reward", RARITY.find((r) => r.key === key)) };
 }

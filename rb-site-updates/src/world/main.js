@@ -7,6 +7,8 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { init, id } from './rb_world.js';
 // The city you drive, buy, build and collect in (property, businesses, jobs, drops).
 import { initEmpire } from './empire.js';
+import { initHud } from './hud.js';
+import { initProgress } from './progress.js';
 
 // --- CORE ---
 const db = init();
@@ -486,7 +488,11 @@ async function startGame() {
         controls: () => controls, mesh: () => playerMesh, minimap: () => minimap, gps: () => gpsFix,
         onFrame: (f) => frameHooks.push(f),
         sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); },
+        help: () => hud && hud.help(),
     });
+    const ectx = { scene, player, play, gps: () => gpsFix, onFrame: (f) => frameHooks.push(f), sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); } };
+    const hud = initHud(window.RBEmpire, ectx);
+    window.RBProgress = initProgress(window.RBEmpire, ectx);
     fetchCalendarEvents();
 }
 

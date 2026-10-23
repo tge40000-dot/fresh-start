@@ -44,10 +44,10 @@ if world.count("<!--CLERK-LOADER-->") != 1 or "__CLERK_KEY__" not in world or 'd
 # The world page has no nonce: its own script tags carry none, and its CSP allows inline scripts as the game always has.
 world = world.replace("<!--CLERK-LOADER-->", loader.group(0).replace(' nonce="__NONCE__"', ""))
 world_main = (wsrc / "main.js").read_text(encoding="utf-8")
-world_client = (wsrc / "rb_world.js").read_text(encoding="utf-8")
+# Every game module in src/world (main.js, rb_world.js, empire.js, ...) is served at /app/world/<name>.js.
+world_files = {f.name: f.read_text(encoding="utf-8") for f in sorted(wsrc.glob("*.js")) if f.name != "world-worker.js"}
 world_code = (wsrc / "world-worker.js").read_text(encoding="utf-8")
-world_empire = (wsrc / "empire.js").read_text(encoding="utf-8")
-world_defs = (wsrc / "empire_defs.js").read_text(encoding="utf-8")
+world_defs = world_files["empire_defs.js"]
 # The server uses the same lot, district and business tables as the game, inside a namespace (RBE) so names like LOTS
 # can't clash with anything else in artist-router.
 defs_names = re.findall(r"^export (?:const|function) (\w+)", world_defs, re.M)
@@ -72,8 +72,7 @@ END = "// ---------------------------------------------------------------- end R
 qr_block = "const rbbQrcode = (function () {\n" + qr.rstrip("\n") + "\nreturn qrcode;\n})();\n"
 block = (START + "const RB_BADGE_HTML = " + json.dumps(page) + ";\n" + "const RB_APP_HTML = " + json.dumps(app) + ";\n"
          + "const RB_BADGE_SCHEMA = " + json.dumps(statements) + ";\n" + qr_block + goldrush.rstrip("\n") + "\n" + code.rstrip("\n") + "\n"
-         + "const RB_WORLD_HTML = " + json.dumps(world) + ";\nconst RB_WORLD_MAIN = " + json.dumps(world_main) + ";\nconst RB_WORLD_CLIENT = " + json.dumps(world_client) + ";\n"
-         + "const RB_WORLD_EMPIRE = " + json.dumps(world_empire) + ";\nconst RB_WORLD_DEFS = " + json.dumps(world_defs) + ";\n" + rbe_block
+         + "const RB_WORLD_HTML = " + json.dumps(world) + ";\nconst RB_WORLD_FILES = " + json.dumps(world_files) + ";\n" + rbe_block
          + world_code.rstrip("\n") + "\n" + END)
 
 if START in s:

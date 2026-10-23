@@ -13,7 +13,7 @@
 // relentlessbillionaire.com/game/ keeps working); play-time points only start once RB Badge itself is switched on.
 const WORLD_PEER_SECONDS = 20;
 const WORLD_BEAT_CREDIT = 10;
-const WORLD_VERSION = "w4";
+const WORLD_VERSION = "w5";
 const WORLD_OWNER_DAYS = 14; // a lot whose owner hasn't played for this long is for sale again
 
 function worldClean(s, n) { return String(s ?? "").replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, n); }
@@ -206,7 +206,8 @@ async function rbWorldRoute(request, env, url, path, method) {
     const html = RB_WORLD_HTML.replace("__CLERK_KEY__", () => rbcScriptJson(String(env.CLERK_PUBLISHABLE_KEY || ""))).replaceAll("__VERSION__", WORLD_VERSION);
     return new Response(request.method === "HEAD" ? null : html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Content-Security-Policy": worldCsp(env), "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN", "Referrer-Policy": "strict-origin-when-cross-origin" } });
   }
-  const files = { "/app/world/main.js": RB_WORLD_MAIN, "/app/world/rb_world.js": RB_WORLD_CLIENT, "/app/world/empire.js": RB_WORLD_EMPIRE, "/app/world/empire_defs.js": RB_WORLD_DEFS };
+  const file = /^\/app\/world\/([a-z_]+\.js)$/.exec(path)?.[1];
+  const files = file && Object.hasOwn(RB_WORLD_FILES, file) ? { [path]: RB_WORLD_FILES[file] } : {};
   if (Object.hasOwn(files, path) && page) {
     if (!g.worldOpen) return new Response("// RB World is coming soon.\n", { status: 404, headers: { "Content-Type": "application/javascript; charset=utf-8" } });
     return new Response(files[path], { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff" } });
