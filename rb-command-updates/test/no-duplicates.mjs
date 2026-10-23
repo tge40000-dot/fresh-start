@@ -4,9 +4,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 const dir = process.argv[2];
 const ONCE = {
-  "index.js": ['import * as affiliate from', 'import * as showplanner from', 'import * as analytics from', 'import * as rehost from', 'if (path === "/api/affiliate/preview")',
+  "index.js": ['import * as mediakit from', 'import * as weeklyHealth from', 'import * as worldadmin from', 'await weeklyHealth.weekly(env)', 'const week = await weeklyHealth.latest(env)', 'if (path === "/world") {', 'if (path === "/api/world-admin")', 'import * as affiliate from', 'import * as showplanner from', 'import * as analytics from', 'import * as rehost from', 'if (path === "/api/affiliate/preview")',
     'if (path === "/api/shows/suggest")', 'if (path === "/api/shows/plans")', 'if (path === "/api/analytics")', 'if (path === "/api/rehost/run")', 'await showplanner.topUp(env).catch(() => null)', 'await analytics.crashes(env).catch(() => null)', 'async function daily(env)'],
-  "ui.js": ["function viewAffiliate()", "function viewShows(params)", "function showCalendar(", "function viewShowPlan(", "function viewAnalytics(params)", "function drawChart(", "function viewRehost()", "function postLink(",
+  "ui.js": ['NAV_TOP.push(["/world", "RB World"])', "function viewAffiliate()", "function viewShows(params)", "function showCalendar(", "function viewShowPlan(", "function viewAnalytics(params)", "function drawChart(", "function viewRehost()", "function postLink(",
     ".afgrid{", ".calgrid{display:grid", ".achart{", 'NAV_TOP.push(["affiliate"', 'NAV_TOP.push(["shows"', 'NAV_TOP.push(["analytics"', 'r.name === "affiliate"', 'r.name === "shows"', 'r.name === "analytics"', 'r.name === "rehost"'],
   "tables.js": ['surface: f.pick("Shows on"'],
 };

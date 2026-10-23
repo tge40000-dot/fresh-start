@@ -53,6 +53,8 @@ node "$ROOT/rb-site-updates/test/studio-plugins.test.mjs" "$W/rb-mastering-studi
 py "$ROOT/rb-site-updates/patch_studio_plugins.py" "$W/rb-mastering-studio"
 # after a mastered download: "Next: release it"
 py "$ROOT/rb-site-updates/patch_next_steps.py" "$W/rb-mastering-studio"
+# studio checkout without Stripe Managed Payments (it refused every product without a tax code)
+py "$ROOT/rb-site-updates/patch_studio_checkout.py" "$W/rb-mastering-studio"
 # custom palettes from the builder: every copy of theme.js learns them (consumers are deployed before rb-command)
 for s in rb-public-content artist-router rb-radio rb-command; do py "$ROOT/rb-tools/patch_theme_custom.py" "$W/$s"; done
 # rb-command: every patch, in order; each skips what's already there and drops copies an older script added twice
@@ -84,6 +86,8 @@ py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-command"; py "$ROOT/rb-tools/pat
 py "$ROOT/rb-command-updates/patch_badges_admin.py" "$W/rb-command"
 # the weekly health report (daily run + Overview)
 py "$ROOT/rb-command-updates/patch_health.py" "$W/rb-command"
+# RB World's controls (/world): switches, car radio, players, moderation, lots and races
+py "$ROOT/rb-command-updates/patch_world_admin.py" "$W/rb-command"
 # rb-email: the forwarder replaces Cloudflare's sample
 cp "$ROOT/rb-email/src/index.js" "$W/rb-email/index.js"
 
@@ -108,11 +112,13 @@ node --no-warnings "$ROOT/rb-site-updates/test/guard-all.test.mjs" $(for s in $G
 node --no-warnings "$ROOT/rb-site-updates/test/publish-queue.test.mjs" "$W/rb-autopilot" 2>/dev/null | tail -1
 node --no-warnings "$ROOT/rb-site-updates/test/idea-mix.test.mjs" "$W/rb-autopilot"
 node --no-warnings "$T/health.test.mjs" "$W/rb-command"
+node --no-warnings "$T/world-admin.test.mjs" "$W/rb-command"
 node --no-warnings "$ROOT/rb-site-updates/test/list-signup.test.mjs" "$W/rb-radio" "$W/rb-tv"
 node --no-warnings "$ROOT/rb-site-updates/test/ai-limit.test.mjs" "$W/relentless-billionaire-api/script.js"
 node --no-warnings "$ROOT/rb-site-updates/test/radio-tv.test.mjs" "$W/rb-radio" "$W/rb-tv"
 node "$ROOT/rb-site-updates/test/flow.test.mjs" "$W/rb-radio"
 node "$ROOT/rb-site-updates/test/studio.test.mjs" "$W/rb-mastering-studio"
+node --no-warnings "$ROOT/rb-site-updates/test/studio-checkout.test.mjs" "$W/rb-mastering-studio"
 node "$ROOT/rb-tools/test/custom-palettes.mjs" "$W/rb-command" "$W/rb-public-content" "$W/rb-radio" "$W/artist-router"
 node "$ROOT/rb-email/test/test.mjs"
 node --no-warnings "$ROOT/rb-site-updates/test/memberships.test.mjs" "$W/rb-memberships/index.js"

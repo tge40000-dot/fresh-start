@@ -145,6 +145,7 @@ export function help() {
     <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows</td><td>Drive and steer</td></tr>
     <tr><td><kbd>Space</kbd></td><td>Handbrake: drift round corners</td></tr>
     <tr><td><kbd>G</kbd></td><td>Horn</td></tr>
+    <tr><td><kbd>M</kbd> or 📻</td><td>Car radio: RB Radio live, the same song as everyone</td></tr>
     <tr><td><kbd>P</kbd></td><td>Photo mode: the HUD hides, orbit the car, set the blur and a filter, save the picture</td></tr>
     <tr><td><kbd>Shift</kbd> or <kbd>N</kbd></td><td>Nitro (the blue gauge refills)</td></tr>
     <tr><td><kbd>E</kbd></td><td>The lot you're next to: buy, build, manage</td></tr>

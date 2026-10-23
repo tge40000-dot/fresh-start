@@ -121,8 +121,15 @@
 
         /* RADIO BAR */
         #radio-bar { position: absolute; bottom: calc(var(--safe-bottom) + 72px); left: 12px; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 20px; padding: 4px 12px; z-index: 9; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(12px); }
-        #radio-bar button { background: none; border: none; color: var(--gold); font-size: 14px; cursor: pointer; }
-        #radio-bar span { font-size: 9px; color: rgba(255,255,255,0.5); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #radio-bar button { background: none; border: none; color: var(--gold); font-size: 16px; cursor: pointer; min-width: 36px; min-height: 36px; margin: -4px -6px -4px -8px; touch-action: manipulation; }
+        #radio-bar .rtxt { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+        #radio-bar .rtxt b { font-size: 7px; letter-spacing: .22em; color: var(--gold); }
+        #radio-bar.live .rtxt b { color: #FF5A6E; }
+        #radio-bar span { font-size: 9px; color: rgba(255,255,255,0.55); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #radio-bar.on span { color: rgba(255,255,255,0.9); }
+        #radio-bar.on #btn-radio { text-shadow: 0 0 8px var(--gold); }
+        #radio-vol { width: 58px; accent-color: var(--gold); }
+        @media (max-width: 420px) { #radio-vol { display: none; } #radio-bar span { max-width: 110px; } }
 
         /* CALENDAR EVENTS */
         #events-bar { position: absolute; bottom: calc(var(--safe-bottom) + 72px); right: 12px; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 10px; padding: 6px 10px; z-index: 9; backdrop-filter: blur(12px); max-width: 180px; }
@@ -199,7 +206,7 @@
         <input type="text" class="start-input" id="input-name" placeholder="Enter your gamer name" maxlength="20" autocomplete="off">
         <button class="btn-enter" id="btn-start">ENTER GAME</button>
         <div class="admin-row">
-            <input type="checkbox" id="chk-admin"><label for="chk-admin">Enter as Admin</label>
+            <input type="checkbox" id="chk-admin"><label for="chk-admin">Enter as Admin (RB Command)</label>
         </div>
     </div>
 
@@ -255,9 +262,10 @@
         </div>
 
         <!-- Radio -->
-        <div id="radio-bar">
-            <button id="btn-radio">📻</button>
-            <span id="radio-track">♪ RB Radio</span>
+        <div id="radio-bar" data-rb-radio-host role="region" aria-label="Car radio">
+            <button id="btn-radio" type="button" aria-pressed="false" aria-label="Car radio: RB Radio on or off (M)" title="Car radio: RB Radio (M)">📻</button>
+            <div class="rtxt"><b>RB RADIO</b><span id="radio-track" aria-live="polite">Press 📻 for RB Radio</span></div>
+            <input id="radio-vol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Radio volume">
         </div>
 
         <!-- Calendar Events -->
@@ -375,12 +383,12 @@
     // Admin redirect (inline, no module dependency)
     document.getElementById('btn-start').addEventListener('click', function() {
         if (document.getElementById('chk-admin').checked) {
-            window.location.href = '/admin';
+            window.location.href = 'https://team.relentlessbillionaire.com/world';
         }
     });
     </script>
-    <script>window.RB_CLERK_KEY = __CLERK_KEY__;</script>
+    <script>window.RB_CLERK_KEY = __CLERK_KEY__; window.RB_WORLD_CFG = __WORLD_CFG__;</script>
 <!--CLERK-LOADER-->
     <script type="module" src="/app/world/main.js?v=__VERSION__"></script>
-<script src="https://relentlessbillionaire.com/radio/embed.js" defer data-rb-radio data-bar="off"></script><script>(function(){function w(){var b=document.getElementById("btn-radio"),R=window.RBRadio;if(!b||!R||b.dataset.rb)return;b.dataset.rb="1";b.title="RB Radio";b.setAttribute("aria-label","RB Radio: play or pause");b.addEventListener("click",function(){R.toggle();});R.subscribe(function(s){b.setAttribute("aria-pressed",s&&s.playing?"true":"false");});}if(window.RBRadio)w();else window.addEventListener("rbradio:ready",w);})();</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4eaa77af88742a6',t:'MTc5MjY5NDY3NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script src="https://relentlessbillionaire.com/radio/embed.js" defer data-rb-radio data-bar="off"></script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4eaa77af88742a6',t:'MTc5MjY5NDY3NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

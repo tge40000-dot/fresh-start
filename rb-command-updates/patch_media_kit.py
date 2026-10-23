@@ -42,7 +42,11 @@ if BLOCK in s:
     s = s.replace(BLOCK, "" if LINE in s else LINE)
     changed = True
 for old, new in edits:
-    if new in s:
+    # done already, even if another patch has since added its own line at the same anchor: look for the first
+    # distinctive line this edit adds
+    added = new.replace(old, "", 1) if old in new else new
+    first = next((ln for ln in added.split("\n") if len(ln.strip()) > 20), "")
+    if new in s or (first and first in s):
         continue
     if s.count(old) != 1:
         raise SystemExit(f"rb-command/index.js: anchor found {s.count(old)} times: {old[:70]!r}")

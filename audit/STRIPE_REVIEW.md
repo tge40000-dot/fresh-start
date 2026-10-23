@@ -1,5 +1,16 @@
 # Stripe review, 23 Oct 2026
 
+**Update, later on 23 Oct (with the owner's OK):**
+- **RB Studio checkout fixed.** The studio turned out to be connected to a second Stripe account (`acct_1U8gl1…`), which has Stripe Managed Payments on by default. Managed Payments refused every product without a tax code, so every studio purchase failed with "the product tax code is missing". Studio checkout sessions now ask for `managed_payments[enabled]=false` (`rb-site-updates/patch_studio_checkout.py`), the same as the beat store and `/fund`. Checked live: a single master and a monthly plan both open a live Stripe checkout page. Sales tax stays RB's responsibility, as it already is for the store and `/fund`.
+- **10 duplicate products archived** (archived, not deleted; this can be undone in the dashboard):
+  - both sets of ELITE, PRO and STARTER Membership;
+  - the older copy of Consulting, Outreach, Flyer and Lead Generation.
+
+  No site's code used them.
+- **Still to do by hand:** delete the disabled webhook (`studio.relentlessbillionaire.vip/api/donors/webhook`) in the dashboard, because the Stripe connector can't delete webhooks. It's already disabled, so it's harmless.
+
+The original review follows.
+
 This was a read-only check of the one live Stripe account, "Relentless Billionaire" (`acct_1SjTtWB7eDnuwXUA`), made through the Stripe connector. Nothing in Stripe was created, changed or archived. Every change below waits on the owner's OK.
 
 ## 1. RB Studio can't take payments from this account (check first)
