@@ -14,7 +14,7 @@
 // relentlessbillionaire.com/game/ keeps working); play-time points only start once RB Badge itself is switched on.
 const WORLD_PEER_SECONDS = 20;
 const WORLD_BEAT_CREDIT = 10;
-const WORLD_VERSION = "w11";
+const WORLD_VERSION = "w13";
 const WORLD_OWNER_DAYS = 14; // a lot whose owner hasn't played for this long is for sale again
 const WORLD_CAR_COLOR = /^#[0-9a-fA-F]{6}$/;
 
@@ -78,8 +78,8 @@ async function worldBeat(request, env, g, body) {
   const [, peers, board, chat] = await env.DB.batch([
     env.DB.prepare("INSERT INTO world_players (id, name, clerk_user_id, net_worth, tokens, kills, deaths, health, lng, lat, seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, clerk_user_id = coalesce(excluded.clerk_user_id, world_players.clerk_user_id), net_worth = excluded.net_worth, tokens = excluded.tokens, kills = excluded.kills, deaths = excluded.deaths, health = excluded.health, lng = coalesce(excluded.lng, world_players.lng), lat = coalesce(excluded.lat, world_players.lat), seen_at = excluded.seen_at")
       .bind(pid, name, clerkId, worldNum(body.netWorth), worldNum(body.tokens), worldNum(body.kills, 1e9), worldNum(body.deaths, 1e9), Math.max(0, Math.min(1000, worldNum(body.health, 1e6))), lng, lat, now),
-    env.DB.prepare("SELECT p.id, p.name, p.net_worth, p.health, p.lng, p.lat, c.x, c.z, c.h, c.s, c.level, c.color, c.at FROM world_players p LEFT JOIN world_cars c ON c.id = p.id WHERE p.seen_at >= ? AND p.id != ? ORDER BY p.seen_at DESC LIMIT 50").bind(new Date(Date.now() - WORLD_PEER_SECONDS * 1000).toISOString(), pid),
-    env.DB.prepare("SELECT id, name, net_worth FROM world_players WHERE seen_at >= ? ORDER BY net_worth DESC LIMIT 10").bind(new Date(Date.now() - 30 * 864e5).toISOString()),
+    env.DB.prepare("SELECT p.id, p.name, p.net_worth, p.health, p.lng, p.lat, c.x, c.z, c.h, c.s, c.level, c.color, c.at FROM world_players p LEFT JOIN world_cars c ON c.id = p.id WHERE p.seen_at >= ? AND p.id != ? AND p.id NOT IN (SELECT id FROM world_bans) ORDER BY p.seen_at DESC LIMIT 50").bind(new Date(Date.now() - WORLD_PEER_SECONDS * 1000).toISOString(), pid),
+    env.DB.prepare("SELECT id, name, net_worth FROM world_players WHERE seen_at >= ? AND id NOT IN (SELECT id FROM world_bans) ORDER BY net_worth DESC LIMIT 10").bind(new Date(Date.now() - 30 * 864e5).toISOString()),
     since > 0
       ? env.DB.prepare("SELECT n, player_id, name, text, created_at FROM world_chat WHERE n > ? ORDER BY n LIMIT 30").bind(since)
       : env.DB.prepare("SELECT * FROM (SELECT n, player_id, name, text, created_at FROM world_chat WHERE created_at >= ? ORDER BY n DESC LIMIT 20) ORDER BY n").bind(new Date(Date.now() - 6 * 3600e3).toISOString()),
@@ -294,8 +294,9 @@ async function worldChat(request, env, body) {
   return rbcJson({ ok: true });
 }
 
-async function worldAds(env) {
+async function worldAds(env, g) {
   const out = [];
+  if (g && g.worldNotice) out.push({ id: "notice", status: "live", channel: "Ticker", title: "RB World", body: g.worldNotice });
   try {
     const r = await env.DB.prepare("SELECT id, advertiser, headline, body FROM ads WHERE status = 'live' AND surface IN ('all', 'game') AND (starts_at IS NULL OR starts_at = '' OR datetime(starts_at) <= datetime('now')) AND (ends_at IS NULL OR ends_at = '' OR datetime(ends_at) >= datetime('now')) ORDER BY weight DESC, id LIMIT 10").all();
     for (const a of r.results || []) out.push({ id: "ad" + a.id, status: "live", channel: "Ticker", title: a.headline || a.advertiser, body: a.body || a.advertiser || "" });
@@ -332,7 +333,8 @@ async function rbWorldRoute(request, env, url, path, method) {
       const nonce = rbcNonce();
       return new Response(request.method === "HEAD" ? null : RB_APP_HTML.replaceAll("__NONCE__", nonce).replace("__STATUS__", "off").replace("__CLERK_KEY__", '""').replace("__STATE__", () => rbcScriptJson(rbbPublicState(g))), { headers: rbcPageHeaders(env, nonce) });
     }
-    const html = RB_WORLD_HTML.replace("__CLERK_KEY__", () => rbcScriptJson(String(env.CLERK_PUBLISHABLE_KEY || ""))).replaceAll("__VERSION__", WORLD_VERSION);
+    const html = RB_WORLD_HTML.replace("__CLERK_KEY__", () => rbcScriptJson(String(env.CLERK_PUBLISHABLE_KEY || ""))).replaceAll("__VERSION__", WORLD_VERSION)
+      .replace("__WORLD_CFG__", () => rbcScriptJson({ radio: g.worldRadio, notice: g.worldNotice }));
     return new Response(request.method === "HEAD" ? null : html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Content-Security-Policy": worldCsp(env), "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN", "Referrer-Policy": "strict-origin-when-cross-origin" } });
   }
   const file = /^\/app\/world\/([a-z_]+\.js)$/.exec(path)?.[1];
@@ -351,12 +353,14 @@ async function rbWorldRoute(request, env, url, path, method) {
   }
   if (!path.startsWith("/api/world/")) return null;
   if (!g.worldOpen) return rbcJson({ ok: false, error: "RB World is coming soon." }, 403);
-  if (path === "/api/world/ads" && method === "GET") return await worldAds(env);
+  if (path === "/api/world/ads" && method === "GET") return await worldAds(env, g);
   if (["/api/world/beat", "/api/world/chat", "/api/world/lot", "/api/world/rent", "/api/world/race"].includes(path) && method === "POST") {
     const origin = request.headers.get("Origin");
     if (origin && origin !== url.origin) return rbcJson({ ok: false, error: "Not allowed from another site." }, 403);
     if (!/^application\/json/i.test(request.headers.get("Content-Type") || "")) return rbcJson({ ok: false, error: "Send JSON." }, 415);
     const body = await request.json().catch(() => ({}));
+    if (path !== "/api/world/beat" && WORLD_ID.test(String(body?.id || "")) && (await env.DB.prepare("SELECT 1 FROM world_bans WHERE id = ?").bind(String(body.id)).first()))
+      return rbcJson({ ok: false, error: "This player can't do that in RB World." }, 403);
     if (path === "/api/world/lot") return await worldLot(env, body);
     if (path === "/api/world/rent") return await worldRent(env, body);
     if (path === "/api/world/race") return await worldRace(env, body);

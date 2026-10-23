@@ -259,8 +259,24 @@ USERS.u_bob = { email: "bob@example.com" };
   const csp = w.headers.get("Content-Security-Policy");
   assert.ok(/connect-src 'self'[^;]*basemaps\.cartocdn\.com/.test(csp) && !/esm\.sh|instantdb|stripe/i.test(csp), "the game's hosts only: no InstantDB, no Stripe");
   assert.ok(!/instantdb|esm\.sh|js\.stripe\.com|\$9\.99/i.test(wh), "no InstantDB, Stripe or the unbacked $9.99 offer");
-  assert.ok(wh.includes('src="/app/world/main.js?v=w11"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
+  assert.ok(wh.includes('src="/app/world/main.js?v=w13"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
   assert.ok(wh.includes("OPEN THE RB APP") && wh.includes("SEE MEMBERSHIPS"));
+  // the car radio and the notice come from RB Command > RB World; "Enter as Admin" opens RB World's controls there
+  assert.ok(wh.includes('window.RB_WORLD_CFG = {"radio":true,"notice":""}') && wh.includes("data-rb-radio-host") && wh.includes('id="radio-vol"'));
+  assert.ok(wh.includes("https://team.relentlessbillionaire.com/world") && !wh.includes("location.href = '/admin'") && !wh.includes('getElementById("btn-radio"),R=window.RBRadio'));
+  const rj = await (await go("/app/world/radio.js")).text();
+  assert.ok(rj.includes("export function initRadio") && rj.includes("RBRadio") && rj.includes('"KeyM"'));
+  // the phone: everything else on screen in one place (📱 or T), with a Classic layout in Settings
+  const pj = await (await go("/app/world/phone.js")).text();
+  assert.ok(pj.includes("export function initPhone") && pj.includes('"KeyT"') && pj.includes("rb-phone-ui") && pj.includes('"set-screen"'));
+  for (const app of ["jobs", "empire", "races", "goals", "chat", "radio", "leaders", "events", "settings", "help"]) assert.ok(pj.includes(`["${app}", `), "phone app " + app);
+  assert.ok(wh.includes('id="set-screen"') && wh.includes("Classic: everything on screen"));
+  const mjs = await (await go("/app/world/main.js")).text(); assert.ok(mjs.includes("from './phone.js'") && mjs.includes("initPhone(window.RBEmpire, ectx)"));
+  sql("UPDATE badge_config SET value='off' WHERE key='world_radio'"); sql("UPDATE badge_config SET value='Comedy night <Friday>' WHERE key='world_notice'");
+  const wh2 = await (await go("/app/world/")).text();
+  assert.ok(wh2.includes('"radio":false') && wh2.includes("Comedy night"), "radio off and the notice in the page");
+  assert.ok(!/<Friday>/.test(wh2.split("RB_WORLD_CFG")[1].split("</script>")[0]), "the notice can't break out of its script");
+  sql("UPDATE badge_config SET value='on' WHERE key='world_radio'");
   const mj = await (await go("/app/world/main.js")).text(), cj = await (await go("/app/world/rb_world.js")).text();
   assert.ok(mj.includes("from './rb_world.js'") && !mj.includes("@instantdb") && mj.includes("const db = init();"));
   assert.ok(cj.includes("/api/world/beat") && cj.includes("export function init"));
@@ -287,6 +303,18 @@ USERS.u_bob = { email: "bob@example.com" };
   const ads = (await api("/api/world/ads")).body.ads;
   assert.ok(ads.some((x) => x.title === "Acme Studios" && x.channel === "Ticker") && !ads.some((x) => x.title === "x"), "game ads only");
   assert.ok(ads.some((x) => x.title === "RB Comedy Night"), "upcoming RB Events in the ticker");
+  assert.equal(ads[0].id, "notice"); assert.equal(ads[0].body, "Comedy night <Friday>", "the notice leads the ticker");
+  sql("UPDATE badge_config SET value='' WHERE key='world_notice'");
+  assert.ok(!(await api("/api/world/ads")).body.ads.some((x) => x.id === "notice"), "no notice, no ticker line");
+  // a player blocked in RB Command > RB World: no chat, no races, off the leaderboard and other players' maps; still drives
+  sql("INSERT INTO world_bans (id, name, reason, by, created_at) VALUES ('bbbbbbbb-2222', 'Rival', 'spam', 'owner', '2026-10-23T00:00:00Z')");
+  NOW += 61000;
+  let bl = await chat("bbbbbbbb-2222", "still here?"); assert.equal(bl.status, 403); assert.match(bl.body.error, /can't do that/);
+  assert.equal((await api("/api/world/race", { method: "POST", body: { id: "bbbbbbbb-2222", op: "board", track: "downtown" } })).status, 403);
+  assert.equal((await beat(null, { id: "bbbbbbbb-2222", name: "Rival" })).status, 200, "they can still drive");
+  b = await beat(null, { id: "aaaaaaaa-1111", name: "Guest" });
+  assert.ok(!b.body.board.some((x) => x.name === "Rival") && !b.body.peers.some((x) => x.id === "bbbbbbbb-2222"), "off the board and the map");
+  sql("DELETE FROM world_bans");
 
   // play time while signed in: 5 points per 10 minutes, up to 30 a day
   const before = (await me("u_bob")).body.standing.lifetime;

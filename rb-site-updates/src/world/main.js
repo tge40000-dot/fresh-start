@@ -12,6 +12,8 @@ import { initProgress } from './progress.js';
 import { initRace } from './race.js';
 import { initPeds } from './peds.js';
 import { initAudio as initSound } from './audio.js';
+import { initRadio } from './radio.js';
+import { initPhone } from './phone.js';
 
 // --- CORE ---
 const db = init();
@@ -384,7 +386,7 @@ async function startGame() {
     const name = document.getElementById('input-name').value.trim();
     player.name = name || `Hustler_${Math.floor(Math.random() * 1000)}`;
 
-    if (document.getElementById('chk-admin').checked) { window.location.href = '/admin'; return; }
+    if (document.getElementById('chk-admin').checked) { window.location.href = 'https://team.relentlessbillionaire.com/world'; return; }
 
     document.getElementById('start-screen').style.display = 'none';
     document.getElementById('game-container').style.display = 'block';
@@ -423,12 +425,15 @@ async function startGame() {
         sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); },
         help: () => hud && hud.help(),
     });
-    const ectx = { scene, player, play, fx, gps: () => gpsFix, minimap: () => minimap, onFrame: (f) => frameHooks.push(f), sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); } };
+    const ectx = { scene, player, play, fx, music: (on) => { if (!sfx.bgm) return; if (on && player.settings.audio) sfx.bgm.play().catch(() => {}); else sfx.bgm.pause(); }, gps: () => gpsFix, minimap: () => minimap, onFrame: (f) => frameHooks.push(f), sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); } };
     const hud = initHud(window.RBEmpire, ectx);
     window.RBProgress = initProgress(window.RBEmpire, ectx);
     window.RBRace = initRace(window.RBEmpire, ectx, window.RBProgress);
     window.RBPeds = initPeds(window.RBEmpire, ectx);
     window.RBAudio = initSound(window.RBEmpire, ectx); // engine, tyres, city, rain, sirens and the horn (G)
+    window.RBCarRadio = initRadio(window.RBEmpire, ectx); // RB Radio live in the car (📻 or M)
+    window.RBPhone = initPhone(window.RBEmpire, ectx); // everything else on screen, in one phone (📱 or T)
+    const notice = (window.RB_WORLD_CFG || {}).notice; if (notice) setTimeout(() => window.RBEmpire.toast('📣 ' + notice), 2500);
     fx.build(); window.RBFx = fx;
     bindGraphics();
     fetchCalendarEvents();

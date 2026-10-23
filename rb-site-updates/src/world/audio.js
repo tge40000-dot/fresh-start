@@ -8,6 +8,7 @@
 import { on } from "./empire.js";
 
 let A = null; // the audio context and its parts, once started
+let duckK = 1; // the car radio dips the game's sounds while it plays
 function noiseBuffer(ctx, seconds, brown) {
   const n = ctx.sampleRate * seconds, b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0);
   let last = 0;
@@ -65,7 +66,7 @@ export function initAudio(E, ctx) {
     if (!A) return;
     t += dt;
     const audioOn = ctx.player.settings?.audio !== false && !document.hidden;
-    set(A.master.gain, audioOn ? 0.9 : 0, 0.2);
+    set(A.master.gain, audioOn ? 0.9 * duckK : 0, 0.2);
     if (!audioOn) return;
     const car = E.car, v = Math.abs(car.speed || 0), accel = (v - lastSpeed) / Math.max(dt, 1e-3); lastSpeed = v;
     // gears every 9 m/s; revs climb through each gear and drop on the change
@@ -89,5 +90,5 @@ export function initAudio(E, ctx) {
     // now and then a horn somewhere down the street
     A.nextHorn -= dt; if (A.nextHorn <= 0) { A.nextHorn = 18 + Math.random() * 30; honk(0.025, 330 + Math.random() * 80, 415 + Math.random() * 80, 0.25 + Math.random() * 0.3); }
   });
-  return { honk: () => honk(0.18), started: () => !!A };
+  return { honk: () => honk(0.18), started: () => !!A, duck: (v) => { duckK = Math.max(0, Math.min(1, Number(v) || 0)); } };
 }
