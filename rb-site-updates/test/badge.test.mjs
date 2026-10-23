@@ -255,7 +255,7 @@ USERS.u_bob = { email: "bob@example.com" };
   const csp = w.headers.get("Content-Security-Policy");
   assert.ok(/connect-src 'self'[^;]*basemaps\.cartocdn\.com/.test(csp) && !/esm\.sh|instantdb|stripe/i.test(csp), "the game's hosts only: no InstantDB, no Stripe");
   assert.ok(!/instantdb|esm\.sh|js\.stripe\.com|\$9\.99/i.test(wh), "no InstantDB, Stripe or the unbacked $9.99 offer");
-  assert.ok(wh.includes('src="/app/world/main.js?v=w9"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
+  assert.ok(wh.includes('src="/app/world/main.js?v=w10"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
   assert.ok(wh.includes("OPEN THE RB APP") && wh.includes("SEE MEMBERSHIPS"));
   const mj = await (await go("/app/world/main.js")).text(), cj = await (await go("/app/world/rb_world.js")).text();
   assert.ok(mj.includes("from './rb_world.js'") && !mj.includes("@instantdb") && mj.includes("const db = init();"));
@@ -414,7 +414,7 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.equal((await race(Cc, "join", { race: ring })).status, 200, "a place came free");
   assert.equal((await race(Cc, "sync", { race: "race_nope1234", cp: 0, car: [0, 0, 0, 0] })).status, 404);
   assert.equal((await race("bad", "host", { track: LOOP })).status, 400);
-  for (const f of ["/app/world/race.js", "/app/world/city.js", "/app/world/city_data.js", "/app/world/peds.js", "/app/world/fx.js", "/app/world/cars.js"]) assert.equal((await go(f)).status, 200, f);
+  for (const f of ["/app/world/race.js", "/app/world/city.js", "/app/world/city_data.js", "/app/world/peds.js", "/app/world/fx.js", "/app/world/cars.js", "/app/world/audio.js"]) assert.equal((await go(f)).status, 200, f);
 }
 
 // ---------------------------------------------------------------- 4. sign-in rules and the switch

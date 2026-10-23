@@ -53,6 +53,15 @@ r = await go(h2, {}, "https://relentlessbillionaire.com/"); assert.equal(r.statu
 r = await go(h2, {}, "https://relentlessbillionaire.com/", { method: "HEAD" }); assert.equal(r.status, 503);
 const h3 = guarded(async () => new Response("fine", { status: 201 }));
 r = await go(h3, {}, "https://relentlessbillionaire.com/"); assert.equal(r.status, 201);
+// scanner probes get a 404 at once, without reaching the Worker; real pages (and .well-known) still do
+let reached = 0;
+const h4 = guarded(async () => { reached++; return new Response("page"); });
+for (const u of ["/.env", "/.git/config", "/config/env/aws_credentials.env", "/docker-compose.production.yml", "/wp-admin/", "/media/wp-includes/wlwmanifest.xml", "/xmlrpc.php", "/index.php", "/.bash_profile", "/serverless.yaml"]) {
+  r = await go(h4, {}, "https://br.relentlessbillionaire.com" + u); assert.equal(r.status, 404, u);
+}
+assert.equal(reached, 0, "no probe reached the Worker");
+for (const u of ["/", "/store", "/.well-known/security.txt", "/studio/api/pricing", "/app/world/main.js", "/env", "/git"]) { r = await go(h4, {}, "https://relentlessbillionaire.com" + u); assert.equal(r.status, 200, u); }
+assert.equal(reached, 7, "real paths pass straight through");
 assert.ok(w.fetch.__rbSafe, "the guard is the outermost wrapper of the real Worker");
 
 // 4. rb-mastering-studio: R2 fails a read with its passing internal error (the crash seen live on /studio/api/pricing
@@ -86,4 +95,4 @@ if (studioDir) {
 
 // 4. running the patch again changes nothing (checked by deploy-all running it on a patched copy)
 console.error = realErr;
-console.log("resilience ok: a failed schema check no longer crashes a page," + (studioDir ? " the studio retries a failed R2 read and keeps its pricing settings," : "") + " a database outage gets 503 pages (HTML, JSON for the API) with Retry-After, the errors are logged, the guard is outermost");
+console.log("resilience ok: scanner probes get an instant 404, a failed schema check no longer crashes a page," + (studioDir ? " the studio retries a failed R2 read and keeps its pricing settings," : "") + " a database outage gets 503 pages (HTML, JSON for the API) with Retry-After, the errors are logged, the guard is outermost");

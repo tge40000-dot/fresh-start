@@ -65,7 +65,12 @@ for s in $ICON_SITES; do py "$ROOT/rb-tools/patch_icons.py" "$W/$s"; done
 for s in $ICON_SITES; do py "$ROOT/rb-tools/patch_tabs.py" "$W/$s"; done
 # the sitemap, the beatstore's robots.txt, a baseline security header, and game.relentlessbillionaire.com going to RB World
 py "$ROOT/rb-tools/patch_seo.py" "$W/artist-router" "$W/beatstore" "$W/rb-events-page" "$W/rb-fund-campaign" "$W/rb-release"
-py "$ROOT/rb-tools/patch_resilience.py" "$W/artist-router" "$W/rb-mastering-studio"
+# RB Command > Create: a publish queue the owner can fill (creative_publish_queue), run on the 10-minute schedule
+py "$ROOT/rb-tools/patch_publish_queue.py" "$W/rb-autopilot"
+# crash guard: a passing database/storage error gets one retry and then a "please try again" page, never an error page
+GUARD_SITES="rb-radio rb-tv rb-memberships beatstore rb-events-page rb-fund-campaign rb-release rb-jobs rb-partners rb-game rb-public-content relentless-hub rb-radio-hub rb-command relentless-billionaire-api rb-autopilot"
+py "$ROOT/rb-tools/patch_resilience.py" "$W/artist-router" "$W/rb-mastering-studio" $(for s in $GUARD_SITES; do echo "$W/$s"; done)
+for s in $ICON_SITES; do py "$ROOT/rb-tools/patch_icons.py" "$W/$s" >/dev/null; done # the RB icon on the guard's page too
 # Site images (RB Command > Site images): the screen in rb-command, the pictures and per-site CSS from rb-public-content
 py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-command"; py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-public-content"
 # RB Command > Badges (levels, rewards, achievements, settings) and the Badge desk for the door
@@ -90,6 +95,8 @@ node --no-warnings "$T/badge-desk.test.mjs" "$W/rb-command"
 node --no-warnings "$ROOT/rb-site-updates/test/game-redirect.test.mjs" "$W/rb-game"
 node --no-warnings "$ROOT/rb-site-updates/test/seo.test.mjs" "$W/artist-router/artist-router-v14.js" "$W/beatstore/worker.js" "$W/rb-events-page/events-worker.js" "$W/rb-fund-campaign/worker.js" "$W/rb-release/rb-release-worker.js"
 node --no-warnings "$ROOT/rb-site-updates/test/resilience.test.mjs" "$W/artist-router/artist-router-v14.js" "$W/rb-mastering-studio"
+node --no-warnings "$ROOT/rb-site-updates/test/guard-all.test.mjs" $(for s in $GUARD_SITES; do echo "$W/$s"; done)
+node --no-warnings "$ROOT/rb-site-updates/test/publish-queue.test.mjs" "$W/rb-autopilot" 2>/dev/null | tail -1
 node --no-warnings "$ROOT/rb-site-updates/test/ai-limit.test.mjs" "$W/relentless-billionaire-api/script.js"
 node --no-warnings "$ROOT/rb-site-updates/test/radio-tv.test.mjs" "$W/rb-radio" "$W/rb-tv"
 node "$ROOT/rb-site-updates/test/flow.test.mjs" "$W/rb-radio"

@@ -45,7 +45,7 @@ assert.match(r.headers.get("Content-Type"), /xml/); assert.ok((await r.text()).i
 const BASE = "frame-ancestors 'self'; base-uri 'self'; object-src 'none'";
 for (const [path, url] of others.map((p, i) => [p, ["https://relentlessbillionaire.com/events", "https://relentlessbillionaire.com/fund", "https://relentlessbillionaire.com/release"][i]])) {
   const w = (await import(path)).default;
-  assert.ok(w.fetch.__rbSec, path + " is wrapped");
+  assert.ok(w.fetch.__rbSec || w.fetch.__rbSafe, path + " is wrapped"); // the crash guard (patch_resilience.py) may be outermost
   let res;
   try { res = await go(w, url); } catch (e) { continue; }   // a page that needs bindings the fake env lacks: the wrap is checked above
   const ct = res.headers.get("Content-Type") || "", csp = res.headers.get("Content-Security-Policy");

@@ -1,0 +1,11 @@
+{
+  "script": "media-worker",
+  "entry": "worker.js",
+  "version": "0370a09e-5823-4bc2-b1e7-095c1ccce0e8",
+  "parts": [
+    {
+      "name": "worker.js",
+      "type": "application/javascript+module"
+    }
+  ]
+}

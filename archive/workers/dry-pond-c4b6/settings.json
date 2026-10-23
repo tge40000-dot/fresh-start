@@ -1,0 +1,11 @@
+{
+ "script": "dry-pond-c4b6",
+ "compatibility_date": "2026-07-13",
+ "compatibility_flags": [],
+ "bindings": [
+  {
+   "type": "ai",
+   "name": "AI"
+  }
+ ]
+}

@@ -11,6 +11,7 @@ import { initHud } from './hud.js';
 import { initProgress } from './progress.js';
 import { initRace } from './race.js';
 import { initPeds } from './peds.js';
+import { initAudio as initSound } from './audio.js';
 
 // --- CORE ---
 const db = init();
@@ -422,11 +423,12 @@ async function startGame() {
         sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); },
         help: () => hud && hud.help(),
     });
-    const ectx = { scene, player, play, gps: () => gpsFix, minimap: () => minimap, onFrame: (f) => frameHooks.push(f), sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); } };
+    const ectx = { scene, player, play, fx, gps: () => gpsFix, minimap: () => minimap, onFrame: (f) => frameHooks.push(f), sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); } };
     const hud = initHud(window.RBEmpire, ectx);
     window.RBProgress = initProgress(window.RBEmpire, ectx);
     window.RBRace = initRace(window.RBEmpire, ectx, window.RBProgress);
     window.RBPeds = initPeds(window.RBEmpire, ectx);
+    window.RBAudio = initSound(window.RBEmpire, ectx); // engine, tyres, city, rain, sirens and the horn (G)
     fx.build(); window.RBFx = fx;
     bindGraphics();
     fetchCalendarEvents();

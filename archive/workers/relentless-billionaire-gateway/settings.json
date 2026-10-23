@@ -1,0 +1,12 @@
+{
+ "script": "relentless-billionaire-gateway",
+ "compatibility_date": "2024-01-01",
+ "compatibility_flags": [],
+ "bindings": [
+  {
+   "type": "plain_text",
+   "name": "ENVIRONMENT",
+   "value": "(not saved)"
+  }
+ ]
+}

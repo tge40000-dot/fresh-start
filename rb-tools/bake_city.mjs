@@ -103,8 +103,9 @@ function clipLine(line) { // keep the parts of a line inside the tile square
   if (cur.length > 1) parts.push(cur);
   return parts;
 }
+const LANDMARK_CLASSES = new Set(["ferry_terminal", "bus", "town_hall", "library", "museum", "attraction", "information", "harbor", "park"]);
 const CLS0 = ["motorway", "trunk", "primary", "secondary", "tertiary", "minor", "service"];
-const feats = { building: [], road: [], name: [], green: [], plaza: [], water: [], place: [], zone: [] };
+const feats = { building: [], road: [], name: [], green: [], plaza: [], water: [], place: [], zone: [], poi: [] };
 const DRIVE = { motorway: 16, trunk: 16, primary: 16, secondary: 14, tertiary: 12, minor: 9, service: 6 };
 for (const f of readdirSync(TILES).filter((x) => x.endsWith(".pbf"))) {
   const [, tx, ty] = f.replace(".pbf", "").split("_").map(Number);
@@ -135,6 +136,8 @@ for (const f of readdirSync(TILES).filter((x) => x.endsWith(".pbf"))) {
     if (ft.type !== 3 || !(c === "grass" || c === "park" || s === "park" || s === "garden" || c === "playground" || c === "pitch")) return;
     for (const ring of ft.loadGeometry()) { const pts = clipPoly(ring.map((q) => [q.x, q.y])); if (pts.length > 2 && area(pts) > 0) feats.green.push(pts.map(ll)); }
   });
+  // public landmarks (for jobs and the sightseeing run): civic places, transport, parks and sights, never businesses
+  each("poi", (ft) => { const p = ft.properties; if (!p.name || ft.type !== 1 || !LANDMARK_CLASSES.has(p.class) || (p.class === "bus" && p.subclass !== "bus_station")) return; const g = ft.loadGeometry()[0][0]; if (g.x >= 0 && g.x <= EXT && g.y >= 0 && g.y <= EXT) feats.poi.push({ name: String(p.name_en || p.name), cls: p.class, rank: Number(p.rank) || 99, ll: ll(g) }); });
   each("water", (ft) => { for (const ring of ft.loadGeometry()) { const pts = clipPoly(ring.map((q) => [q.x, q.y])); if (pts.length > 2 && area(pts) > 0) feats.water.push(pts.map(ll)); } });
   each("place", (ft) => { const p = ft.properties; if (["neighbourhood", "quarter"].includes(p.class)) { const g = ft.loadGeometry()[0][0]; if (g.x >= 0 && g.x <= EXT && g.y >= 0 && g.y <= EXT) feats.place.push({ ll: ll(g), name: String(p.name_en || p.name), cls: p.class }); } });
 }
@@ -361,6 +364,19 @@ const places = feats.place.map((p) => ({ name: p.name, p: local(p.ll), cls: p.cl
 for (const [n, lng, lat] of CFG.places) places.unshift({ name: n, p: local([lng, lat]), cls: "rb" });
 const uniqPlaces = []; for (const p of places) if (!uniqPlaces.some((u) => u.name === p.name)) uniqPlaces.push(p);
 console.log("places", uniqPlaces.map((p) => p.name).join(", "));
+// landmarks: each public place inside the drivable city, with the road point in front of it where a car stops
+const LM_KIND = { ferry_terminal: "transport", bus: "transport", town_hall: "civic", library: "civic", museum: "sight", attraction: "sight", information: "civic", harbor: "waterfront", park: "park" };
+const landmarks = [];
+for (const f of feats.poi.sort((a, b) => a.rank - b.rank || (a.name < b.name ? -1 : 1))) {
+  if (landmarks.some((l) => l.name === f.name)) continue;
+  const p = local(f.ll); if (!inRect(p, HALF_X - 20, HALF_Z - 20)) continue;
+  let best = null, bd = Infinity;
+  for (const e of edges) { if (e.cls === "service") continue; const d = segDist(p, N[e.a], N[e.b]); if (d < bd) { bd = d; best = e; } }
+  if (!best || bd > 90) continue;
+  const A = N[best.a], B = N[best.b], dx = B[0] - A[0], dz = B[1] - A[1], L = dx * dx + dz * dz || 1, t = Math.max(0.05, Math.min(0.95, ((p[0] - A[0]) * dx + (p[1] - A[1]) * dz) / L));
+  landmarks.push({ name: f.name, kind: LM_KIND[f.cls] || "sight", at: [A[0] + dx * t, A[1] + dz * t], p });
+}
+console.log("landmarks", landmarks.length, landmarks.map((l) => l.name).join(", "));
 
 // ---------------------------------------------------------------- the lots: one real building per RB lot id
 // The board keeps its layout (empire_defs.js LAYOUT): cheap round the edge, dear by the plaza; the plaza is Times Square.
@@ -477,6 +493,7 @@ const data = {
   classes: CLS, widths: CLS.map((c) => DRIVE[c]), names,
   green: poly(feats.green), plazas: poly(feats.plaza), water: poly(feats.water),
   places: uniqPlaces.map((p) => [p.name, q(p.p[0]), q(p.p[1])]),
+  landmarks: landmarks.map((l) => [l.name, l.kind, q(l.at[0]), q(l.at[1]), q(l.p[0]), q(l.p[1])]), // name, kind, the road point, the place itself
   lots, hq: hq ? buildings.indexOf(hq) : -1, boards,
 };
 const json = JSON.stringify(data);

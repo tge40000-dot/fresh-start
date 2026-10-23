@@ -170,6 +170,7 @@ export function initFx({ renderer, scene, camera, wet }) {
   }
   fx.setGraphics = (choice) => { prefs.graphics = choice; keep(); setTier(choice === "auto" ? ceiling : choice); };
   fx.setWeather = (choice) => { prefs.weather = choice; keep(); nextWeather(); };
+  fx.sharedWeather = (t) => sharedMode(t); // (for tests)
   function keep() { try { localStorage.setItem(SAVE, JSON.stringify(prefs)); } catch (e) {} }
   fx.setSize = () => { const pr = renderer.getPixelRatio(); renderer.setSize(innerWidth, innerHeight); if (composer) { composer.setSize(innerWidth, innerHeight); if (passes.grade) passes.grade.uniforms.uRes.value.set(innerWidth * pr, innerHeight * pr); } };
 
@@ -188,14 +189,21 @@ export function initFx({ renderer, scene, camera, wet }) {
   // ---------------------------------------------------------------- weather
   const target = { cloud: 0.3, rain: 0 };
   let wT = 0;
-  function nextWeather() {
-    let mode = prefs.weather;
-    if (mode === "auto") { const r = Math.random(); mode = r < 0.5 ? "clear" : r < 0.78 ? "cloudy" : "rain"; }
+  // Live weather is the same for every player: it comes from the clock (a new spell every 6 minutes, from a hash of
+  // which 6 minutes it is), so everyone driving round the city at the same time sees the same sky and the same rain.
+  const SPELL = 6 * 60 * 1000;
+  function sharedMode(t) {
+    let h = Math.imul(Math.floor(t / SPELL) ^ 0x5bd1e995, 2654435761) >>> 0; h ^= h >>> 15; h = Math.imul(h, 2246822519) >>> 0; h ^= h >>> 13;
+    const r = (h % 1000) / 1000; return r < 0.5 ? "clear" : r < 0.78 ? "cloudy" : "rain";
+  }
+  function nextWeather(snap) {
+    const now = Date.now(), mode = prefs.weather === "auto" ? sharedMode(now) : prefs.weather;
     fx.weather.mode = mode;
     Object.assign(target, { clear: { cloud: 0.22, rain: 0 }, cloudy: { cloud: 0.62, rain: 0 }, rain: { cloud: 0.9, rain: 1 } }[mode]);
-    wT = 240 + Math.random() * 300;
+    wT = prefs.weather === "auto" ? (SPELL - (now % SPELL)) / 1000 + 0.5 : 240 + Math.random() * 300;
+    if (snap) Object.assign(fx.weather, { cloud: target.cloud, rain: target.rain, wet: target.rain ? 0.8 : 0 }); // join a spell already under way
   }
-  nextWeather();
+  nextWeather(true);
   function weatherTick(dt) {
     wT -= dt; if (wT <= 0) nextWeather();
     const w = fx.weather, k = Math.min(1, dt / 25);

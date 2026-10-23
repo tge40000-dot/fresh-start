@@ -1,0 +1,18 @@
+{
+ "script": "waitlist-api",
+ "compatibility_date": "",
+ "compatibility_flags": [],
+ "bindings": [
+  {
+   "type": "d1",
+   "name": "DB",
+   "id": "820b8c2f-55b8-40ea-8ab8-2dfc74659fdb",
+   "database_id": "820b8c2f-55b8-40ea-8ab8-2dfc74659fdb"
+  },
+  {
+   "type": "plain_text",
+   "name": "TOTAL_SPOTS",
+   "value": "(not saved)"
+  }
+ ]
+}

@@ -99,7 +99,7 @@ function drawRadar(t) {
   const blink = Math.floor(t * 4) % 2;
   for (const cp of R.cops) dot(cp.x, cp.z, 6.5, blink ? "#ff2a2a" : "#2a6bff", "#fff");
   // the target: job or race checkpoint, on the rim with an arrow when it's out of range
-  const tgt = R.job ? (R.job.stage ? R.job.b : R.job.a) : window.__rbRaceTarget || null;
+  const tgt = R.job ? R.job.stops[R.job.stage].at : window.__rbRaceTarget || null;
   if (tgt) {
     let [px, pz] = at(tgt[0], tgt[1]); const col = R.job && R.job.stage ? "#00E676" : "#F5D547";
     const dx = px - mid, dz = pz - mid, dd = Math.hypot(dx, dz), lim = mid - 14;
@@ -144,6 +144,8 @@ export function help() {
   <h3>DRIVING</h3><table>
     <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows</td><td>Drive and steer</td></tr>
     <tr><td><kbd>Space</kbd></td><td>Handbrake: drift round corners</td></tr>
+    <tr><td><kbd>G</kbd></td><td>Horn</td></tr>
+    <tr><td><kbd>P</kbd></td><td>Photo mode: the HUD hides, orbit the car, set the blur and a filter, save the picture</td></tr>
     <tr><td><kbd>Shift</kbd> or <kbd>N</kbd></td><td>Nitro (the blue gauge refills)</td></tr>
     <tr><td><kbd>E</kbd></td><td>The lot you're next to: buy, build, manage</td></tr>
     <tr><td><kbd>C</kbd></td><td>Camera: chase, high, bonnet, free</td></tr>

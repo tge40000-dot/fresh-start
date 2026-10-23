@@ -1,0 +1,11 @@
+{
+  "script": "ops-worker",
+  "entry": "worker.js",
+  "version": "01b5e463-64e7-4e91-807b-267569874ad8",
+  "parts": [
+    {
+      "name": "worker.js",
+      "type": "application/javascript+module"
+    }
+  ]
+}

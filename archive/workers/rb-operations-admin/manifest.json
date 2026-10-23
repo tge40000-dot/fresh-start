@@ -1,0 +1,11 @@
+{
+  "script": "rb-operations-admin",
+  "entry": "rb-operations-admin.js",
+  "version": "32c2bc87-f0dd-405e-aecc-477315cc1137",
+  "parts": [
+    {
+      "name": "rb-operations-admin.js",
+      "type": "application/javascript+module"
+    }
+  ]
+}

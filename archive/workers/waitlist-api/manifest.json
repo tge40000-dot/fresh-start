@@ -1,0 +1,11 @@
+{
+  "script": "waitlist-api",
+  "entry": "index.js",
+  "version": "fdb609e2-79bf-4bcd-a6f9-057e3549765b",
+  "parts": [
+    {
+      "name": "index.js",
+      "type": "application/javascript+module"
+    }
+  ]
+}

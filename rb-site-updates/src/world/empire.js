@@ -29,7 +29,13 @@ const JOBS = [
   { kind: "delivery", name: "Delivery run", icon: "📦", pay: 1, time: 1.6, wanted: 0, desc: "Pick up a package and drop it across town." },
   { kind: "vip", name: "VIP ride", icon: "🕶️", pay: 1.8, time: 1.1, wanted: 0, desc: "Get a client to their meeting. They tip for speed." },
   { kind: "heist", name: "The heist", icon: "💼", pay: 4, time: 1.4, wanted: 3, desc: "Grab the briefcase, then lose the cops on the way to the drop. Busted means a fine." },
+  { kind: "tour", name: "Sightseeing run", icon: "📸", pay: 1.3, time: 1.5, wanted: 0, desc: "Show a visitor three real Vallejo landmarks, in order." },
 ];
+// A landmark at least `minFrom` metres from a point (and not one already on the route), or null.
+function landmarkFrom(p, minFrom, skip = []) {
+  const ok = CITY.LANDMARKS.filter((l) => !skip.includes(l) && Math.hypot(l.at[0] - p[0], l.at[1] - p[1]) >= minFrom && Math.hypot(l.at[0] - p[0], l.at[1] - p[1]) <= 900);
+  return ok.length ? ok[Math.floor(Math.random() * ok.length)] : null;
+}
 
 let C = null; // what main.js hands over: scene, camera, controls, player, play, save, hud, mesh, minimap, gps
 const S = { biz: {}, cards: [], picked: {}, lastTick: Date.now(), clock: 9 * 60, stats: { earned: 0, jobs: 0, busts: 0, drops: 0 } };
@@ -88,6 +94,8 @@ function buildCity() {
   const scene = C.scene;
   world = CITY.buildCity(scene);
   CITY.timesSquare(scene, world);
+  // real landmarks, named where they stand (deliveries, rides and the sightseeing run go to them)
+  for (const l of CITY.LANDMARKS) { const sg = sprite("◆ " + l.name, { w: 1024, h: 112, size: 50, border: "#C9A84C", sx: Math.min(30, 5 + l.name.length * 0.62), sy: 2.4, tint: 0xffffff }); sg.position.set(l.p[0], 9, l.p[1]); scene.add(sg); }
   lampMat = world.lampMat;
   // lit windows for the businesses players build
   windowMat = new THREE.MeshStandardMaterial({ color: 0x1b2026, metalness: 0.6, roughness: 0.3, emissive: 0xffd9a0, emissiveIntensity: 0.3 });
@@ -245,7 +253,7 @@ function driveCar(dt) {
   if (hand) fwd *= Math.pow(0.7, dt);
   const nfx = Math.sin(car.heading), nfz = Math.cos(car.heading);
   car.vx = nfx * fwd + nfz * side; car.vz = nfz * fwd - nfx * side;
-  car.speed = fwd; car.drift = Math.abs(side);
+  car.speed = fwd; car.drift = Math.abs(side); car.boosting = boosting;
   const nx = car.x + car.vx * dt, nz = car.z + car.vz * dt;
   if (!blocked(nx, nz)) { car.x = nx; car.z = nz; }
   else {
@@ -254,6 +262,7 @@ function driveCar(dt) {
     else if (!blocked(car.x, nz)) { car.z = nz; car.vx *= -0.2; }
     else { car.vx *= -0.3; car.vz *= -0.3; }
     if (hit > 12) { shake = Math.min(1, hit / 30); C.play("alert", 0.25); }
+    if (hit > 4) emit("crash", hit);
   }
   // the car on screen
   const m = car.mesh, u = m.userData;
@@ -392,27 +401,46 @@ function setBeacon(p, color) {
 function openJobs() {
   if (job) return panel(`<h2>${job.icon} ${esc(job.name)}</h2><div class="subtitle">${job.stage === 0 ? "Drive to the pickup (the gold light)." : "Drive to the drop (the green light)."} ${Math.ceil(job.left)}s left.</div>
     <button class="btn-ghost" data-e="quit">GIVE UP</button>`, { quit: () => { endJob(false, "You walked away from the job."); hidePanel(); } });
-  const offers = JOBS.map((j) => { const a = roadPoint([car.x, car.z], 90, [car.x, car.z]), b = roadPoint(a, 300), dist = Math.hypot(a[0] - car.x, a[1] - car.z) + Math.hypot(b[0] - a[0], b[1] - a[1]); return { ...j, a, b, dist, reward: Math.round((dist * 9 * j.pay) / 100) * 100, limit: Math.round(dist / 13 * j.time + 20) }; });
+  // each job is a list of stops; deliveries, rides and the sightseeing run end at real landmarks (the heist never does)
+  const offers = JOBS.map((j) => {
+    const a = roadPoint([car.x, car.z], 90, [car.x, car.z]);
+    let stops;
+    if (j.kind === "tour") {
+      const l1 = landmarkFrom([car.x, car.z], 120), l2 = l1 && landmarkFrom(l1.at, 200, [l1]), l3 = l2 && landmarkFrom(l2.at, 200, [l1, l2]);
+      if (!l3) return null;
+      stops = [l1, l2, l3].map((l) => ({ at: l.at, name: l.name }));
+    } else {
+      const l = j.kind !== "heist" ? landmarkFrom(a, 300) : null;
+      stops = [{ at: a, name: j.kind === "vip" ? "the client" : "the pickup" }, l ? { at: l.at, name: l.name } : { at: roadPoint(a, 300), name: "the drop" }];
+    }
+    let dist = Math.hypot(stops[0].at[0] - car.x, stops[0].at[1] - car.z);
+    for (let i = 1; i < stops.length; i++) dist += Math.hypot(stops[i].at[0] - stops[i - 1].at[0], stops[i].at[1] - stops[i - 1].at[1]);
+    const last = stops[stops.length - 1].name, desc = j.kind === "tour" ? `${j.desc} ${stops.map((x) => x.name).join(" → ")}.` : last.startsWith("the ") ? j.desc : `${j.desc} Drop at ${last}.`;
+    return { ...j, desc, stops, a: stops[0].at, b: stops[stops.length - 1].at, dist, reward: Math.round((dist * 9 * j.pay) / 100) * 100, limit: Math.round(dist / 13 * j.time + 20 + (stops.length - 2) * 10) };
+  }).filter(Boolean);
   const acts = {};
   const rows = offers.map((o, i) => { acts["j" + i] = () => startJob(o); return `<div class="rb-card"><div><b>${o.icon} ${esc(o.name)}</b> ${o.wanted ? '<span class="rb-red">★★★</span>' : ""}<div class="rb-muted">${esc(o.desc)}</div><div class="rb-muted">${Math.round(o.dist)} m · ${o.limit}s</div></div><button class="rb-btn" data-e="j${i}">${money(o.reward)}</button></div>`; }).join("");
   panel(`<h2 style="color:var(--red)">HUSTLE</h2><div class="subtitle">Pick a job. Faster jobs pay more; heists pay most and bring the cops.</div>${rows}<button class="btn-ghost" data-e="close">CLOSE</button>`, { ...acts, close: hidePanel });
 }
 function startJob(o) {
-  hidePanel(); job = { ...o, stage: 0, left: o.limit }; setBeacon(o.a, 0xC9A84C); C.play("alert");
-  toast(`${o.icon} ${o.name}: head for the gold light.`);
+  hidePanel(); job = { ...o, stage: 0, left: o.limit }; setBeacon(o.stops[0].at, 0xC9A84C); C.play("alert");
+  toast(`${o.icon} ${o.name}: head for the gold light${o.kind === "tour" ? ` at ${o.stops[0].name}` : ""}.`);
 }
 function jobTick(dt) {
   if (!job) return;
   job.left -= dt;
   ui.job.style.display = "block";
-  ui.job.textContent = `${job.icon} ${job.stage === 0 ? "PICKUP" : "DROP"} · ${Math.max(0, Math.ceil(job.left))}s · ${Math.round(Math.hypot((job.stage ? job.b : job.a)[0] - car.x, (job.stage ? job.b : job.a)[1] - car.z))} m`;
+  const stop = job.stops[job.stage], p = stop.at, lastStop = job.stage === job.stops.length - 1;
+  const what = job.kind === "tour" ? `STOP ${job.stage + 1}/${job.stops.length}` : job.stage === 0 ? "PICKUP" : "DROP";
+  ui.job.textContent = `${job.icon} ${what}${stop.name.startsWith("the ") ? "" : " · " + stop.name} · ${Math.max(0, Math.ceil(job.left))}s · ${Math.round(Math.hypot(p[0] - car.x, p[1] - car.z))} m`;
   if (job.left <= 0) return endJob(false, "Out of time.");
-  const p = job.stage ? job.b : job.a;
-  if (Math.hypot(p[0] - car.x, p[1] - car.z) < 5) {
-    if (job.stage === 0) {
-      job.stage = 1; job.left += 10; setBeacon(job.b, 0x00E676); C.play("cash");
-      if (job.wanted) { setWanted(job.wanted); toast("You've got the case. Cops are on you!", true); } else toast("Picked up. Now the drop.");
-    } else endJob(true);
+  if (Math.hypot(p[0] - car.x, p[1] - car.z) < 6) {
+    if (lastStop) return endJob(true);
+    job.stage++; job.left += 10; const next = job.stops[job.stage];
+    setBeacon(next.at, job.stage === job.stops.length - 1 ? 0x00E676 : 0xC9A84C); C.play("cash");
+    if (job.wanted && job.stage === 1) { setWanted(job.wanted); toast("You've got the case. Cops are on you!", true); }
+    else if (job.kind === "tour") toast(`📸 ${stop.name} ✓ Next: ${next.name}.`);
+    else toast(next.name.startsWith("the ") ? "Picked up. Now the drop." : `Picked up. Now to ${next.name}.`);
   }
 }
 function endJob(ok, why) {

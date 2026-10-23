@@ -52,8 +52,9 @@ def edit(name, old, new, what):
     # Done already, even if another patch has since added its own block at the same anchor: look for the first
     # line this edit adds.
     added = new.replace(old, "", 1) if old in new else new
-    first = next((ln for ln in added.split("\n") if ln.strip()), "")
-    if new in s or (len(first.strip()) > 20 and first in s):
+    # the first line long enough to be distinctive ("  world_lots: {" alone is too short, and is checked on the line after)
+    first = next((ln for ln in added.split("\n") if len(ln.strip()) > 20), "")
+    if new in s or (first and first in s):
         return
     if s.count(old) != 1:
         raise SystemExit(f"rb-command/{name}: {what}: anchor found {s.count(old)} times: {old[:70]!r}")
@@ -183,6 +184,19 @@ edit("tables.js", "  // ---------------- Settings\n  feature_controls: {",
      '    fields: { name: f.ro("Player"), text: f.ro("Message", "textarea"), player_id: f.ro("Game id"), created_at: f.ro("Sent", "datetime") },\n'
      "  },\n\n"
      "  // ---------------- Settings\n  feature_controls: {", "RB World chat table")
+
+# Earlier runs added the three RB World tables again on every deploy (the done-already check above looked only at
+# their short first line). Keep the first copy of each and drop the rest.
+import re as _re
+t = (folder / "tables.js").read_text(encoding="utf-8")
+before = len(t)
+for key in ("world_lots", "world_race_best", "world_chat"):
+    blocks = list(_re.finditer(r"^  " + key + r": \{\n.*?^  \},\n\n", t, _re.M | _re.S))
+    for m in reversed(blocks[1:]):
+        t = t[:m.start()] + t[m.end():]
+if len(t) != before:
+    (folder / "tables.js").write_text(t, encoding="utf-8")
+    changed.append("duplicate RB World tables removed")
 
 # ---------------------------------------------------------------- auth.js: the new group and the Door staff role
 edit("auth.js", '"Partners", "Members", "Rewards", "CRM", "Settings"])', '"Partners", "Members", "Rewards", "Badges", "CRM", "Settings"])', "Badges capability")

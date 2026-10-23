@@ -38,6 +38,9 @@ edges.forEach((e, i) => {
 export const anyLinks = nodes.map(() => []);
 edges.forEach((e, i) => { anyLinks[e.a].push({ to: e.b, e: i }); anyLinks[e.b].push({ to: e.a, e: i }); });
 const places = D.places.map(([n, x, z]) => ({ name: n, x: dm(x), z: dm(z) }));
+// Public landmarks from OpenStreetMap (civic places, transport, parks and sights; never businesses): where jobs drop off
+// and the sightseeing run goes. at = the road point in front, where a car stops; p = the place itself.
+export const LANDMARKS = (D.landmarks || []).map(([name, kind, x, z, px, pz]) => ({ name, kind, at: [dm(x), dm(z)], p: [dm(px), dm(pz)] }));
 export const BOARDS = D.boards.map(([x, z, ang, w, h, y]) => ({ x: dm(x), z: dm(z), ang, w, h, y })); // Times Square screens
 export const lotGeo = Object.fromEntries(Object.entries(D.lots).map(([id, l]) => [id, { building: buildings[l.b], door: l.door, face: l.face }]));
 
