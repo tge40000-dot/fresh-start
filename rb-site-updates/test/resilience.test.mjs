@@ -1,4 +1,4 @@
-// Usage: node --no-warnings rb-site-updates/test/resilience.test.mjs <patched artist-router-v14.js>
+// Usage: node --no-warnings rb-site-updates/test/resilience.test.mjs <patched artist-router-v14.js> [<patched rb-mastering-studio dir>]
 // rb-tools/patch_resilience.py: a passing D1 "internal error" no longer crashes artist-router. The schema check carries
 // on without the database, a GET that meets a passing error is tried once more, and anything still failing gets a
 // 503 "please try again" page (JSON on /api/) instead of throwing.
@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { fakeD1 } from "../../rb-surface/test/fake-d1.mjs";
 globalThis.HTMLRewriter = class { on() { return this; } transform(r) { return r; } };
 globalThis.caches = { default: { match: async () => null, put: async () => {} } };
-const [arPath] = process.argv.slice(2);
+const [arPath, studioDir] = process.argv.slice(2);
 const ctx = { waitUntil() {}, passThroughOnException() {} };
 let n = 0;
 const load = async () => (await import(arPath + "?copy=" + ++n)).default; // a fresh copy: a new isolate
@@ -55,6 +55,35 @@ const h3 = guarded(async () => new Response("fine", { status: 201 }));
 r = await go(h3, {}, "https://relentlessbillionaire.com/"); assert.equal(r.status, 201);
 assert.ok(w.fetch.__rbSafe, "the guard is the outermost wrapper of the real Worker");
 
+// 4. rb-mastering-studio: R2 fails a read with its passing internal error (the crash seen live on /studio/api/pricing
+//    and /studio/api/me): the read is tried once more; with R2 down, pricing comes from the last settings read; and the
+//    guard answers instead of throwing
+if (studioDir) {
+  const fs = await import("node:fs"), path = await import("node:path"), os = await import("node:os");
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "studio-mod-"));
+  let src = fs.readFileSync(path.join(studioDir, "index.js"), "utf8");
+  src = src.replace(/import (\w+) from "\.\/([^"]+)";/g, (m, name, file) => `const ${name} = ${JSON.stringify(fs.readFileSync(path.join(studioDir, file), "utf8"))};`);
+  fs.writeFileSync(path.join(tmp, "index.mjs"), src);
+  const S = (await import(path.join(tmp, "index.mjs"))).default;
+  const store = new Map([["billing/config.json", JSON.stringify({ live: true, prices: {}, created: "2026-10-01T00:00:00Z" })]]);
+  let bad = 0;
+  const VAULT = {
+    async get(k) { if (bad > 0) { bad--; throw new Error("get: We encountered an internal error. Please try again. (10001)"); } const v = store.get(k); return v == null ? null : { json: async () => JSON.parse(v), text: async () => v, body: v, httpMetadata: {} }; },
+    async put(k, v) { store.set(k, String(v)); }, async delete(k) { store.delete(k); }, async list() { return { objects: [], truncated: false }; }, async head() { return null; },
+  };
+  const senv = { VAULT, DB: fakeD1(), STUDIO_KEY: "test-only-key" }; // a dummy key for this test
+  r = await go(S, senv, "https://relentlessbillionaire.com/studio/api/pricing"); assert.ok(r.status < 500, "pricing works: " + r.status + " " + errs.slice(-3).join(" / ").slice(0, 600));
+  bad = 1; r = await go(S, senv, "https://relentlessbillionaire.com/studio/api/pricing");
+  assert.ok(r.status < 500, "pricing after one failed R2 read: " + r.status);
+  bad = 100; r = await go(S, senv, "https://relentlessbillionaire.com/studio/api/pricing");
+  assert.ok(r.status < 500, "pricing from the last settings read while R2 fails: " + r.status);
+  bad = 100; r = await go(S, senv, "https://relentlessbillionaire.com/studio/api/me");
+  assert.ok(r instanceof Response, "/studio/api/me answers instead of throwing");
+  if (r.status >= 500) assert.equal(r.status, 503);
+  assert.ok(S.fetch.__rbSafe, "the guard is the outermost wrapper of the studio");
+  bad = 0;
+}
+
 // 4. running the patch again changes nothing (checked by deploy-all running it on a patched copy)
 console.error = realErr;
-console.log("resilience ok: a failed schema check no longer crashes a page, a database outage gets 503 pages (HTML, JSON for the API) with Retry-After, the errors are logged, the guard is outermost");
+console.log("resilience ok: a failed schema check no longer crashes a page," + (studioDir ? " the studio retries a failed R2 read and keeps its pricing settings," : "") + " a database outage gets 503 pages (HTML, JSON for the API) with Retry-After, the errors are logged, the guard is outermost");
