@@ -164,6 +164,16 @@ edit("tables.js", "  // ---------------- Settings\n  feature_controls: {",
      "  },\n\n"
      "  // ---------------- Settings\n  feature_controls: {", "RB World lots table")
 
+# RB World race records: best times on each track; deleting a row takes a time off the record board.
+edit("tables.js", "  // ---------------- Settings\n  feature_controls: {",
+     "  world_race_best: {\n"
+     '    label: "RB World race records", group: "Badges", pk: "k", pkType: "text", title: "name", list: ["track", "name", "ms", "at"], search: ["name", "track", "player_id"], order: "track, ms",\n'
+     "    del: true, ensure: BADGE_SCHEMA,\n"
+     '    note: "Each player\'s best time on each RB World street race track (ms = milliseconds, timed by the server). Delete a row to take a time off the record board, for example if a name breaks the rules. Race prizes are game money only.",\n'
+     '    fields: { track: f.ro("Track"), name: f.ro("Player"), ms: f.ro("Time (ms)", "int"), player_id: f.ro("Game id"), race_id: f.ro("Race"), at: f.ro("Set", "datetime") },\n'
+     "  },\n\n"
+     "  // ---------------- Settings\n  feature_controls: {", "RB World race records table")
+
 # RB World chat (the 3D game at relentlessbillionaire.com/app/world), so the team can remove messages.
 edit("tables.js", "  // ---------------- Settings\n  feature_controls: {",
      "  world_chat: {\n"

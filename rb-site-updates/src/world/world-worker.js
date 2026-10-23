@@ -6,6 +6,7 @@
 //                               and, for signed-in members, play-time RB Badge points out
 //   POST /api/world/chat        a message (240 characters, rate limited)
 //   GET  /api/world/ads         the ticker: live RB ads for the game and upcoming RB Events
+//   POST /api/world/race        street races: host, solo, join, sync (position and checkpoints), leave, records
 // Play time: a signed-in member's beats add up the seconds between them (at most WORLD_BEAT_CREDIT each, so several
 // tabs or a stalled tab don't count extra); every world_block_minutes of play gives world_points_block points, up to
 // world_points_daily a day. Net worth and the rest of the game stay in the player's browser, as before; the
@@ -13,8 +14,9 @@
 // relentlessbillionaire.com/game/ keeps working); play-time points only start once RB Badge itself is switched on.
 const WORLD_PEER_SECONDS = 20;
 const WORLD_BEAT_CREDIT = 10;
-const WORLD_VERSION = "w5";
+const WORLD_VERSION = "w6";
 const WORLD_OWNER_DAYS = 14; // a lot whose owner hasn't played for this long is for sale again
+const WORLD_CAR_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 function worldClean(s, n) { return String(s ?? "").replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, n); }
 function worldNum(v, max = 1e15) { const x = Math.floor(Number(v)); return Number.isFinite(x) ? Math.max(-max, Math.min(max, x)) : 0; }
@@ -69,27 +71,45 @@ async function worldBeat(request, env, g, body) {
   if (g.on && /^Bearer\s+\S+/i.test(request.headers.get("Authorization") || "")) {
     try { const m = await rbbMember(request, env); clerkId = m.clerk_user_id; points = await worldPlayPoints(env, g, m); } catch {}
   }
-  const now = new Date(Date.now()).toISOString(), since = Math.max(0, worldNum(body.since));
+  const now = new Date(Date.now()).toISOString(), since = Math.max(0, worldNum(body.since)), ms = Date.now();
+  const car = Array.isArray(body.car) ? body.car.slice(0, 4).map(Number) : [];
+  const lvl = Math.max(0, Math.min(999, worldNum(body.level))); // 0: not sent, keep what's stored
+  const carOk = car.length === 4 && car.every(Number.isFinite) && Math.abs(car[0]) < 400 && Math.abs(car[1]) < 400;
   const [, peers, board, chat] = await env.DB.batch([
     env.DB.prepare("INSERT INTO world_players (id, name, clerk_user_id, net_worth, tokens, kills, deaths, health, lng, lat, seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, clerk_user_id = coalesce(excluded.clerk_user_id, world_players.clerk_user_id), net_worth = excluded.net_worth, tokens = excluded.tokens, kills = excluded.kills, deaths = excluded.deaths, health = excluded.health, lng = coalesce(excluded.lng, world_players.lng), lat = coalesce(excluded.lat, world_players.lat), seen_at = excluded.seen_at")
       .bind(pid, name, clerkId, worldNum(body.netWorth), worldNum(body.tokens), worldNum(body.kills, 1e9), worldNum(body.deaths, 1e9), Math.max(0, Math.min(1000, worldNum(body.health, 1e6))), lng, lat, now),
-    env.DB.prepare("SELECT id, name, net_worth, health, lng, lat FROM world_players WHERE seen_at >= ? AND id != ? ORDER BY seen_at DESC LIMIT 50").bind(new Date(Date.now() - WORLD_PEER_SECONDS * 1000).toISOString(), pid),
+    env.DB.prepare("SELECT p.id, p.name, p.net_worth, p.health, p.lng, p.lat, c.x, c.z, c.h, c.s, c.level, c.color, c.at FROM world_players p LEFT JOIN world_cars c ON c.id = p.id WHERE p.seen_at >= ? AND p.id != ? ORDER BY p.seen_at DESC LIMIT 50").bind(new Date(Date.now() - WORLD_PEER_SECONDS * 1000).toISOString(), pid),
     env.DB.prepare("SELECT id, name, net_worth FROM world_players WHERE seen_at >= ? ORDER BY net_worth DESC LIMIT 10").bind(new Date(Date.now() - 30 * 864e5).toISOString()),
     since > 0
       ? env.DB.prepare("SELECT n, player_id, name, text, created_at FROM world_chat WHERE n > ? ORDER BY n LIMIT 30").bind(since)
       : env.DB.prepare("SELECT * FROM (SELECT n, player_id, name, text, created_at FROM world_chat WHERE created_at >= ? ORDER BY n DESC LIMIT 20) ORDER BY n").bind(new Date(Date.now() - 6 * 3600e3).toISOString()),
   ]);
-  // The shared city: who owns which lot, and rent others paid this player since the last beat.
-  const [ownLots, rentDue] = await env.DB.batch([
+  // The shared city: who owns which lot, and rent others paid this player since the last beat. Where this player's
+  // car is in the city (others draw it), races open to join or under way, and the other live leaderboards.
+  const [ownLots, rentDue, , races, lotBoard, levelBoard] = await env.DB.batch([
     worldLotsQuery(env),
     env.DB.prepare("SELECT coalesce(sum(rent_pending), 0) AS n FROM world_lots WHERE owner_id = ?").bind(pid),
+    carOk
+      ? env.DB.prepare("INSERT INTO world_cars (id, x, z, h, s, level, color, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET x = excluded.x, z = excluded.z, h = excluded.h, s = excluded.s, level = CASE WHEN ? > 0 THEN excluded.level ELSE world_cars.level END, color = excluded.color, at = excluded.at")
+        .bind(pid, car[0], car[1], car[2], Math.max(-60, Math.min(60, car[3])), lvl || 1, WORLD_CAR_COLOR.test(String(body.color || "")) ? body.color : null, ms, lvl)
+      : env.DB.prepare("UPDATE world_cars SET level = coalesce(?, level) WHERE id = ?").bind(lvl || null, pid),
+    env.DB.prepare("SELECT r.id, r.track, r.host_name, r.start_at, r.ends_at, (SELECT count(*) FROM world_race_entries e WHERE e.race_id = r.id) AS n, (SELECT count(*) FROM world_race_entries e WHERE e.race_id = r.id AND e.player_id = ?) AS mine FROM world_races r WHERE r.solo = 0 AND r.ends_at > ? ORDER BY r.start_at LIMIT 6").bind(pid, ms),
+    env.DB.prepare("SELECT l.owner_id AS id, max(l.owner_name) AS name, count(*) AS n, sum(l.level) AS stars FROM world_lots l JOIN world_players p ON p.id = l.owner_id WHERE p.seen_at >= ? GROUP BY l.owner_id ORDER BY n DESC, stars DESC LIMIT 10").bind(worldActiveSince()),
+    env.DB.prepare("SELECT p.id, p.name, c.level FROM world_cars c JOIN world_players p ON p.id = c.id WHERE p.seen_at >= ? ORDER BY c.level DESC, p.net_worth DESC LIMIT 10").bind(new Date(Date.now() - 30 * 864e5).toISOString()),
   ]);
   const rent = Number(rentDue.results?.[0]?.n) || 0;
   if (rent > 0) await env.DB.prepare("UPDATE world_lots SET rent_pending = 0 WHERE owner_id = ?").bind(pid).run();
   return rbcJson({
     ok: true,
-    peers: (peers.results || []).map((p) => ({ id: p.id, name: p.name, netWorth: Number(p.net_worth), health: Number(p.health), pos: p.lng == null ? null : [Number(p.lng), Number(p.lat)] })),
+    peers: (peers.results || []).map((p) => ({ id: p.id, name: p.name, netWorth: Number(p.net_worth), health: Number(p.health), pos: p.lng == null ? null : [Number(p.lng), Number(p.lat)],
+      car: p.x == null || ms - Number(p.at) > WORLD_PEER_SECONDS * 1000 ? null : [Number(p.x), Number(p.z), Number(p.h), Number(p.s)], level: Number(p.level) || 1, color: p.color || null })),
     board: (board.results || []).map((u) => ({ id: u.id, name: u.name, netWorth: Number(u.net_worth) })),
+    boards: {
+      lots: (lotBoard.results || []).map((u) => ({ id: u.id, name: u.name, lots: Number(u.n), stars: Number(u.stars) || 0 })),
+      level: (levelBoard.results || []).map((u) => ({ id: u.id, name: u.name, level: Number(u.level) || 1 })),
+    },
+    races: (races.results || []).map((r) => ({ id: r.id, track: r.track, host: r.host_name, start_at: Number(r.start_at), ends_at: Number(r.ends_at), n: Number(r.n), mine: Number(r.mine) > 0 })),
+    now: ms,
     chat: (chat.results || []).map((c) => ({ n: Number(c.n), id: "c" + c.n, senderId: c.player_id, author: c.name, text: c.text, ts: Date.parse(c.created_at) })),
     points,
     lots: (ownLots.results || []).map(worldLotOut),
@@ -159,6 +179,109 @@ async function worldRent(env, body) {
   return rbcJson({ ok: true, paid, owner: cur.owner_name });
 }
 
+// ---------------------------------------------------------------- street races (tracks and limits: empire_defs.js, as RBE)
+// The server keeps the clock: a race starts at start_at, each checkpoint is timed when its sync arrives, and a
+// checkpoint only counts in order, within RACE_CP_RADIUS of it, and no sooner than RACE_MAX_SPEED allows from the last
+// one. So times on the record board are the server's, not what a game says. Prizes are game money, paid by the game.
+function worldRaceOut(race, entries, pid, ms) {
+  return {
+    ok: true, now: ms,
+    race: { id: race.id, track: race.track, host: race.host_name, host_id: race.host_id, solo: !!Number(race.solo), start_at: Number(race.start_at), ends_at: Number(race.ends_at) },
+    entries: entries.map((e) => ({ id: e.player_id, name: e.name, slot: Number(e.slot), cp: Number(e.cp), finish_ms: e.finish_ms == null ? null : Number(e.finish_ms), place: e.place == null ? null : Number(e.place),
+      car: e.x == null ? null : [Number(e.x), Number(e.z), Number(e.h), Number(e.s)], you: e.player_id === pid })),
+  };
+}
+async function worldRaceRead(env, raceId, pid, ms) {
+  const [r, e] = await env.DB.batch([
+    env.DB.prepare("SELECT * FROM world_races WHERE id = ?").bind(raceId),
+    env.DB.prepare("SELECT * FROM world_race_entries WHERE race_id = ? ORDER BY slot").bind(raceId),
+  ]);
+  const race = r.results?.[0];
+  return race ? worldRaceOut(race, e.results || [], pid, ms) : null;
+}
+async function worldRace(env, body) {
+  const pid = String(body?.id || ""), action = String(body?.action || ""), ms = Date.now();
+  if (!WORLD_ID.test(pid)) return rbcJson({ ok: false, error: "Start the game again." }, 400);
+  const name = worldClean(body?.name, 24) || "Hustler";
+  if (action === "records") {
+    const t = RBE.raceTrack(body?.track);
+    if (!t) return rbcJson({ ok: false, error: "Pick a track." }, 400);
+    const [top, mine] = await env.DB.batch([
+      env.DB.prepare("SELECT player_id, name, ms, at FROM world_race_best WHERE track = ? ORDER BY ms, at LIMIT 10").bind(t.key),
+      env.DB.prepare("SELECT ms, (SELECT count(*) FROM world_race_best b WHERE b.track = ? AND b.ms < m.ms) + 1 AS rank FROM world_race_best m WHERE track = ? AND player_id = ?").bind(t.key, t.key, pid),
+    ]);
+    const me = mine.results?.[0];
+    return rbcJson({ ok: true, track: t.key, top: (top.results || []).map((r) => ({ id: r.player_id, name: r.name, ms: Number(r.ms), you: r.player_id === pid })), you: me ? { ms: Number(me.ms), rank: Number(me.rank) } : null });
+  }
+  if (action === "host" || action === "solo") {
+    const t = RBE.raceTrack(body?.track);
+    if (!t) return rbcJson({ ok: false, error: "Pick a track." }, 400);
+    if (!(await worldRateOk(env, "rh:" + pid, 8))) return rbcJson({ ok: false, error: "Slow down a little before starting another race." }, 429);
+    const solo = action === "solo", id = rbcId("race_"), start = ms + (solo ? RBE.RACE_SOLO_S : RBE.RACE_LOBBY_S) * 1000, ends = start + t.par * 3 * 1000;
+    await env.DB.batch([
+      // Old races go, and this player leaves any race they're still in.
+      env.DB.prepare("DELETE FROM world_race_entries WHERE race_id IN (SELECT id FROM world_races WHERE ends_at < ?)").bind(ms - 3600e3),
+      env.DB.prepare("DELETE FROM world_races WHERE ends_at < ?").bind(ms - 3600e3),
+      env.DB.prepare("DELETE FROM world_race_entries WHERE player_id = ? AND finish_ms IS NULL AND race_id IN (SELECT id FROM world_races WHERE ends_at > ?)").bind(pid, ms),
+      env.DB.prepare("INSERT INTO world_races (id, track, host_id, host_name, solo, start_at, ends_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(id, t.key, pid, name, solo ? 1 : 0, start, ends, new Date(ms).toISOString()),
+      env.DB.prepare("INSERT INTO world_race_entries (race_id, player_id, name, slot, cp, at) VALUES (?, ?, ?, 0, 0, ?)").bind(id, pid, name, ms),
+    ]);
+    return rbcJson(await worldRaceRead(env, id, pid, ms));
+  }
+  const raceId = String(body?.race || "");
+  if (!/^race_[A-Za-z0-9_-]{4,60}$/.test(raceId)) return rbcJson({ ok: false, error: "That race isn't running." }, 400);
+  const race = await env.DB.prepare("SELECT * FROM world_races WHERE id = ?").bind(raceId).first();
+  if (!race) return rbcJson({ ok: false, error: "That race isn't running." }, 404);
+  const t = RBE.raceTrack(race.track);
+  if (action === "join") {
+    if (Number(race.solo)) return rbcJson({ ok: false, error: "That's a solo time trial." }, 409);
+    if (ms >= Number(race.start_at)) return rbcJson({ ok: false, error: "That race has already started." }, 409);
+    if (!(await worldRateOk(env, "rj:" + pid, 12))) return rbcJson({ ok: false, error: "Slow down a little." }, 429);
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM world_race_entries WHERE player_id = ? AND race_id != ? AND finish_ms IS NULL AND race_id IN (SELECT id FROM world_races WHERE ends_at > ?)").bind(pid, raceId, ms),
+      // The next free grid slot, and only while there's room.
+      env.DB.prepare("INSERT OR IGNORE INTO world_race_entries (race_id, player_id, name, slot, cp, at) SELECT ?, ?, ?, coalesce((SELECT max(slot) + 1 FROM world_race_entries WHERE race_id = ?), 0), 0, ? WHERE (SELECT count(*) FROM world_race_entries WHERE race_id = ?) < ?")
+        .bind(raceId, pid, name, raceId, ms, raceId, RBE.RACE_MAX),
+    ]);
+    const out = await worldRaceRead(env, raceId, pid, ms);
+    if (!out.entries.some((e) => e.you)) return rbcJson({ ok: false, error: `That race is full (${RBE.RACE_MAX} racers).` }, 409);
+    return rbcJson(out);
+  }
+  const entry = await env.DB.prepare("SELECT * FROM world_race_entries WHERE race_id = ? AND player_id = ?").bind(raceId, pid).first();
+  if (action === "leave") {
+    if (entry && entry.finish_ms == null) await env.DB.prepare("DELETE FROM world_race_entries WHERE race_id = ? AND player_id = ? AND finish_ms IS NULL").bind(raceId, pid).run();
+    return rbcJson({ ok: true });
+  }
+  if (action !== "sync") return rbcJson({ ok: false, error: "Unknown action." }, 400);
+  if (!entry) return rbcJson({ ok: false, error: "You're not in that race." }, 404);
+  if (!(await worldRateOk(env, "rs:" + pid, 150))) return rbcJson({ ok: false, error: "Too fast." }, 429);
+  const pos = Array.isArray(body.car) ? body.car.slice(0, 4).map(Number) : [];
+  const ok = pos.length === 4 && pos.every(Number.isFinite) && Math.abs(pos[0]) < 400 && Math.abs(pos[1]) < 400;
+  const stmts = [];
+  if (ok) stmts.push(env.DB.prepare("UPDATE world_race_entries SET x = ?, z = ?, h = ?, s = ?, at = ? WHERE race_id = ? AND player_id = ?").bind(pos[0], pos[1], pos[2], Math.max(-60, Math.min(60, pos[3])), ms, raceId, pid));
+  const cp = Number(entry.cp), start = Number(race.start_at);
+  if (ok && t && entry.finish_ms == null && ms >= start && ms <= Number(race.ends_at) && worldNum(body.cp) === cp + 1 && cp < t.cps.length) {
+    // Where the car was when the game saw it pass (a sync can arrive a moment later, further on), else where it is now.
+    const hit = Array.isArray(body.hit) && body.hit.length === 2 && body.hit.every((v) => Number.isFinite(Number(v))) ? body.hit.map(Number) : pos;
+    const target = t.cps[cp], since = cp === 0 ? start : Number(entry.cp_at);
+    const near = Math.hypot(hit[0] - target[0], hit[1] - target[1]) <= RBE.RACE_CP_RADIUS;
+    const possible = ms - since >= (RBE.raceLeg(t, cp) / RBE.RACE_MAX_SPEED) * 1000;
+    if (near && possible) {
+      if (cp + 1 < t.cps.length) {
+        stmts.push(env.DB.prepare("UPDATE world_race_entries SET cp = ?, cp_at = ? WHERE race_id = ? AND player_id = ? AND cp = ?").bind(cp + 1, ms, raceId, pid, cp));
+      } else {
+        const time = ms - start;
+        stmts.push(env.DB.prepare("UPDATE world_race_entries SET cp = ?, cp_at = ?, finish_ms = ?, place = (SELECT count(*) FROM world_race_entries f WHERE f.race_id = ? AND f.finish_ms IS NOT NULL) + 1 WHERE race_id = ? AND player_id = ? AND cp = ? AND finish_ms IS NULL")
+          .bind(cp + 1, ms, time, raceId, raceId, pid, cp));
+        stmts.push(env.DB.prepare("INSERT INTO world_race_best (k, track, player_id, name, ms, race_id, at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(k) DO UPDATE SET name = excluded.name, ms = excluded.ms, race_id = excluded.race_id, at = excluded.at WHERE excluded.ms < world_race_best.ms")
+          .bind(`${t.key}:${pid}`, t.key, pid, name, time, raceId, new Date(ms).toISOString()));
+      }
+    }
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+  return rbcJson(await worldRaceRead(env, raceId, pid, ms));
+}
+
 async function worldChat(request, env, body) {
   const pid = String(body?.id || ""), text = worldClean(body?.text, 240), name = worldClean(body?.name, 24) || "Hustler";
   if (!WORLD_ID.test(pid)) return rbcJson({ ok: false, error: "Start the game again." }, 400);
@@ -215,13 +338,14 @@ async function rbWorldRoute(request, env, url, path, method) {
   if (!path.startsWith("/api/world/")) return null;
   if (!g.worldOpen) return rbcJson({ ok: false, error: "RB World is coming soon." }, 403);
   if (path === "/api/world/ads" && method === "GET") return await worldAds(env);
-  if (["/api/world/beat", "/api/world/chat", "/api/world/lot", "/api/world/rent"].includes(path) && method === "POST") {
+  if (["/api/world/beat", "/api/world/chat", "/api/world/lot", "/api/world/rent", "/api/world/race"].includes(path) && method === "POST") {
     const origin = request.headers.get("Origin");
     if (origin && origin !== url.origin) return rbcJson({ ok: false, error: "Not allowed from another site." }, 403);
     if (!/^application\/json/i.test(request.headers.get("Content-Type") || "")) return rbcJson({ ok: false, error: "Send JSON." }, 415);
     const body = await request.json().catch(() => ({}));
     if (path === "/api/world/lot") return await worldLot(env, body);
     if (path === "/api/world/rent") return await worldRent(env, body);
+    if (path === "/api/world/race") return await worldRace(env, body);
     return path === "/api/world/beat" ? await worldBeat(request, env, g, body) : await worldChat(request, env, body);
   }
   return rbcJson({ ok: false, error: "Not found" }, 404);

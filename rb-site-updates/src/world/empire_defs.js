@@ -65,3 +65,23 @@ export function rentFor(lot, level, business) {
   return Math.round(l.price * (business ? 0.02 * Math.max(1, Math.min(MAX_LEVEL, Number(level) || 1)) : 0.01));
 }
 export function upgradeCost(b, level) { return Math.round(b.cost * 0.6 * level); }
+
+// Street races: the same tracks for solo time trials and multiplayer races, and the server's checks.
+// A track is a start point and the checkpoints in order; the start faces the first checkpoint.
+const RL = (i) => -HALF - ROAD / 2 + i * PITCH; // the centre of road line i (0 and GRID are the ring road)
+const RING = [[RL(GRID), RL(0)], [RL(GRID), RL(GRID)], [RL(0), RL(GRID)], [RL(0), RL(0)], [RL(3), RL(0)]];
+export const RACE_TRACKS = [
+  { key: "loop", name: "Plaza Loop", par: 32, start: [RL(3), RL(1)], cps: [[RL(4), RL(1)], [RL(4), RL(5)], [RL(2), RL(5)], [RL(2), RL(1)], [RL(3), RL(1)]] },
+  { key: "zig", name: "Downtown Zigzag", par: 36, start: [RL(0), RL(0)], cps: [[RL(1), RL(0)], [RL(1), RL(2)], [RL(3), RL(2)], [RL(3), RL(4)], [RL(5), RL(4)], [RL(5), RL(6)]] },
+  { key: "ring", name: "City Ring", par: 52, start: [RL(3), RL(0)], cps: RING },
+  { key: "gp", name: "RB Grand Prix (2 laps)", par: 100, start: [RL(3), RL(0)], cps: [...RING, ...RING] },
+];
+export const RACE_LOBBY_S = 20;        // a hosted race starts this long after it's made; others can join until then
+export const RACE_SOLO_S = 3;          // a solo time trial's countdown
+export const RACE_MAX = 8;             // racers in one race
+export const RACE_MAX_SPEED = 50;      // m/s; the server refuses a checkpoint reached faster than this (top speed is 44 with nitro)
+export const RACE_CP_RADIUS = 10;      // how close to a checkpoint counts, on the server (the game uses 7)
+export const RACE_PRIZES = [25000, 15000, 8000]; // game money for 1st, 2nd, 3rd with two or more racers; everyone else who finishes gets 3000
+export function raceTrack(key) { return RACE_TRACKS.find((t) => t.key === key) || null; }
+// The distance from the point before checkpoint i (the start for 0) to checkpoint i.
+export function raceLeg(t, i) { const a = i === 0 ? t.start : t.cps[i - 1], b = t.cps[i]; return Math.hypot(b[0] - a[0], b[1] - a[1]); }

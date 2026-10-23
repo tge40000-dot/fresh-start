@@ -255,7 +255,7 @@ USERS.u_bob = { email: "bob@example.com" };
   const csp = w.headers.get("Content-Security-Policy");
   assert.ok(/connect-src 'self'[^;]*basemaps\.cartocdn\.com/.test(csp) && !/esm\.sh|instantdb|stripe/i.test(csp), "the game's hosts only: no InstantDB, no Stripe");
   assert.ok(!/instantdb|esm\.sh|js\.stripe\.com|\$9\.99/i.test(wh), "no InstantDB, Stripe or the unbacked $9.99 offer");
-  assert.ok(wh.includes('src="/app/world/main.js?v=w5"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
+  assert.ok(wh.includes('src="/app/world/main.js?v=w6"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
   assert.ok(wh.includes("OPEN THE RB APP") && wh.includes("SEE MEMBERSHIPS"));
   const mj = await (await go("/app/world/main.js")).text(), cj = await (await go("/app/world/rb_world.js")).text();
   assert.ok(mj.includes("from './rb_world.js'") && !mj.includes("@instantdb") && mj.includes("const db = init();"));
@@ -347,6 +347,73 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.ok(files.every(([st]) => st === 200));
 }
 
+// ---------------------------------------------------------------- 3e. RB World races (server-timed), cars and live boards
+{
+  const { raceTrack, raceLeg, RACE_MAX_SPEED, RACE_LOBBY_S, RACE_MAX } = await import("../src/world/empire_defs.js");
+  const race = (id, action, extra = {}) => { NOW += 50; return api("/api/world/race", { method: "POST", body: { id, name: "R" + id.slice(0, 3), action, ...extra } }); };
+  const beatR = (id, extra = {}) => { NOW += 4000; return api("/api/world/beat", { method: "POST", body: { id, name: "R" + id.slice(0, 3), ...extra } }); };
+  const A = "raceaaaa-0001", B = "racebbbb-0002", Cc = "racecccc-0003";
+  await beatR(A, { car: [10, -114, 0.5, 20], level: 7, color: "#2F55D4" }); await beatR(B, { car: [999, 0, 0, 0], color: "red" });
+  let wb = await beatR(B, { car: [5, 5, 0, 0], level: 2 });
+  const pa = wb.body.peers.find((p) => p.id === A);
+  assert.deepEqual(pa.car, [10, -114, 0.5, 20], "others see where your car is"); assert.equal(pa.level, 7); assert.equal(pa.color, "#2F55D4");
+  wb = await beatR(A);
+  const pb = wb.body.peers.find((p) => p.id === B);
+  assert.deepEqual(pb.car, [5, 5, 0, 0], "a car off the map is ignored"); assert.equal(pb.color, null, "and only #rrggbb colours");
+  assert.ok(wb.body.boards.level.some((u) => u.id === A && u.level === 7), "the level board");
+  assert.ok(Array.isArray(wb.body.boards.lots), "the lots board");
+  assert.equal((await race(A, "host", { track: "moon" })).status, 400, "unknown track");
+  let r = await race(A, "host", { track: "loop" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const id = r.body.race.id, start = r.body.race.start_at, t = raceTrack("loop");
+  assert.equal(start, NOW + RACE_LOBBY_S * 1000); assert.equal(r.body.race.solo, false);
+  assert.deepEqual(r.body.entries.map((e) => [e.id, e.slot, e.you]), [[A, 0, true]]);
+  wb = await beatR(B);
+  assert.deepEqual(wb.body.races.map((x) => [x.id, x.track, x.n, x.mine]), [[id, "loop", 1, false]], "everyone sees the open race");
+  r = await race(B, "join", { race: id }); assert.equal(r.status, 200); assert.equal(r.body.entries.find((e) => e.you).slot, 1);
+  assert.equal((await race(B, "join", { race: id })).body.entries.length, 2, "joining twice changes nothing");
+  // checkpoints before the start don't count
+  const at = (p) => [p[0] + 1, p[1] - 1, 0, 30];
+  r = await race(A, "sync", { race: id, cp: 1, car: at(t.cps[0]) }); assert.equal(r.body.entries.find((e) => e.you).cp, 0, "not before the start");
+  NOW = start + 100;
+  assert.equal((await race(Cc, "join", { race: id })).status, 409, "can't join once it has started");
+  r = await race(A, "sync", { race: id, cp: 1, car: at(t.cps[0]) }); assert.equal(r.body.entries.find((e) => e.you).cp, 0, "faster than any car can go");
+  NOW = start + Math.ceil((raceLeg(t, 0) / RACE_MAX_SPEED) * 1000) + 200;
+  r = await race(A, "sync", { race: id, cp: 1, car: [t.cps[0][0] + 20, t.cps[0][1], 0, 30] }); assert.equal(r.body.entries.find((e) => e.you).cp, 0, "too far from the checkpoint");
+  r = await race(A, "sync", { race: id, cp: 1, car: [t.cps[0][0] + 20, t.cps[0][1], 0, 30], hit: [t.cps[0][0] + 2, t.cps[0][1]] }); assert.equal(r.body.entries.find((e) => e.you).cp, 1, "the spot where the game saw it pass counts");
+  r = await race(A, "sync", { race: id, cp: 3, car: at(t.cps[2]) }); assert.equal(r.body.entries.find((e) => e.you).cp, 1, "checkpoints in order");
+  // A finishes, then B
+  const run = async (who, from, gap) => { for (let i = from; i < t.cps.length; i++) { NOW += gap; r = await race(who, "sync", { race: id, cp: i + 1, car: at(t.cps[i]) }); } return r.body.entries.find((e) => e.you); };
+  let me = await run(A, 1, 6000);
+  assert.equal(me.cp, t.cps.length); assert.equal(me.place, 1); assert.equal(me.finish_ms, NOW - start, "the server's time");
+  const aTime = me.finish_ms;
+  NOW = start; me = await run(B, 0, 7000);
+  assert.equal(me.place, 2); assert.ok(me.finish_ms > aTime);
+  r = await race(B, "sync", { race: id, cp: t.cps.length + 1, car: at(t.cps[0]) }); assert.equal(r.body.entries.find((e) => e.you).place, 2, "finishing twice changes nothing");
+  r = await race(Cc, "records", { track: "loop" });
+  assert.deepEqual(r.body.top.map((x) => [x.id, x.ms]), [[A, aTime], [B, me.finish_ms]]); assert.equal(r.body.you, null);
+  assert.deepEqual((await race(B, "records", { track: "loop" })).body.you, { ms: me.finish_ms, rank: 2 });
+  // a solo trial: no one can join; a slower time doesn't replace a best, a faster one does
+  r = await race(A, "solo", { track: "loop" }); const solo = r.body.race;
+  assert.equal(solo.solo, true); assert.equal(solo.start_at, NOW + 3000);
+  assert.equal((await race(B, "join", { race: solo.id })).status, 409, "solo is solo");
+  const runSolo = async (gap) => { NOW = solo.start_at; for (let i = 0; i < t.cps.length; i++) { NOW += gap; r = await race(A, "sync", { race: solo.id, cp: i + 1, car: at(t.cps[i]) }); } };
+  await runSolo(9000);
+  assert.equal(one("SELECT ms FROM world_race_best WHERE track='loop' AND player_id=?", A).ms, aTime, "a slower time keeps the best");
+  r = await race(A, "solo", { track: "loop" }); Object.assign(solo, r.body.race);
+  await runSolo(3200);
+  assert.equal(one("SELECT ms FROM world_race_best WHERE track='loop' AND player_id=?", A).ms, 5 * (3200 + 50), "a faster time replaces it (each call is 50 ms later)");
+  // leaving, and a full race
+  r = await race(B, "host", { track: "ring" }); const ring = r.body.race.id;
+  for (let i = 0; i < RACE_MAX - 1; i++) { const pid = `fullrace-${String(i).padStart(4, "0")}`; assert.equal((await race(pid, "join", { race: ring })).status, 200, "racer " + i); }
+  r = await race(Cc, "join", { race: ring }); assert.equal(r.status, 409); assert.match(r.body.error, /full/);
+  await race("fullrace-0000", "leave", { race: ring });
+  assert.equal((await race(Cc, "join", { race: ring })).status, 200, "a place came free");
+  assert.equal((await race(Cc, "sync", { race: "race_nope1234", cp: 0, car: [0, 0, 0, 0] })).status, 404);
+  assert.equal((await race("bad", "host", { track: "loop" })).status, 400);
+  for (const f of ["/app/world/race.js"]) assert.equal((await go(f)).status, 200, f);
+}
+
 // ---------------------------------------------------------------- 4. sign-in rules and the switch
 {
   assert.equal((await me()).status, 401, "needs sign-in");
@@ -372,4 +439,4 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.ok(closed.includes("coming soon") && !closed.includes("main.js"), "the world page says coming soon");
   sql("UPDATE badge_config SET value='on' WHERE key='world_open'");
 }
-console.log("badge ok: RB World on RB's backend (page, no InstantDB or Stripe, players, leaderboard, chat with limits, ads ticker, play-time points with gaps and daily cap), RB app and manifest, Gold Rush scores checked against the round (early, too high, twice, late, round and daily caps, rounds a day), off by default, terms for review, pulled points counted once, levels, achievements, signed QR read back, redeem with stock/balance/level checks, sign-in rules");
+console.log("badge ok: RB World races on the server clock (lobby, join window, checkpoint order, distance and speed checks, places, best times, solo, full, leave), cars, level and lots boards; RB World on RB's backend (page, no InstantDB or Stripe, players, leaderboard, chat with limits, ads ticker, play-time points with gaps and daily cap), RB app and manifest, Gold Rush scores checked against the round (early, too high, twice, late, round and daily caps, rounds a day), off by default, terms for review, pulled points counted once, levels, achievements, signed QR read back, redeem with stock/balance/level checks, sign-in rules");

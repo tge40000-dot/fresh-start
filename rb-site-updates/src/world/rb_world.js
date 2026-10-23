@@ -18,6 +18,9 @@ function token() { return clerk && clerk.session ? clerk.session.getToken().catc
 export function api(path, body) { return call(path, body); }
 const beatHooks = [];
 export function onBeat(cb) { beatHooks.push(cb); }
+// Extra fields sent with each beat (where the car is in the city, the player's level and car colour).
+const beatExtras = [];
+export function beatExtra(fn) { beatExtras.push(fn); }
 async function call(path, body) {
   const t = await token(), headers = { "Content-Type": "application/json" };
   if (t) headers.Authorization = "Bearer " + t;
@@ -58,7 +61,8 @@ export function init() {
     if (!state.me || !state.me.id || busy) return;
     busy = true;
     try {
-      const d = await call("/api/world/beat", { ...state.me, ...pending, since: state.since });
+      const extra = Object.assign({}, ...beatExtras.map((fn) => { try { return fn() || {}; } catch (e) { return {}; } }));
+      const d = await call("/api/world/beat", { ...state.me, ...pending, ...extra, since: state.since });
       pending = {};
       beatHooks.forEach((cb) => { try { cb(d); } catch (e) {} });
       state.peers = Object.fromEntries((d.peers || []).map((p) => [p.id, p]));

@@ -186,7 +186,7 @@ function renderLot(l) {
 
 // ---------------------------------------------------------------- driving
 // A low wedge with a cabin, wheels that spin and steer, head and brake lights; cops get a light bar.
-function makeCar(color, cop, glow) {
+export function makeCar(color, cop, glow) {
   const g = new THREE.Group(), paint = new THREE.MeshStandardMaterial({ color, metalness: 0.7, roughness: 0.25, emissive: glow ? color : 0x000000, emissiveIntensity: glow ? 0.25 : 0 });
   const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.7, 4.5), paint); body.position.y = 0.7; body.castShadow = true; g.add(body);
   const nose = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.35, 1.2), paint); nose.position.set(0, 1.05, 1.5); nose.rotation.x = 0.18; g.add(nose);
@@ -203,7 +203,7 @@ function makeCar(color, cop, glow) {
   const head = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.16, 0.08), new THREE.MeshBasicMaterial({ color: 0xFFF6D0 })); head.position.set(0, 0.85, 2.27); g.add(head);
   const tailMat = new THREE.MeshBasicMaterial({ color: 0x550000 });
   const tail = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.18, 0.08), tailMat); tail.position.set(0, 0.9, -2.27); g.add(tail);
-  g.userData = { wheels, tailMat };
+  g.userData = { wheels, tailMat, paint };
   if (glow) {
     const under = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 5), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, depthWrite: false })); under.rotation.x = -Math.PI / 2; under.position.y = 0.06; g.add(under);
     const flames = [-0.55, 0.55].map((x) => { const f = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.4, 8), new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.85 })); f.rotation.x = -Math.PI / 2; f.position.set(x, 0.55, -2.9); f.visible = false; g.add(f); return f; });
@@ -260,12 +260,13 @@ function cycleCam() {
 }
 car.vx = 0; car.vz = 0; car.boost = 1; car.steer = 0;
 function driveCar(dt) {
-  const { t, s, boost, hand } = driveInput();
+  let { t, s, boost, hand } = driveInput();
+  if (car.lock) { t = 0; boost = false; car.vx = car.vz = 0; } // held on the grid during a race countdown
   const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
   let fwd = car.vx * fx + car.vz * fz, side = car.vx * fz - car.vz * fx;
   const boosting = boost && car.boost > 0.02 && t > 0;
   car.boost = Math.max(0, Math.min(1, car.boost + (boosting ? -0.35 : 0.09) * dt));
-  const max = boosting ? 44 : 30, accel = boosting ? 34 : 19;
+  const max = (boosting ? 44 : 30) + (car.draft || 0), accel = boosting ? 34 : 19; // draft: a slipstream bonus in races
   if (t > 0) fwd += accel * dt * (fwd < max ? 1 : 0);
   else if (t < 0) fwd -= (fwd > 0 ? 42 : 14) * dt;
   else fwd *= Math.pow(0.45, dt);

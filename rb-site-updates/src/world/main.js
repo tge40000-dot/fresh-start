@@ -9,6 +9,7 @@ import { init, id } from './rb_world.js';
 import { initEmpire } from './empire.js';
 import { initHud } from './hud.js';
 import { initProgress } from './progress.js';
+import { initRace } from './race.js';
 
 // --- CORE ---
 const db = init();
@@ -493,6 +494,7 @@ async function startGame() {
     const ectx = { scene, player, play, gps: () => gpsFix, onFrame: (f) => frameHooks.push(f), sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); } };
     const hud = initHud(window.RBEmpire, ectx);
     window.RBProgress = initProgress(window.RBEmpire, ectx);
+    window.RBRace = initRace(window.RBEmpire, ectx, window.RBProgress);
     fetchCalendarEvents();
 }
 

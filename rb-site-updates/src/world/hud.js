@@ -62,6 +62,8 @@ function drawRadar(t) {
   const blink = Math.floor(t * 4) % 2;
   for (const c of R.cops) { cx.fillStyle = blink ? "#ff2a2a" : "#2a6bff"; cx.beginPath(); cx.arc(X(c.x), Z(c.z), 6, 0, 7); cx.fill(); }
   // the target: job or race checkpoint
+  // other players' cars (race.js): racers in your race in gold, everyone else white
+  for (const g of window.__rbGhosts || []) { cx.fillStyle = g.racer ? "#F5D547" : "#ffffff"; cx.beginPath(); cx.arc(X(g.x), Z(g.z), 4.5, 0, 7); cx.fill(); cx.strokeStyle = "#000"; cx.lineWidth = 1; cx.stroke(); }
   const tgt = R.job ? (R.job.stage ? R.job.b : R.job.a) : window.__rbRaceTarget || null;
   if (tgt) {
     const px = X(tgt[0]), pz = Z(tgt[1]), pulse = 8 + (t * 20) % 14;
@@ -99,7 +101,8 @@ export function help() {
     <tr><td><kbd>Shift</kbd> or <kbd>N</kbd></td><td>Nitro (the blue gauge refills)</td></tr>
     <tr><td><kbd>E</kbd></td><td>The lot you're next to: buy, build, manage</td></tr>
     <tr><td><kbd>C</kbd></td><td>Camera: chase, high, bonnet, free</td></tr>
-    <tr><td><kbd>R</kbd></td><td>Start a street race</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Street races: host, join or race the clock</td></tr>
+    <tr><td><kbd>L</kbd></td><td>Live leaderboard (🏆 on phones)</td></tr>
     <tr><td><kbd>H</kbd> / <kbd>Esc</kbd></td><td>This help / close a panel</td></tr>
     <tr><td>Phone</td><td>Stick to steer, GAS / BRAKE / DRIFT / NITRO on the right</td></tr>
     <tr><td>Controller</td><td>Left stick steer, RT gas, LT brake, A nitro, B drift, Y lot, Back camera, Start help</td></tr>
@@ -109,6 +112,8 @@ export function help() {
     <tr><td>🏠 Lots</td><td>Stop by a FOR SALE sign. Own all four of a colour for +50% customers. Others pay you rent when they stop on yours.</td></tr>
     <tr><td>🏢 Businesses</td><td>Build on your lot, set the price, hire talent, upgrade to ★★★★★, run marketing. They earn while you play, and a little while you're away.</td></tr>
     <tr><td>💰💎🃏 Drops</td><td>Drive through them. With location on, drops appear near where you really are too.</td></tr>
+    <tr><td>🏁 Races</td><td>Host a race and everyone in the city gets an invite, or join one. Podium places win $25,000 / $15,000 / $8,000. Blue canisters fill your nitro; driving close behind another racer (slipstream) refills it and adds speed.</td></tr>
+    <tr><td>🎨 Paint</td><td>In the race menu: colours for your car. Other players see it, with your name and level.</td></tr>
     <tr><td>📋 Goals</td><td>Daily rewards, three daily quests, achievements and your level.</td></tr>
   </table>
   <div class="rb-muted" style="margin-top:12px">Everything here is game money. Signed in with your RB account, your play time can also earn RB Badge points.</div>
