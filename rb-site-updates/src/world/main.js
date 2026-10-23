@@ -5,6 +5,8 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 // RB World runs on RB's own backend (rb_world.js), with the same calls the game used on InstantDB.
 import { init, id } from './rb_world.js';
+// The city you drive, buy, build and collect in (property, businesses, jobs, drops).
+import { initEmpire } from './empire.js';
 
 // --- CORE ---
 const db = init();
@@ -28,6 +30,8 @@ let allAds = [], chatMessages = [], investments = [];
 let isAdmin = false, chatOpen = false, combatMode = false, wantedLevel = 0;
 let vrSession = null;
 let particles, clock;
+let gpsFix = false;
+const frameHooks = [];
 
 // --- WEAPONS & SECURITY ---
 const WEAPONS = [
@@ -141,15 +145,6 @@ function init3D() {
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // --- GOLDEN GRID (Circuit-board paths) ---
-    const gridMat = new THREE.LineBasicMaterial({ color: 0xC9A84C, transparent: true, opacity: 0.15 });
-    for (let i = -200; i <= 200; i += 10) {
-        const geoH = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-200, 0.05, i), new THREE.Vector3(200, 0.05, i)]);
-        const geoV = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(i, 0.05, -200), new THREE.Vector3(i, 0.05, 200)]);
-        scene.add(new THREE.Line(geoH, gridMat));
-        scene.add(new THREE.Line(geoV, gridMat));
-    }
-
     // --- WATER PLANE (reflective dark water with gold shimmer) ---
     const waterGeo = new THREE.PlaneGeometry(500, 150);
     const waterMat = new THREE.MeshStandardMaterial({
@@ -160,8 +155,7 @@ function init3D() {
     water.position.set(0, -0.5, -120);
     scene.add(water);
 
-    // --- CITY BUILDINGS ---
-    generateCinematicCity();
+    // --- CITY BUILDINGS --- (the empire builds the city: roads, lots, the plaza and the skyline)
 
     // --- GOLDEN PARTICLES ---
     createGoldenParticles();
@@ -394,7 +388,7 @@ function animate() {
     renderer.setAnimationLoop(() => {
         const delta = clock.getDelta();
         const elapsed = clock.getElapsedTime();
-        controls.update();
+        if (controls.enabled) controls.update();
 
         // Animate particles (slow drift upward)
         if (particles) {
@@ -412,6 +406,7 @@ function animate() {
             if (ring) ring.material.opacity = 0.3 + Math.sin(elapsed * 2) * 0.15;
         }
 
+        frameHooks.forEach(f => f(delta, elapsed));
         // Render with bloom
         composer.render();
     });
@@ -444,6 +439,7 @@ function startGPS() {
     if (!navigator.geolocation) return;
     navigator.geolocation.watchPosition(pos => {
         player.pos = [pos.coords.longitude, pos.coords.latitude];
+        gpsFix = true;
         if (minimap) minimap.setCenter(player.pos);
     }, () => {}, { enableHighAccuracy: true });
 }
@@ -485,6 +481,12 @@ async function startGame() {
     setInterval(rotateTicker, 5000);
 
     bindControls();
+    window.RBEmpire = initEmpire({
+        scene, camera, player, play,
+        controls: () => controls, mesh: () => playerMesh, minimap: () => minimap, gps: () => gpsFix,
+        onFrame: (f) => frameHooks.push(f),
+        sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); },
+    });
     fetchCalendarEvents();
 }
 
@@ -694,7 +696,8 @@ window._buyTokens = () => { if (player.netWorth < 5000) { alert('Need $5K'); ret
 window._sellTokens = () => { if (player.tokens < 50) { alert('Need 50 tokens'); return; } player.tokens -= 50; player.netWorth += 5000; play('cash'); safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); renderInvest(); };
 
 // --- ROI ---
-function processROI() { player.netWorth += player.empireValue * 0.05; player.tokens += Math.floor(player.empireValue * 0.05 / 1000); }
+// Businesses now earn on their own (empire.js), so the old flat 5% of empire value is gone.
+function processROI() {}
 function processInvestROI() { investments.forEach(inv => { player.netWorth += Math.floor(inv.amount * 0.08); player.tokens += Math.floor(inv.amount * 0.08 / 500); }); safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); }
 
 // --- CHAT ---

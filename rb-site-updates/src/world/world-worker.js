@@ -13,7 +13,8 @@
 // relentlessbillionaire.com/game/ keeps working); play-time points only start once RB Badge itself is switched on.
 const WORLD_PEER_SECONDS = 20;
 const WORLD_BEAT_CREDIT = 10;
-const WORLD_VERSION = "w3";
+const WORLD_VERSION = "w4";
+const WORLD_OWNER_DAYS = 14; // a lot whose owner hasn't played for this long is for sale again
 
 function worldClean(s, n) { return String(s ?? "").replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, n); }
 function worldNum(v, max = 1e15) { const x = Math.floor(Number(v)); return Number.isFinite(x) ? Math.max(-max, Math.min(max, x)) : 0; }
@@ -78,13 +79,84 @@ async function worldBeat(request, env, g, body) {
       ? env.DB.prepare("SELECT n, player_id, name, text, created_at FROM world_chat WHERE n > ? ORDER BY n LIMIT 30").bind(since)
       : env.DB.prepare("SELECT * FROM (SELECT n, player_id, name, text, created_at FROM world_chat WHERE created_at >= ? ORDER BY n DESC LIMIT 20) ORDER BY n").bind(new Date(Date.now() - 6 * 3600e3).toISOString()),
   ]);
+  // The shared city: who owns which lot, and rent others paid this player since the last beat.
+  const [ownLots, rentDue] = await env.DB.batch([
+    worldLotsQuery(env),
+    env.DB.prepare("SELECT coalesce(sum(rent_pending), 0) AS n FROM world_lots WHERE owner_id = ?").bind(pid),
+  ]);
+  const rent = Number(rentDue.results?.[0]?.n) || 0;
+  if (rent > 0) await env.DB.prepare("UPDATE world_lots SET rent_pending = 0 WHERE owner_id = ?").bind(pid).run();
   return rbcJson({
     ok: true,
     peers: (peers.results || []).map((p) => ({ id: p.id, name: p.name, netWorth: Number(p.net_worth), health: Number(p.health), pos: p.lng == null ? null : [Number(p.lng), Number(p.lat)] })),
     board: (board.results || []).map((u) => ({ id: u.id, name: u.name, netWorth: Number(u.net_worth) })),
     chat: (chat.results || []).map((c) => ({ n: Number(c.n), id: "c" + c.n, senderId: c.player_id, author: c.name, text: c.text, ts: Date.parse(c.created_at) })),
     points,
+    lots: (ownLots.results || []).map(worldLotOut),
+    rent,
   });
+}
+
+// ---------------------------------------------------------------- the empire: lots and rent (empire_defs.js, as RBE)
+function worldActiveSince() { return new Date(Date.now() - WORLD_OWNER_DAYS * 864e5).toISOString(); }
+function worldLotsQuery(env) {
+  return env.DB.prepare("SELECT l.lot, l.owner_id, l.owner_name, l.business, l.level, l.title FROM world_lots l JOIN world_players p ON p.id = l.owner_id WHERE p.seen_at >= ?").bind(worldActiveSince());
+}
+function worldLotOut(r) { return { lot: Number(r.lot), owner_id: r.owner_id, owner_name: r.owner_name, business: r.business || null, level: Number(r.level) || 0, name: r.title || null }; }
+
+async function worldLot(env, body) {
+  const pid = String(body?.id || ""), action = String(body?.action || ""), l = RBE.lotById(body?.lot);
+  if (!WORLD_ID.test(pid)) return rbcJson({ ok: false, error: "Start the game again." }, 400);
+  if (!l) return rbcJson({ ok: false, error: "That lot isn't in the city." }, 400);
+  if (!(await worldRateOk(env, "l:" + pid, 20))) return rbcJson({ ok: false, error: "Slow down a little." }, 429);
+  const name = worldClean(body?.name, 24) || "Hustler", now = new Date(Date.now()).toISOString(), active = worldActiveSince();
+  const cur = await env.DB.prepare("SELECT l.*, (SELECT p.seen_at FROM world_players p WHERE p.id = l.owner_id) AS seen FROM world_lots l WHERE l.lot = ?").bind(l.id).first();
+  const ownerActive = cur && cur.owner_id && cur.seen && cur.seen >= active;
+  const read = async () => { const r = await env.DB.prepare("SELECT lot, owner_id, owner_name, business, level, title FROM world_lots WHERE lot = ?").bind(l.id).first(); return r && r.owner_id ? worldLotOut(r) : null; };
+  if (action === "buy") {
+    if (ownerActive) return rbcJson({ ok: false, error: cur.owner_id === pid ? "You already own it." : `${cur.owner_name} owns this lot.` }, 409);
+    const mineN = Number((await env.DB.prepare("SELECT count(*) AS n FROM world_lots l JOIN world_players p ON p.id = l.owner_id WHERE l.owner_id = ? AND p.seen_at >= ?").bind(pid, active).first())?.n) || 0;
+    if (mineN >= RBE.MAX_LOTS_PER_PLAYER) return rbcJson({ ok: false, error: `You already own ${RBE.MAX_LOTS_PER_PLAYER} lots, the most anyone can.` }, 409);
+    // Taken only if it's still free (or its owner has been away WORLD_OWNER_DAYS), so two buyers can't both get it.
+    await env.DB.prepare("INSERT INTO world_lots (lot, owner_id, owner_name, business, level, title, rent_pending, bought_at, updated_at) VALUES (?, ?, ?, NULL, 0, NULL, 0, ?, ?) ON CONFLICT(lot) DO UPDATE SET owner_id = excluded.owner_id, owner_name = excluded.owner_name, business = NULL, level = 0, title = NULL, rent_pending = 0, bought_at = excluded.bought_at, updated_at = excluded.updated_at WHERE world_lots.owner_id IS NULL OR coalesce((SELECT p.seen_at FROM world_players p WHERE p.id = world_lots.owner_id), '') < ?")
+      .bind(l.id, pid, name, now, now, active).run();
+    const after = await read();
+    if (!after || after.owner_id !== pid) return rbcJson({ ok: false, error: "Someone else just bought it." }, 409);
+    return rbcJson({ ok: true, lot: after });
+  }
+  if (!ownerActive || cur.owner_id !== pid) return rbcJson({ ok: false, error: "That isn't your lot." }, 403);
+  if (action === "build") {
+    const b = RBE.businessByKey(body?.business);
+    if (!b) return rbcJson({ ok: false, error: "Pick a business." }, 400);
+    if (cur.business) return rbcJson({ ok: false, error: "There's already a business here." }, 409);
+    if (b.tier > RBE.DISTRICTS[l.district].tier) return rbcJson({ ok: false, error: "That business needs a pricier district." }, 400);
+    await env.DB.prepare("UPDATE world_lots SET business = ?, level = 1, owner_name = ?, updated_at = ? WHERE lot = ? AND owner_id = ? AND business IS NULL").bind(b.key, name, now, l.id, pid).run();
+  } else if (action === "upgrade") {
+    const want = worldNum(body?.level);
+    if (!cur.business || want !== Number(cur.level) + 1 || want > RBE.MAX_LEVEL) return rbcJson({ ok: false, error: "It can't go up from here." }, 409);
+    await env.DB.prepare("UPDATE world_lots SET level = ?, updated_at = ? WHERE lot = ? AND owner_id = ? AND level = ?").bind(want, now, l.id, pid, Number(cur.level)).run();
+  } else if (action === "rename") {
+    const title = worldClean(body?.title, 28);
+    if (!title || !cur.business) return rbcJson({ ok: false, error: "Type a name." }, 400);
+    await env.DB.prepare("UPDATE world_lots SET title = ?, updated_at = ? WHERE lot = ? AND owner_id = ?").bind(title, now, l.id, pid).run();
+  } else if (action === "sell") {
+    const rent = Number(cur.rent_pending) || 0;
+    await env.DB.prepare("DELETE FROM world_lots WHERE lot = ? AND owner_id = ?").bind(l.id, pid).run();
+    return rbcJson({ ok: true, lot: null, rent });
+  } else return rbcJson({ ok: false, error: "Unknown action." }, 400);
+  return rbcJson({ ok: true, lot: await read() });
+}
+
+// Rent for stopping on someone else's lot: the amount comes from empire_defs.js, at most once a minute per lot.
+async function worldRent(env, body) {
+  const pid = String(body?.id || ""), l = RBE.lotById(body?.lot);
+  if (!WORLD_ID.test(pid) || !l) return rbcJson({ ok: false, error: "Start the game again." }, 400);
+  const cur = await env.DB.prepare("SELECT l.*, (SELECT p.seen_at FROM world_players p WHERE p.id = l.owner_id) AS seen FROM world_lots l WHERE l.lot = ?").bind(l.id).first();
+  if (!cur || !cur.owner_id || cur.owner_id === pid || !(cur.seen >= worldActiveSince())) return rbcJson({ ok: true, paid: 0 });
+  if (!(await worldRateOk(env, `r:${pid}:${l.id}`, 1))) return rbcJson({ ok: true, paid: 0 });
+  const paid = RBE.rentFor(l.id, cur.level, cur.business);
+  await env.DB.prepare("UPDATE world_lots SET rent_pending = min(rent_pending + ?, 1000000000000) WHERE lot = ? AND owner_id = ?").bind(paid, l.id, cur.owner_id).run();
+  return rbcJson({ ok: true, paid, owner: cur.owner_name });
 }
 
 async function worldChat(request, env, body) {
@@ -134,18 +206,21 @@ async function rbWorldRoute(request, env, url, path, method) {
     const html = RB_WORLD_HTML.replace("__CLERK_KEY__", () => rbcScriptJson(String(env.CLERK_PUBLISHABLE_KEY || ""))).replaceAll("__VERSION__", WORLD_VERSION);
     return new Response(request.method === "HEAD" ? null : html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Content-Security-Policy": worldCsp(env), "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN", "Referrer-Policy": "strict-origin-when-cross-origin" } });
   }
-  if ((path === "/app/world/main.js" || path === "/app/world/rb_world.js") && page) {
+  const files = { "/app/world/main.js": RB_WORLD_MAIN, "/app/world/rb_world.js": RB_WORLD_CLIENT, "/app/world/empire.js": RB_WORLD_EMPIRE, "/app/world/empire_defs.js": RB_WORLD_DEFS };
+  if (Object.hasOwn(files, path) && page) {
     if (!g.worldOpen) return new Response("// RB World is coming soon.\n", { status: 404, headers: { "Content-Type": "application/javascript; charset=utf-8" } });
-    return new Response(path.endsWith("main.js") ? RB_WORLD_MAIN : RB_WORLD_CLIENT, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff" } });
+    return new Response(files[path], { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff" } });
   }
   if (!path.startsWith("/api/world/")) return null;
   if (!g.worldOpen) return rbcJson({ ok: false, error: "RB World is coming soon." }, 403);
   if (path === "/api/world/ads" && method === "GET") return await worldAds(env);
-  if ((path === "/api/world/beat" || path === "/api/world/chat") && method === "POST") {
+  if (["/api/world/beat", "/api/world/chat", "/api/world/lot", "/api/world/rent"].includes(path) && method === "POST") {
     const origin = request.headers.get("Origin");
     if (origin && origin !== url.origin) return rbcJson({ ok: false, error: "Not allowed from another site." }, 403);
     if (!/^application\/json/i.test(request.headers.get("Content-Type") || "")) return rbcJson({ ok: false, error: "Send JSON." }, 415);
     const body = await request.json().catch(() => ({}));
+    if (path === "/api/world/lot") return await worldLot(env, body);
+    if (path === "/api/world/rent") return await worldRent(env, body);
     return path === "/api/world/beat" ? await worldBeat(request, env, g, body) : await worldChat(request, env, body);
   }
   return rbcJson({ ok: false, error: "Not found" }, 404);

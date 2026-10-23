@@ -154,6 +154,16 @@ upgrade("tables.js", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|
 upgrade("tables.js", 'if (k === "enabled" && !["on", "off"].includes(val))', 'if ((k === "enabled" || k === "world_open") && !["on", "off"].includes(val))', "RB World switch is checked")
 upgrade("tables.js", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_)/", "/^(points_|order_cap|contribution_cap|checkin_|adjust_max|game_|world_points|world_block)/", "RB World settings are checked")
 
+# RB World lots: who owns what in the game's city; deleting a row puts that lot back on sale.
+edit("tables.js", "  // ---------------- Settings\n  feature_controls: {",
+     "  world_lots: {\n"
+     '    label: "RB World lots", group: "Badges", pk: "lot", title: "owner_name", list: ["lot", "owner_name", "business", "level", "title", "updated_at"], search: ["owner_name", "title", "business"], order: "lot",\n'
+     "    del: true, ensure: BADGE_SCHEMA,\n"
+     '    note: "Who owns which lot in RB World\'s city (game money only). Delete a row to put that lot back on sale, for example if a name or business title breaks the rules. Lots also go back on sale by themselves when their owner hasn\'t played for 14 days.",\n'
+     '    fields: { owner_name: f.ro("Owner"), owner_id: f.ro("Game id"), business: f.ro("Business"), level: f.ro("Level", "int"), title: f.ro("Business name"), rent_pending: f.ro("Rent waiting", "int"), bought_at: f.ro("Bought", "datetime"), updated_at: f.ro("Updated", "datetime") },\n'
+     "  },\n\n"
+     "  // ---------------- Settings\n  feature_controls: {", "RB World lots table")
+
 # RB World chat (the 3D game at relentlessbillionaire.com/app/world), so the team can remove messages.
 edit("tables.js", "  // ---------------- Settings\n  feature_controls: {",
      "  world_chat: {\n"

@@ -14,6 +14,10 @@ export function id() {
 
 let clerk = null;
 function token() { return clerk && clerk.session ? clerk.session.getToken().catch(() => null) : Promise.resolve(null); }
+// The same request helper, for the empire (lots and rent), and a way for it to hear each beat.
+export function api(path, body) { return call(path, body); }
+const beatHooks = [];
+export function onBeat(cb) { beatHooks.push(cb); }
 async function call(path, body) {
   const t = await token(), headers = { "Content-Type": "application/json" };
   if (t) headers.Authorization = "Bearer " + t;
@@ -30,7 +34,7 @@ function showChip(text, href) {
   if (!chip) {
     chip = document.createElement("a");
     chip.id = "rb-badge-chip";
-    chip.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:calc(10px + env(safe-area-inset-bottom));z-index:9000;padding:7px 14px;border-radius:999px;background:rgba(5,5,5,.85);border:1px solid #C9A84C;color:#F5E6A3;font:700 11px/1.2 Inter,system-ui,sans-serif;letter-spacing:.06em;text-decoration:none;white-space:nowrap";
+    chip.style.cssText = "position:fixed;left:12px;top:198px;z-index:7000;padding:7px 14px;border-radius:999px;background:rgba(5,5,5,.85);border:1px solid #C9A84C;color:#F5E6A3;font:700 11px/1.2 Inter,system-ui,sans-serif;letter-spacing:.06em;text-decoration:none;white-space:nowrap";
     document.body.appendChild(chip);
   }
   chip.textContent = text;
@@ -56,6 +60,7 @@ export function init() {
     try {
       const d = await call("/api/world/beat", { ...state.me, ...pending, since: state.since });
       pending = {};
+      beatHooks.forEach((cb) => { try { cb(d); } catch (e) {} });
       state.peers = Object.fromEntries((d.peers || []).map((p) => [p.id, p]));
       presence.forEach((cb) => cb({ peers: state.peers }));
       for (const m of d.chat || []) {

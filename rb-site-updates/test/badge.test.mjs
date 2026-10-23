@@ -255,7 +255,7 @@ USERS.u_bob = { email: "bob@example.com" };
   const csp = w.headers.get("Content-Security-Policy");
   assert.ok(/connect-src 'self'[^;]*basemaps\.cartocdn\.com/.test(csp) && !/esm\.sh|instantdb|stripe/i.test(csp), "the game's hosts only: no InstantDB, no Stripe");
   assert.ok(!/instantdb|esm\.sh|js\.stripe\.com|\$9\.99/i.test(wh), "no InstantDB, Stripe or the unbacked $9.99 offer");
-  assert.ok(wh.includes('src="/app/world/main.js?v=w3"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
+  assert.ok(wh.includes('src="/app/world/main.js?v=w4"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
   assert.ok(wh.includes("OPEN THE RB APP") && wh.includes("SEE MEMBERSHIPS"));
   const mj = await (await go("/app/world/main.js")).text(), cj = await (await go("/app/world/rb_world.js")).text();
   assert.ok(mj.includes("from './rb_world.js'") && !mj.includes("@instantdb") && mj.includes("const db = init();"));
@@ -301,6 +301,50 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.ok((await me("u_bob")).body.history.some((x) => x.label === "Played RB World"));
   const terms = await (await go("/badge/terms")).text();
   assert.ok(terms.includes("RB World, the 3D city game") && terms.includes("are not RB Badge points"));
+}
+
+// ---------------------------------------------------------------- 3d. the RB World empire: shared lots and rent
+{
+  const lotApi = (id, lot, action, extra = {}) => { NOW += 3100; return api("/api/world/lot", { method: "POST", body: { id, name: id.slice(0, 4), lot, action, ...extra } }); };
+  const beatW = (id) => { NOW += 4000; return api("/api/world/beat", { method: "POST", body: { id, name: id.slice(0, 4) } }); };
+  const A = "aaaaaaaa-1111", B = "bbbbbbbb-2222";
+  await beatW(A); await beatW(B);
+  assert.equal((await lotApi(A, 14, "buy")).status, 400, "the plaza isn't for sale");
+  assert.equal((await lotApi(A, 99, "buy")).status, 400);
+  let r = await lotApi(A, 0, "buy");
+  assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.lot.owner_id, A);
+  r = await lotApi(B, 0, "buy"); assert.equal(r.status, 409); assert.match(r.body.error, /owns this lot/);
+  assert.equal((await lotApi(B, 0, "build", { business: "coffee" })).status, 403, "only the owner builds");
+  assert.equal((await lotApi(A, 0, "build", { business: "hotel" })).status, 400, "a hotel needs a pricier district");
+  r = await lotApi(A, 0, "build", { business: "coffee" }); assert.equal(r.body.lot.business, "coffee"); assert.equal(r.body.lot.level, 1);
+  assert.equal((await lotApi(A, 0, "build", { business: "barber" })).status, 409, "one business a lot");
+  assert.equal((await lotApi(A, 0, "upgrade", { level: 3 })).status, 409, "one level at a time");
+  r = await lotApi(A, 0, "upgrade", { level: 2 }); assert.equal(r.body.lot.level, 2);
+  r = await lotApi(A, 0, "rename", { title: "<b>Bean</b> There" }); assert.equal(r.body.lot.name, "bBean/b There");
+  // rent: B stops on A's lot; A collects it on the next beat
+  r = await api("/api/world/rent", { method: "POST", body: { id: B, lot: 0 } });
+  assert.equal(r.body.paid, 8000 * 0.02 * 2, "2% of the deed per level"); assert.equal(r.body.owner, "aaaa");
+  assert.equal((await api("/api/world/rent", { method: "POST", body: { id: B, lot: 0 } })).body.paid, 0, "once a minute per lot");
+  assert.equal((await api("/api/world/rent", { method: "POST", body: { id: A, lot: 0 } })).body.paid, 0, "no rent on your own lot");
+  let wb = await beatW(A);
+  assert.equal(wb.body.rent, 320); assert.deepEqual(wb.body.lots.map((x) => [x.lot, x.business, x.level, x.name]), [[0, "coffee", 2, "bBean/b There"]]);
+  assert.equal((await beatW(A)).body.rent, 0, "rent is paid out once");
+  // the most lots anyone can own
+  for (const id of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) assert.equal((await lotApi(A, id, "buy")).status, 200, "lot " + id);
+  r = await lotApi(A, 12, "buy"); assert.equal(r.status, 409); assert.match(r.body.error, /12 lots/);
+  // selling frees the lot and hands back rent waiting on it
+  await api("/api/world/rent", { method: "POST", body: { id: B, lot: 1 } });
+  r = await lotApi(A, 1, "sell"); assert.equal(r.body.ok, true); assert.equal(r.body.lot, null); assert.equal(r.body.rent, 80);
+  assert.equal((await lotApi(B, 1, "buy")).body.lot.owner_id, B);
+  // an owner who stops playing for 14 days loses their lots
+  NOW += 15 * DAY;
+  await beatW(B);
+  wb = await beatW(B);
+  assert.deepEqual(wb.body.lots.map((x) => x.lot), [1], "A's lots no longer show");
+  r = await lotApi(B, 0, "buy"); assert.equal(r.body.lot.owner_id, B, "and are for sale again"); assert.equal(r.body.lot.business, null);
+  const files = [];
+  for (const f of ["/app/world/empire.js", "/app/world/empire_defs.js"]) { const r = await go(f); files.push([r.status, await r.text()]); }
+  assert.ok(files.every(([st]) => st === 200));
 }
 
 // ---------------------------------------------------------------- 4. sign-in rules and the switch
