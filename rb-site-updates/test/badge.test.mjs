@@ -255,7 +255,7 @@ USERS.u_bob = { email: "bob@example.com" };
   const csp = w.headers.get("Content-Security-Policy");
   assert.ok(/connect-src 'self'[^;]*basemaps\.cartocdn\.com/.test(csp) && !/esm\.sh|instantdb|stripe/i.test(csp), "the game's hosts only: no InstantDB, no Stripe");
   assert.ok(!/instantdb|esm\.sh|js\.stripe\.com|\$9\.99/i.test(wh), "no InstantDB, Stripe or the unbacked $9.99 offer");
-  assert.ok(wh.includes('src="/app/world/main.js?v=w6"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
+  assert.ok(wh.includes('src="/app/world/main.js?v=w7"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
   assert.ok(wh.includes("OPEN THE RB APP") && wh.includes("SEE MEMBERSHIPS"));
   const mj = await (await go("/app/world/main.js")).text(), cj = await (await go("/app/world/rb_world.js")).text();
   assert.ok(mj.includes("from './rb_world.js'") && !mj.includes("@instantdb") && mj.includes("const db = init();"));
@@ -353,7 +353,7 @@ USERS.u_bob = { email: "bob@example.com" };
   const race = (id, action, extra = {}) => { NOW += 50; return api("/api/world/race", { method: "POST", body: { id, name: "R" + id.slice(0, 3), action, ...extra } }); };
   const beatR = (id, extra = {}) => { NOW += 4000; return api("/api/world/beat", { method: "POST", body: { id, name: "R" + id.slice(0, 3), ...extra } }); };
   const A = "raceaaaa-0001", B = "racebbbb-0002", Cc = "racecccc-0003";
-  await beatR(A, { car: [10, -114, 0.5, 20], level: 7, color: "#2F55D4" }); await beatR(B, { car: [999, 0, 0, 0], color: "red" });
+  await beatR(A, { car: [10, -114, 0.5, 20], level: 7, color: "#2F55D4" }); await beatR(B, { car: [2999, 0, 0, 0], color: "red" });
   let wb = await beatR(B, { car: [5, 5, 0, 0], level: 2 });
   const pa = wb.body.peers.find((p) => p.id === A);
   assert.deepEqual(pa.car, [10, -114, 0.5, 20], "others see where your car is"); assert.equal(pa.level, 7); assert.equal(pa.color, "#2F55D4");
@@ -383,11 +383,13 @@ USERS.u_bob = { email: "bob@example.com" };
   r = await race(A, "sync", { race: id, cp: 1, car: [t.cps[0][0] + 20, t.cps[0][1], 0, 30], hit: [t.cps[0][0] + 2, t.cps[0][1]] }); assert.equal(r.body.entries.find((e) => e.you).cp, 1, "the spot where the game saw it pass counts");
   r = await race(A, "sync", { race: id, cp: 3, car: at(t.cps[2]) }); assert.equal(r.body.entries.find((e) => e.you).cp, 1, "checkpoints in order");
   // A finishes, then B
-  const run = async (who, from, gap) => { for (let i = from; i < t.cps.length; i++) { NOW += gap; r = await race(who, "sync", { race: id, cp: i + 1, car: at(t.cps[i]) }); } return r.body.entries.find((e) => e.you); };
-  let me = await run(A, 1, 6000);
+  // each leg no faster than the top speed allows, plus `extra` ms (the tracks are real Midtown streets, legs of 270-560 m)
+  const legMs = (i) => Math.ceil((raceLeg(t, i) / RACE_MAX_SPEED) * 1000);
+  const run = async (who, from, extra) => { for (let i = from; i < t.cps.length; i++) { NOW += legMs(i) + extra; r = await race(who, "sync", { race: id, cp: i + 1, car: at(t.cps[i]) }); } return r.body.entries.find((e) => e.you); };
+  let me = await run(A, 1, 2000);
   assert.equal(me.cp, t.cps.length); assert.equal(me.place, 1); assert.equal(me.finish_ms, NOW - start, "the server's time");
   const aTime = me.finish_ms;
-  NOW = start; me = await run(B, 0, 7000);
+  NOW = start; me = await run(B, 0, 3000);
   assert.equal(me.place, 2); assert.ok(me.finish_ms > aTime);
   r = await race(B, "sync", { race: id, cp: t.cps.length + 1, car: at(t.cps[0]) }); assert.equal(r.body.entries.find((e) => e.you).place, 2, "finishing twice changes nothing");
   r = await race(Cc, "records", { track: "loop" });
@@ -397,12 +399,12 @@ USERS.u_bob = { email: "bob@example.com" };
   r = await race(A, "solo", { track: "loop" }); const solo = r.body.race;
   assert.equal(solo.solo, true); assert.equal(solo.start_at, NOW + 3000);
   assert.equal((await race(B, "join", { race: solo.id })).status, 409, "solo is solo");
-  const runSolo = async (gap) => { NOW = solo.start_at; for (let i = 0; i < t.cps.length; i++) { NOW += gap; r = await race(A, "sync", { race: solo.id, cp: i + 1, car: at(t.cps[i]) }); } };
+  const runSolo = async (extra) => { NOW = solo.start_at; for (let i = 0; i < t.cps.length; i++) { NOW += legMs(i) + extra; r = await race(A, "sync", { race: solo.id, cp: i + 1, car: at(t.cps[i]) }); } };
   await runSolo(9000);
   assert.equal(one("SELECT ms FROM world_race_best WHERE track='loop' AND player_id=?", A).ms, aTime, "a slower time keeps the best");
   r = await race(A, "solo", { track: "loop" }); Object.assign(solo, r.body.race);
-  await runSolo(3200);
-  assert.equal(one("SELECT ms FROM world_race_best WHERE track='loop' AND player_id=?", A).ms, 5 * (3200 + 50), "a faster time replaces it (each call is 50 ms later)");
+  await runSolo(300);
+  assert.equal(one("SELECT ms FROM world_race_best WHERE track='loop' AND player_id=?", A).ms, t.cps.reduce((a, _, i) => a + legMs(i) + 300 + 50, 0), "a faster time replaces it (each call is 50 ms later)");
   // leaving, and a full race
   r = await race(B, "host", { track: "ring" }); const ring = r.body.race.id;
   for (let i = 0; i < RACE_MAX - 1; i++) { const pid = `fullrace-${String(i).padStart(4, "0")}`; assert.equal((await race(pid, "join", { race: ring })).status, 200, "racer " + i); }
@@ -411,7 +413,7 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.equal((await race(Cc, "join", { race: ring })).status, 200, "a place came free");
   assert.equal((await race(Cc, "sync", { race: "race_nope1234", cp: 0, car: [0, 0, 0, 0] })).status, 404);
   assert.equal((await race("bad", "host", { track: "loop" })).status, 400);
-  for (const f of ["/app/world/race.js"]) assert.equal((await go(f)).status, 200, f);
+  for (const f of ["/app/world/race.js", "/app/world/city.js", "/app/world/city_data.js"]) assert.equal((await go(f)).status, 200, f);
 }
 
 // ---------------------------------------------------------------- 4. sign-in rules and the switch

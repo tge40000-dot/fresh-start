@@ -14,7 +14,7 @@
 // relentlessbillionaire.com/game/ keeps working); play-time points only start once RB Badge itself is switched on.
 const WORLD_PEER_SECONDS = 20;
 const WORLD_BEAT_CREDIT = 10;
-const WORLD_VERSION = "w6";
+const WORLD_VERSION = "w7";
 const WORLD_OWNER_DAYS = 14; // a lot whose owner hasn't played for this long is for sale again
 const WORLD_CAR_COLOR = /^#[0-9a-fA-F]{6}$/;
 
@@ -74,7 +74,7 @@ async function worldBeat(request, env, g, body) {
   const now = new Date(Date.now()).toISOString(), since = Math.max(0, worldNum(body.since)), ms = Date.now();
   const car = Array.isArray(body.car) ? body.car.slice(0, 4).map(Number) : [];
   const lvl = Math.max(0, Math.min(999, worldNum(body.level))); // 0: not sent, keep what's stored
-  const carOk = car.length === 4 && car.every(Number.isFinite) && Math.abs(car[0]) < 400 && Math.abs(car[1]) < 400;
+  const carOk = car.length === 4 && car.every(Number.isFinite) && Math.abs(car[0]) < 1500 && Math.abs(car[1]) < 1500;
   const [, peers, board, chat] = await env.DB.batch([
     env.DB.prepare("INSERT INTO world_players (id, name, clerk_user_id, net_worth, tokens, kills, deaths, health, lng, lat, seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, clerk_user_id = coalesce(excluded.clerk_user_id, world_players.clerk_user_id), net_worth = excluded.net_worth, tokens = excluded.tokens, kills = excluded.kills, deaths = excluded.deaths, health = excluded.health, lng = coalesce(excluded.lng, world_players.lng), lat = coalesce(excluded.lat, world_players.lat), seen_at = excluded.seen_at")
       .bind(pid, name, clerkId, worldNum(body.netWorth), worldNum(body.tokens), worldNum(body.kills, 1e9), worldNum(body.deaths, 1e9), Math.max(0, Math.min(1000, worldNum(body.health, 1e6))), lng, lat, now),
@@ -256,7 +256,7 @@ async function worldRace(env, body) {
   if (!entry) return rbcJson({ ok: false, error: "You're not in that race." }, 404);
   if (!(await worldRateOk(env, "rs:" + pid, 150))) return rbcJson({ ok: false, error: "Too fast." }, 429);
   const pos = Array.isArray(body.car) ? body.car.slice(0, 4).map(Number) : [];
-  const ok = pos.length === 4 && pos.every(Number.isFinite) && Math.abs(pos[0]) < 400 && Math.abs(pos[1]) < 400;
+  const ok = pos.length === 4 && pos.every(Number.isFinite) && Math.abs(pos[0]) < 1500 && Math.abs(pos[1]) < 1500;
   const stmts = [];
   if (ok) stmts.push(env.DB.prepare("UPDATE world_race_entries SET x = ?, z = ?, h = ?, s = ?, at = ? WHERE race_id = ? AND player_id = ?").bind(pos[0], pos[1], pos[2], Math.max(-60, Math.min(60, pos[3])), ms, raceId, pid));
   const cp = Number(entry.cp), start = Number(race.start_at);

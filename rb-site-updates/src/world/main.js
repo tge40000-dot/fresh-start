@@ -83,9 +83,9 @@ function init3D() {
     clock = new THREE.Clock();
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
-    scene.fog = new THREE.FogExp2(0x000000, 0.008);
+    scene.fog = new THREE.FogExp2(0x8a9bb0, 0.0012);
 
-    camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 9000);
     camera.position.set(0, 35, 55);
 
     renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('three-canvas'), antialias: true, powerPreference: 'high-performance' });
@@ -102,66 +102,14 @@ function init3D() {
     composer.addPass(new RenderPass(scene, camera));
     const bloomPass = new UnrealBloomPass(
         new THREE.Vector2(window.innerWidth, window.innerHeight),
-        1.2,   // strength
-        0.4,   // radius
-        0.2    // threshold
+        0.35,  // strength: only real lights glow (signs, lamps, lit windows at night)
+        0.5,   // radius
+        0.9    // threshold
     );
     composer.addPass(bloomPass);
 
-    // --- LIGHTING ---
-    // Ambient (very dim)
-    scene.add(new THREE.AmbientLight(0x1a1000, 0.3));
-
-    // Main gold directional light
-    const sun = new THREE.DirectionalLight(0xC9A84C, 1.5);
-    sun.position.set(30, 60, 20);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(4096, 4096);
-    sun.shadow.camera.near = 0.5;
-    sun.shadow.camera.far = 200;
-    sun.shadow.camera.left = -100;
-    sun.shadow.camera.right = 100;
-    sun.shadow.camera.top = 100;
-    sun.shadow.camera.bottom = -100;
-    scene.add(sun);
-
-    // Gold point lights scattered through city
-    const goldPositions = [[0,15,0],[-30,20,-20],[40,25,30],[-50,18,50],[60,22,-40]];
-    goldPositions.forEach(p => {
-        const light = new THREE.PointLight(0xC9A84C, 2, 80);
-        light.position.set(...p);
-        scene.add(light);
-    });
-
-    // Rim light (blue-gold contrast)
-    const rim = new THREE.DirectionalLight(0x4a3a10, 0.5);
-    rim.position.set(-40, 30, -50);
-    scene.add(rim);
-
-    // --- GROUND (Dark reflective) ---
-    const groundGeo = new THREE.PlaneGeometry(500, 500);
-    const groundMat = new THREE.MeshStandardMaterial({
-        color: 0x050505, metalness: 0.9, roughness: 0.2
-    });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    scene.add(ground);
-
-    // --- WATER PLANE (reflective dark water with gold shimmer) ---
-    const waterGeo = new THREE.PlaneGeometry(500, 150);
-    const waterMat = new THREE.MeshStandardMaterial({
-        color: 0x020200, metalness: 1, roughness: 0.1, transparent: true, opacity: 0.7
-    });
-    const water = new THREE.Mesh(waterGeo, waterMat);
-    water.rotation.x = -Math.PI / 2;
-    water.position.set(0, -0.5, -120);
-    scene.add(water);
-
-    // --- CITY BUILDINGS --- (the empire builds the city: roads, lots, the plaza and the skyline)
-
-    // --- GOLDEN PARTICLES ---
-    createGoldenParticles();
+    // --- LIGHTING, GROUND, CITY --- (the empire builds the real city: Midtown Manhattan from OpenStreetMap, the sky,
+    // the sun and its shadows; see empire.js and city.js)
 
     // --- PLAYER ---
     createPlayerMesh();
@@ -387,21 +335,28 @@ function createPlayerMesh() {
     playerMesh = group;
 }
 
+// Automatic quality: if the frame rate drops, render at a lower resolution, then without shadows and bloom; if there's
+// room again, step back up. Checked every two seconds.
+let qT = 0, qN = 0, lowFx = false, qRatio = Math.min(window.devicePixelRatio, 2);
+const Q_MAX = Math.min(window.devicePixelRatio, 2);
+const Q_FIXED = /[?&]hq\b/.test(location.search); // ?hq keeps full quality (screenshots)
+function quality(dt) {
+    if (Q_FIXED) return;
+    qT += dt; qN++;
+    if (qT < 2) return;
+    const fps = qN / qT; qT = 0; qN = 0;
+    if (fps < 34 && qRatio > 0.6) qRatio = Math.max(0.6, qRatio - 0.2);
+    else if (fps < 24 && !lowFx) { lowFx = true; renderer.shadowMap.enabled = false; scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); }); }
+    else if (fps > 56 && qRatio < Q_MAX) qRatio = Math.min(Q_MAX, qRatio + 0.1);
+    else return;
+    renderer.setPixelRatio(qRatio); composer.setPixelRatio(qRatio);
+}
+
 function animate() {
     renderer.setAnimationLoop(() => {
         const delta = clock.getDelta();
         const elapsed = clock.getElapsedTime();
         if (controls.enabled) controls.update();
-
-        // Animate particles (slow drift upward)
-        if (particles) {
-            const pos = particles.geometry.attributes.position.array;
-            for (let i = 1; i < pos.length; i += 3) {
-                pos[i] += 0.02;
-                if (pos[i] > 60) pos[i] = 0;
-            }
-            particles.geometry.attributes.position.needsUpdate = true;
-        }
 
         // Pulse player glow
         if (playerMesh) {
@@ -410,8 +365,9 @@ function animate() {
         }
 
         frameHooks.forEach(f => f(delta, elapsed));
-        // Render with bloom
-        composer.render();
+        // Render with bloom (or straight, if the device needs the speed)
+        quality(delta);
+        if (lowFx) renderer.render(scene, camera); else composer.render();
     });
 }
 
@@ -420,8 +376,10 @@ function initMinimap() {
     minimap = new maplibregl.Map({
         container: 'minimap',
         style: 'https://tiles.basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
-        center: player.pos, zoom: 14, interactive: false
+        center: player.pos, zoom: 14, interactive: false, attributionControl: false
     });
+    // the map's credits (CARTO, OpenStreetMap) as the small (i) button: it's a small map
+    minimap.addControl(new maplibregl.AttributionControl({ compact: true }));
 }
 
 // --- WEBXR VR ---
@@ -485,13 +443,13 @@ async function startGame() {
 
     bindControls();
     window.RBEmpire = initEmpire({
-        scene, camera, player, play,
+        scene, camera, player, play, renderer,
         controls: () => controls, mesh: () => playerMesh, minimap: () => minimap, gps: () => gpsFix,
         onFrame: (f) => frameHooks.push(f),
         sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); },
         help: () => hud && hud.help(),
     });
-    const ectx = { scene, player, play, gps: () => gpsFix, onFrame: (f) => frameHooks.push(f), sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); } };
+    const ectx = { scene, player, play, gps: () => gpsFix, minimap: () => minimap, onFrame: (f) => frameHooks.push(f), sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); } };
     const hud = initHud(window.RBEmpire, ectx);
     window.RBProgress = initProgress(window.RBEmpire, ectx);
     window.RBRace = initRace(window.RBEmpire, ectx, window.RBProgress);

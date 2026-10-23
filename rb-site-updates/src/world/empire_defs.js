@@ -67,15 +67,16 @@ export function rentFor(lot, level, business) {
 export function upgradeCost(b, level) { return Math.round(b.cost * 0.6 * level); }
 
 // Street races: the same tracks for solo time trials and multiplayer races, and the server's checks.
-// A track is a start point and the checkpoints in order; the start faces the first checkpoint.
-const RL = (i) => -HALF - ROAD / 2 + i * PITCH; // the centre of road line i (0 and GRID are the ring road)
-const RING = [[RL(GRID), RL(0)], [RL(GRID), RL(GRID)], [RL(0), RL(GRID)], [RL(0), RL(0)], [RL(3), RL(0)]];
+// A track is a start point and the checkpoints in order (turns on real Midtown streets); the start faces the first
+// checkpoint. Generated from the road network by rb-tools/bake_city.mjs: don't edit by hand, re-bake.
+// BEGIN BAKED TRACKS (rb-tools/bake_city.mjs)
 export const RACE_TRACKS = [
-  { key: "loop", name: "Plaza Loop", par: 32, start: [RL(3), RL(1)], cps: [[RL(4), RL(1)], [RL(4), RL(5)], [RL(2), RL(5)], [RL(2), RL(1)], [RL(3), RL(1)]] },
-  { key: "zig", name: "Downtown Zigzag", par: 36, start: [RL(0), RL(0)], cps: [[RL(1), RL(0)], [RL(1), RL(2)], [RL(3), RL(2)], [RL(3), RL(4)], [RL(5), RL(4)], [RL(5), RL(6)]] },
-  { key: "ring", name: "City Ring", par: 52, start: [RL(3), RL(0)], cps: RING },
-  { key: "gp", name: "RB Grand Prix (2 laps)", par: 100, start: [RL(3), RL(0)], cps: [...RING, ...RING] },
+  {"key":"loop","name":"Times Square Loop","par":72,"start":[-10.6,229.7],"cps":[[-9.9,-162],[263,-160.9],[262.3,241.4],[-10.6,241.7]]},
+  {"key":"zig","name":"Theater District Zigzag","par":84,"start":[-284.4,-545.9],"cps":[[-283.9,-239.2],[-10.2,-239.9],[-11.5,76.8],[262.7,76.9],[262.9,402.9]]},
+  {"key":"ring","name":"Midtown Ring","par":167,"start":[-272.4,-557.9],"cps":[[263.4,-557.6],[263.1,560.4],[-284.7,561.6],[-284.4,-557.9]]},
+  {"key":"gp","name":"RB Grand Prix (2 laps)","par":212,"start":[-271.9,-239.2],"cps":[[263,-239.8],[262.3,241.4],[-284.5,242],[-283.9,-239.2],[263,-239.8],[262.3,241.4],[-284.5,242],[-283.9,-239.2]]},
 ];
+// END BAKED TRACKS
 export const RACE_LOBBY_S = 20;        // a hosted race starts this long after it's made; others can join until then
 export const RACE_SOLO_S = 3;          // a solo time trial's countdown
 export const RACE_MAX = 8;             // racers in one race

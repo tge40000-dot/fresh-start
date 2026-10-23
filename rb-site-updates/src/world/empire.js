@@ -1,5 +1,6 @@
 // RB World empire: the city you drive, buy, build and collect in. Loaded by main.js after the 3D scene is up.
-//   Drive (GTA): your car on a road grid, traffic, hustle jobs, heists that bring the cops and a wanted level.
+//   Drive (GTA): your car on real Midtown Manhattan streets (city.js, from OpenStreetMap), traffic that keeps to the
+//     one-way streets and stops at red lights, hustle jobs, heists that bring the cops and a wanted level.
 //   Property (Monopoly): 32 lots in 8 colour districts, shared by every player (server); rent when you stop at someone
 //     else's lot; own a whole district for the set bonus.
 //   Collect (Pokémon Go): drops on the city streets and, with location on, near where you really are; talent cards.
@@ -7,7 +8,9 @@
 //     while you play and a little while you're away.
 // All of it is game money: it stays in RB World and is never RB Badge points.
 import * as THREE from "three";
-import { GRID, BLOCK, ROAD, PITCH, HALF, LOTS, DISTRICTS, BUSINESSES, MAX_LEVEL, MAX_LOTS_PER_PLAYER, RENT_COOLDOWN_S, businessByKey, lotById, rentFor, upgradeCost } from "./empire_defs.js";
+import { Sky } from "three/addons/objects/Sky.js";
+import * as CITY from "./city.js";
+import { LOTS, DISTRICTS, BUSINESSES, MAX_LEVEL, MAX_LOTS_PER_PLAYER, RENT_COOLDOWN_S, businessByKey, lotById, rentFor, upgradeCost } from "./empire_defs.js";
 import { api, onBeat } from "./rb_world.js";
 
 const SAVE = "rb_empire_v1";
@@ -29,12 +32,15 @@ const JOBS = [
 let C = null; // what main.js hands over: scene, camera, controls, player, play, save, hud, mesh, minimap, gps
 const S = { biz: {}, cards: [], picked: {}, lastTick: Date.now(), clock: 9 * 60, stats: { earned: 0, jobs: 0, busts: 0, drops: 0 } };
 const lots = {}; // server: lot -> { owner_id, owner_name, business, level, name }
-const car = { x: 0, z: -HALF - ROAD / 2, heading: 0, speed: 0, mesh: null };
+const car = { x: -12, z: 118, heading: Math.PI, speed: 0, mesh: null }; // on 7th Avenue at 44th Street, facing uptown
+// each lot is a real building: where its door is on the street, and the building itself
+for (const l of LOTS) { const g = CITY.lotGeo[l.id]; if (g) Object.assign(l, { x: g.door[0], z: g.door[1], face: g.face, building: g.building }); }
 const keys = {};
 const joy = { x: 0, y: 0, on: false };
 let lotMeshes = {}, traffic = [], cops = [], drops = [], gpsDrops = [], gpsMarkers = [], job = null, beacon = null;
 let wanted = 0, bustT = 0, escapeT = 0, freeCam = false, lastRent = {}, nearLot = null, stopT = 0, toastBox = null, ui = {};
-let dayLight = null, sun = null, windowMat = null, sky = null, stars = null, lampMat = null;
+const pools = []; // real light from the street lamps nearest you, at night
+let dayLight = null, sun = null, windowMat = null, sky = null, stars = null, lampMat = null, world = null, moon = null, headlight = null, pmrem = null, envAt = -1;
 // What happened in the game, for progress.js (levels, quests, achievements, the tutorial) and the HUD.
 const listeners = {};
 export function on(name, cb) { (listeners[name] ||= []).push(cb); }
@@ -52,13 +58,9 @@ function load() {
 }
 function save() { try { localStorage.setItem(SAVE, JSON.stringify(S)); } catch (e) {} }
 
-// ---------------------------------------------------------------- the city
-const roadLines = []; // road centre lines, the same on both axes
-for (let k = 0; k <= GRID; k++) roadLines.push(-HALF - ROAD / 2 + k * PITCH);
-const blockRect = (l) => ({ x0: l.x - BLOCK / 2, x1: l.x + BLOCK / 2, z0: l.z - BLOCK / 2, z1: l.z + BLOCK / 2 });
-const ALL_BLOCKS = [];
-for (let gz = 0; gz < GRID; gz++) for (let gx = 0; gx < GRID; gx++) ALL_BLOCKS.push({ x: -HALF + BLOCK / 2 + gx * PITCH, z: -HALF + BLOCK / 2 + gz * PITCH, id: gz * GRID + gx });
-
+// ---------------------------------------------------------------- the city (city.js: real streets and buildings)
+// junctions with traffic lights: three or more roads, one of them an avenue or a wide street
+const SIGNAL = CITY.nodes.map((_, i) => CITY.anyLinks[i].length >= 3 && Math.max(...CITY.anyLinks[i].map((l) => CITY.edges[l.e].w)) >= 9);
 function label(text, opts = {}) {
   const cv = document.createElement("canvas"), w = opts.w || 512, h = opts.h || 128;
   cv.width = w; cv.height = h;
@@ -80,74 +82,40 @@ function sprite(text, opts) {
 
 function buildCity() {
   const scene = C.scene;
-  // roads (one long plane per line) and gold lane dashes
-  const asphalt = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.85, metalness: 0.2 });
-  const span = 2 * HALF + 2 * ROAD;
-  for (const r of roadLines) {
-    const a = new THREE.Mesh(new THREE.PlaneGeometry(span, ROAD), asphalt); a.rotation.x = -Math.PI / 2; a.position.set(0, 0.03, r); a.receiveShadow = true; scene.add(a);
-    const b = new THREE.Mesh(new THREE.PlaneGeometry(ROAD, span), asphalt); b.rotation.x = -Math.PI / 2; b.position.set(r, 0.031, 0); b.receiveShadow = true; scene.add(b);
-  }
-  const dash = new THREE.InstancedMesh(new THREE.PlaneGeometry(2.4, 0.22), new THREE.MeshBasicMaterial({ color: 0xC9A84C, transparent: true, opacity: 0.55 }), roadLines.length * 2 * 40);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
-  let n = 0;
-  for (const r of roadLines) for (let i = 0; i < 40; i++) {
-    const t = -span / 2 + (i + 0.5) * (span / 40);
-    e.set(-Math.PI / 2, 0, 0); q.setFromEuler(e); m.compose(new THREE.Vector3(t, 0.05, r), q, new THREE.Vector3(1, 1, 1)); dash.setMatrixAt(n++, m);
-    e.set(-Math.PI / 2, 0, Math.PI / 2); q.setFromEuler(e); m.compose(new THREE.Vector3(r, 0.05, t), q, new THREE.Vector3(1, 1, 1)); dash.setMatrixAt(n++, m);
-  }
-  scene.add(dash);
-  // blocks: a kerb pad per block, with its district colour band along the road (like a Monopoly board)
-  const pad = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.7, metalness: 0.3 });
-  for (const b of ALL_BLOCKS) {
-    const k = new THREE.Mesh(new THREE.BoxGeometry(BLOCK, 0.4, BLOCK), pad); k.position.set(b.x, 0.2, b.z); k.receiveShadow = true; scene.add(k);
-  }
-  for (const l of LOTS) {
-    const d = DISTRICTS[l.district];
-    const band = new THREE.Mesh(new THREE.BoxGeometry(BLOCK, 0.5, 2.2), new THREE.MeshStandardMaterial({ color: d.color, emissive: d.color, emissiveIntensity: 0.35 }));
-    band.position.set(l.x, 0.3, l.z + BLOCK / 2 - 1.1); scene.add(band);
-  }
-  // RB Plaza: the HQ tower and the billboard
-  const hq = new THREE.Mesh(new THREE.BoxGeometry(18, 60, 18), new THREE.MeshStandardMaterial({ color: 0x0a0a0a, metalness: 0.9, roughness: 0.15, emissive: 0xC9A84C, emissiveIntensity: 0.06 }));
-  hq.position.set(0, 30, 0); hq.castShadow = true; scene.add(hq);
-  const crown = new THREE.Mesh(new THREE.BoxGeometry(19, 1.2, 19), new THREE.MeshBasicMaterial({ color: 0xC9A84C })); crown.position.set(0, 60.6, 0); scene.add(crown);
-  const bb = sprite("RELENTLESS BILLIONAIRE\nRB WORLD", { w: 1024, h: 256, size: 70, sx: 30, sy: 7.5, border: "#C9A84C", bg: "rgba(0,0,0,0.9)" }); bb.position.set(0, 70, 0); scene.add(bb);
-  const plazaSign = sprite("RB PLAZA", { size: 70, sx: 14, sy: 3.5, border: "#C9A84C" }); plazaSign.position.set(0, 6, 34); scene.add(plazaSign);
-  // a skyline round the edge, with lit windows (one shared texture)
-  const wcv = document.createElement("canvas"); wcv.width = 64; wcv.height = 128;
-  const wx = wcv.getContext("2d"); wx.fillStyle = "#050505"; wx.fillRect(0, 0, 64, 128);
-  for (let y = 4; y < 128; y += 10) for (let x = 4; x < 64; x += 10) if (Math.random() < 0.45) { wx.fillStyle = Math.random() < 0.85 ? "#C9A84C" : "#F5E6A3"; wx.fillRect(x, y, 5, 6); }
-  const wtex = new THREE.CanvasTexture(wcv); wtex.wrapS = wtex.wrapT = THREE.RepeatWrapping; wtex.repeat.set(2, 4);
-  windowMat = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, metalness: 0.6, roughness: 0.4, emissive: 0xffffff, emissiveMap: wtex, emissiveIntensity: 0.6 });
-  const towers = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), windowMat, 90);
-  for (let i = 0; i < 90; i++) {
-    const ang = (i / 90) * Math.PI * 2 + rnd(-0.03, 0.03), r = HALF + rnd(28, 70), h = rnd(20, 80), w = rnd(8, 16);
-    m.compose(new THREE.Vector3(Math.cos(ang) * r, h / 2, Math.sin(ang) * r), new THREE.Quaternion(), new THREE.Vector3(w, h, w)); towers.setMatrixAt(i, m);
-  }
-  scene.add(towers);
-  // the sky: a gradient dome that follows the time of day, with stars at night
-  sky = new THREE.Mesh(new THREE.SphereGeometry(700, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { top: { value: new THREE.Color(0x0b1a3a) }, bottom: { value: new THREE.Color(0xC9A84C) } },
-    vertexShader: "varying float h; void main(){ h = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
-    fragmentShader: "uniform vec3 top; uniform vec3 bottom; varying float h; void main(){ gl_FragColor = vec4(mix(bottom, top, smoothstep(-0.05, 0.45, h)), 1.0); }" }));
-  scene.add(sky);
-  const sp = new Float32Array(900 * 3);
-  for (let i = 0; i < 900; i++) { const th = Math.random() * Math.PI * 2, ph = Math.random() * 1.3; sp.set([Math.cos(th) * Math.sin(ph) * 650, Math.cos(ph) * 650, Math.sin(th) * Math.sin(ph) * 650], i * 3); }
+  world = CITY.buildCity(scene);
+  CITY.timesSquare(scene, world);
+  lampMat = world.lampMat;
+  // lit windows for the businesses players build
+  windowMat = new THREE.MeshStandardMaterial({ color: 0x1b2026, metalness: 0.6, roughness: 0.3, emissive: 0xffd9a0, emissiveIntensity: 0.3 });
+  // a real sky (sun, haze, sunsets), with stars at night
+  sky = new Sky(); sky.scale.setScalar(9000); scene.add(sky);
+  Object.assign(sky.material.uniforms, { turbidity: { value: 2.5 }, rayleigh: { value: 1 }, mieCoefficient: { value: 0.003 }, mieDirectionalG: { value: 0.8 } });
+  const sp = new Float32Array(1500 * 3);
+  for (let i = 0; i < 1500; i++) { const th = Math.random() * Math.PI * 2, ph = Math.random() * 1.35; sp.set([Math.cos(th) * Math.sin(ph) * 4000, Math.cos(ph) * 9000, Math.sin(th) * Math.sin(ph) * 9000], i * 3); }
   const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.BufferAttribute(sp, 3));
-  stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, transparent: true, opacity: 0, fog: false, depthWrite: false })); scene.add(stars);
-  // street lights on every corner, lit at night
-  lampMat = new THREE.MeshBasicMaterial({ color: 0xFFE2A0 });
-  const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.16, 7, 6), new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8 }), roadLines.length ** 2);
-  const lamps = new THREE.InstancedMesh(new THREE.SphereGeometry(0.45, 10, 8), lampMat, roadLines.length ** 2);
-  let li = 0;
-  for (const rx of roadLines) for (const rz of roadLines) { m.makeTranslation(rx + ROAD / 2 + 0.6, 3.5, rz + ROAD / 2 + 0.6); poles.setMatrixAt(li, m); m.makeTranslation(rx + ROAD / 2 + 0.6, 7.1, rz + ROAD / 2 + 0.6); lamps.setMatrixAt(li++, m); }
-  scene.add(poles); scene.add(lamps);
-  // the plaza garden
-  const trees = new THREE.InstancedMesh(new THREE.ConeGeometry(1.6, 5, 8), new THREE.MeshStandardMaterial({ color: 0x0f3d24, emissive: 0x06210f, emissiveIntensity: 0.4 }), 16);
-  for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; m.makeTranslation(Math.cos(a) * 26, 2.9, Math.sin(a) * 26); trees.setMatrixAt(i, m); }
-  scene.add(trees);
-  const fountain = new THREE.Mesh(new THREE.CylinderGeometry(5, 5.5, 1, 32), new THREE.MeshStandardMaterial({ color: 0x14202a, metalness: 0.9, roughness: 0.1, emissive: 0x1d4f7a, emissiveIntensity: 0.4 })); fountain.position.set(0, 0.9, 22); scene.add(fountain);
-  dayLight = new THREE.HemisphereLight(0xfff2d0, 0x101010, 0.0); scene.add(dayLight);
-  sun = new THREE.DirectionalLight(0xffffff, 0.0); sun.position.set(-60, 120, 40); scene.add(sun);
+  stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 7, sizeAttenuation: true, transparent: true, opacity: 0, fog: false, depthWrite: false })); scene.add(stars);
+  // light: sky and ground bounce, the sun (its shadows follow your car), and a cool moon at night
+  dayLight = new THREE.HemisphereLight(0xcfe3ff, 0x5b5248, 0.6); scene.add(dayLight);
+  sun = new THREE.DirectionalLight(0xfff1dc, 2.2); sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -110, right: 110, top: 110, bottom: -110, near: 10, far: 900 });
+  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.6;
+  scene.add(sun); scene.add(sun.target);
+  moon = new THREE.DirectionalLight(0x8fa8ff, 0.0); moon.position.set(300, 500, -200); scene.add(moon);
+  if (C.renderer) pmrem = new THREE.PMREMGenerator(C.renderer);
+  for (let i = 0; i < 6; i++) { const pl = new THREE.PointLight(0xffc98a, 0, 30, 1.6); scene.add(pl); pools.push(pl); }
+}
+// move the lamp lights to the street lamps nearest the car (once a second)
+function poolsTick() {
+  if (!world || !pools.length) return;
+  const near = world.lamps.map((l) => [l, (l[0] - car.x) ** 2 + (l[1] - car.z) ** 2]).sort((a, b) => a[1] - b[1]).slice(0, pools.length);
+  near.forEach(([[x, z, r]], i) => pools[i].position.set(x + Math.sin(r) * 1.6, 7.4, z + Math.cos(r) * 1.6));
+}
+// The sun's place in the sky for the game clock (rises in the east over Midtown, sets over the Hudson).
+function sunDir(h) {
+  const a = ((h - 6) / 12) * Math.PI, el = Math.sin(a) * 1.05, az = Math.cos(a);
+  const east = CITY.fromLngLat(CITY.toLngLat(0, 0)[0] + 0.01, CITY.toLngLat(0, 0)[1]), len = Math.hypot(...east);
+  const ex = east[0] / len, ez = east[1] / len;
+  return new THREE.Vector3(ex * az * 0.9 + -ez * 0.35, el, ez * az * 0.9 + ex * 0.35).normalize();
 }
 
 // ---------------------------------------------------------------- lots on screen
@@ -159,26 +127,31 @@ function ownsSet(d) { return LOTS.filter((l) => l.district === d).every(mine); }
 function renderLot(l) {
   const scene = C.scene, old = lotMeshes[l.id];
   if (old) { scene.remove(old); old.traverse((o) => { o.geometry?.dispose?.(); if (o.material?.map) o.material.map.dispose(); }); }
-  const g = new THREE.Group(); g.position.set(l.x, 0.4, l.z);
-  const s = lotOwner(l), d = DISTRICTS[l.district], b = s && businessByKey(s.business);
+  const g = new THREE.Group();
+  const s = lotOwner(l), d = DISTRICTS[l.district], b = s && businessByKey(s.business), bld = l.building;
+  // the building's outline in the district colour, at street level and on the roof (like a Monopoly deed)
+  const ring = (y, opacity) => { const pts = bld.pts.map(([x, z]) => new THREE.Vector3(x, y, z)); pts.push(pts[0].clone()); const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: d.color, transparent: true, opacity })); return ln; };
+  g.add(ring(0.25, s ? 0.9 : 0.55));
+  const front = new THREE.Group(); front.position.set(l.x, 0, l.z); front.rotation.y = l.face + Math.PI; g.add(front); // on the sidewalk, facing the street
   if (!s) {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.4, 5.5, 0.4), new THREE.MeshStandardMaterial({ color: 0x333333 })); post.position.set(0, 2.75, 0); g.add(post);
-    const sign = sprite(`FOR SALE\n${money(l.price)}`, { size: 50, sx: 6, sy: 3, border: d.css, color: "#ffffff" }); sign.position.set(0, 7, 0); g.add(sign);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3.6, 0.2), new THREE.MeshStandardMaterial({ color: 0x333333 })); post.position.set(0, 1.8, -2.2); front.add(post);
+    const sign = sprite(`FOR SALE\n${money(l.price)}`, { size: 50, sx: 4.2, sy: 2.1, border: d.css, color: "#ffffff", tint: 0xd0d0d0 }); sign.position.set(0, 4.2, -2.2); front.add(sign);
   } else if (!b) {
-    const fence = new THREE.Mesh(new THREE.BoxGeometry(BLOCK - 4, 1.2, BLOCK - 4), new THREE.MeshStandardMaterial({ color: 0x222222, wireframe: true })); fence.position.y = 0.6; g.add(fence);
-    const sign = sprite(`${s.owner_id === C.player.id ? "YOUR LOT" : esc(s.owner_name)}\nready to build`, { size: 44, sx: 9, sy: 3.4, border: d.css }); sign.position.set(0, 5, 0); g.add(sign);
+    const sign = sprite(`${s.owner_id === C.player.id ? "YOUR LOT" : esc(s.owner_name)}\nready to build`, { size: 44, sx: 6, sy: 2.3, border: d.css, tint: 0xd0d0d0 }); sign.position.set(0, 4, -2.4); front.add(sign);
+    g.add(ring(bld.h + 0.4, 0.9));
   } else {
-    const lvl = Math.max(1, Math.min(MAX_LEVEL, s.level || 1)), h = b.h * (0.7 + 0.3 * lvl), w = BLOCK - 10 + lvl;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), windowMat);
-    body.position.y = h / 2; body.castShadow = true; g.add(body);
-    const trim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 0.6, w + 0.4), new THREE.MeshBasicMaterial({ color: b.color })); trim.position.y = h; g.add(trim);
-    for (let i = 0; i < lvl; i++) { const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.8), new THREE.MeshBasicMaterial({ color: 0xF5D547 })); star.position.set((i - (lvl - 1) / 2) * 2.2, h + 2, 0); g.add(star); }
+    const lvl = Math.max(1, Math.min(MAX_LEVEL, s.level || 1)), h = bld.h;
+    // neon on the roof edge, stars over it, a lit sign over the door, and an awning in the business colour
+    const neon = ring(h + 0.5, 1); neon.material = new THREE.LineBasicMaterial({ color: b.color, toneMapped: false }); g.add(neon);
+    const c = bld.box ? [(bld.box[0] + bld.box[2]) / 2, (bld.box[1] + bld.box[3]) / 2] : [l.x, l.z];
+    for (let i = 0; i < lvl; i++) { const star = new THREE.Mesh(new THREE.OctahedronGeometry(1.2), new THREE.MeshBasicMaterial({ color: 0xF5D547, toneMapped: false })); star.position.set(c[0] + (i - (lvl - 1) / 2) * 3.2, h + 4, c[1]); star.userData.spin = true; g.add(star); }
+    const awning = new THREE.Mesh(new THREE.BoxGeometry(7, 0.25, 2.2), new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.6 })); awning.position.set(0, 3.8, -3.4); front.add(awning);
     const name = s.name || b.name;
-    const sign = sprite(`${b.icon} ${name}\n${s.owner_id === C.player.id ? "YOURS" : esc(s.owner_name)}`, { size: 46, sx: 12, sy: 3.6, border: d.css }); sign.position.set(0, h + 5, 0); g.add(sign);
-    if (b.key === "park") { const ring = new THREE.Mesh(new THREE.TorusGeometry(6, 0.4, 8, 32), new THREE.MeshBasicMaterial({ color: 0xFF6B6B })); ring.position.set(0, h + 7, 0); ring.userData.spin = true; g.add(ring); }
-    // customers walking in: a few dots that loop to the door (how many depends on how busy it is)
-    const crowd = new THREE.InstancedMesh(new THREE.SphereGeometry(0.45, 6, 6), new THREE.MeshBasicMaterial({ color: 0xF5E6A3 }), 12);
-    crowd.userData.crowd = true; crowd.count = 0; g.add(crowd);
+    const sign = sprite(`${b.icon} ${name}\n${s.owner_id === C.player.id ? "YOURS" : esc(s.owner_name)}`, { size: 46, sx: 7.5, sy: 2.3, border: d.css, tint: 0xffffff }); sign.position.set(0, 5.6, -3.6); front.add(sign);
+    if (b.key === "park") { const wheel = new THREE.Mesh(new THREE.TorusGeometry(8, 0.5, 8, 32), new THREE.MeshBasicMaterial({ color: 0xFF6B6B, toneMapped: false })); wheel.position.set(c[0], h + 10, c[1]); wheel.userData.spin = true; g.add(wheel); }
+    // customers walking in: a few people that loop along the sidewalk to the door (how many depends on how busy it is)
+    const crowd = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.28, 1.1, 3, 6), new THREE.MeshStandardMaterial({ color: 0xd8c8b0, roughness: 0.8 }), 12);
+    crowd.userData.crowd = true; crowd.count = 0; front.add(crowd);
   }
   scene.add(g);
   lotMeshes[l.id] = g;
@@ -187,7 +160,7 @@ function renderLot(l) {
 // ---------------------------------------------------------------- driving
 // A low wedge with a cabin, wheels that spin and steer, head and brake lights; cops get a light bar.
 export function makeCar(color, cop, glow) {
-  const g = new THREE.Group(), paint = new THREE.MeshStandardMaterial({ color, metalness: 0.7, roughness: 0.25, emissive: glow ? color : 0x000000, emissiveIntensity: glow ? 0.25 : 0 });
+  const g = new THREE.Group(), paint = new THREE.MeshStandardMaterial({ color, metalness: 0.7, roughness: 0.25, emissive: glow ? color : 0x000000, emissiveIntensity: glow ? 0.05 : 0 });
   const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.7, 4.5), paint); body.position.y = 0.7; body.castShadow = true; g.add(body);
   const nose = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.35, 1.2), paint); nose.position.set(0, 1.05, 1.5); nose.rotation.x = 0.18; g.add(nose);
   const cab = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.65, 2.0), new THREE.MeshStandardMaterial({ color: 0x0a0d12, metalness: 0.95, roughness: 0.05 })); cab.position.set(0, 1.35, -0.35); g.add(cab);
@@ -218,11 +191,7 @@ export function makeCar(color, cop, glow) {
   return g;
 }
 
-function blocked(x, z) {
-  if (Math.abs(x) > HALF + ROAD || Math.abs(z) > HALF + ROAD) return true;
-  for (const b of ALL_BLOCKS) if (Math.abs(x - b.x) < BLOCK / 2 + 1.2 && Math.abs(z - b.z) < BLOCK / 2 + 1.2) return true;
-  return false;
-}
+const blocked = (x, z) => CITY.blocked(x, z, 1.2);
 
 // Keyboard, touch (stick + pedals) and any standard game controller.
 export const pad = { gas: false, brake: false, boost: false, hand: false };
@@ -306,12 +275,17 @@ function driveCar(dt) {
     const tall = cam.aspect < 1 ? 1.45 : 1;
     const back = mode === "far" ? 30 * tall : mode === "hood" ? -0.4 : (12 + speed * 0.12) * tall, up = mode === "far" ? 22 * tall : mode === "hood" ? 1.7 : (6 + speed * 0.04) * tall;
     const want = new THREE.Vector3(car.x - nfx * back, up, car.z - nfz * back);
+    // don't put the camera inside a building: pull it in towards the car until the view is clear
+    if (mode !== "hood") for (let k = 1; k <= 10; k++) { const f = k / 10, x = car.x - nfx * back * f, z = car.z - nfz * back * f; if (CITY.blocked(x, z, 0.4)) { const keep = Math.max(0.15, (k - 1) / 10); want.set(car.x - nfx * back * keep, Math.max(2.4, up * (0.5 + keep * 0.5)), car.z - nfz * back * keep); break; } }
     if (mode === "hood") cam.position.copy(want); else cam.position.lerp(want, 1 - Math.pow(0.015, dt));
     if (shake > 0.01) cam.position.add(new THREE.Vector3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(shake * 0.6));
     const ahead = mode === "hood" ? 30 : 6;
     cam.lookAt(car.x + nfx * ahead, mode === "hood" ? 1.4 : 1.5, car.z + nfz * ahead);
   } else { ctl.enabled = true; ctl.target.set(car.x, 2, car.z); }
+  // the sun's shadows are drawn round wherever the car is
+  sun.target.position.set(car.x, 0, car.z); sun.position.set(car.x + sunV.x * 420, sunV.y * 420, car.z + sunV.z * 420);
 }
+let sunV = new THREE.Vector3(0.3, 0.8, 0.2);
 // tyre marks that fade
 const skids = [];
 let skidGeo = null, skidMat = null;
@@ -323,47 +297,70 @@ function skid(x, z, h) {
 }
 function skidsTick(dt) { for (const k of skids) k.material.opacity = Math.max(0, k.material.opacity - dt * 0.03); }
 
-// cars on the road network: they move between intersections
-function nodeNear(x, z) { const f = (v) => roadLines.reduce((a, r) => (Math.abs(r - v) < Math.abs(a - v) ? r : a), roadLines[0]); return [f(x), f(z)]; }
-function neighbours(nx, nz) {
-  const i = roadLines.indexOf(nx), j = roadLines.indexOf(nz), out = [];
-  if (i > 0) out.push([roadLines[i - 1], nz]); if (i < roadLines.length - 1) out.push([roadLines[i + 1], nz]);
-  if (j > 0) out.push([nx, roadLines[j - 1]]); if (j < roadLines.length - 1) out.push([nx, roadLines[j + 1]]);
-  return out;
-}
+// Cars on the real road network: they go junction to junction, keep to the one-way streets, drive on the right,
+// stop at red lights and behind your car. Cops ignore the lights and pick the way that gets them closest to you.
+const TAXI = 0xF2C200, COLOURS = [TAXI, TAXI, TAXI, 0x15171c, 0xe9e6df, 0x8a8f96, 0x2b3d5c, 0x5c1f1f, 0x1f3b2e, 0x3a3a3a];
 function spawnRoadCar(color, cop, far) {
-  let p;
-  for (let k = 0; k < 20; k++) { p = [pick(roadLines), pick(roadLines)]; if (!far || Math.hypot(p[0] - car.x, p[1] - car.z) > 70) break; }
+  // somewhere on the roads near you (not on top of you)
+  let n = 0;
+  for (let k = 0; k < 40; k++) { n = Math.floor(Math.random() * CITY.nodes.length); const d = Math.hypot(CITY.nodes[n][0] - car.x, CITY.nodes[n][1] - car.z); if (CITY.anyLinks[n].length && d > (far ? 90 : 40) && d < 320) break; }
+  const opts = CITY.links[n].length ? CITY.links[n] : CITY.anyLinks[n], l = pick(opts), e = CITY.edges[l.e];
   const mesh = makeCar(color, cop);
-  return { x: p[0], z: p[1], to: pick(neighbours(p[0], p[1])), from: p, speed: cop ? 17 + wanted * 2.5 : rnd(8, 13), mesh, cop };
+  if (color === TAXI && !cop) { const sign = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.3, 0.35), new THREE.MeshBasicMaterial({ color: 0xfff3c0, toneMapped: false })); sign.position.set(0, 1.85, -0.35); mesh.add(sign); }
+  return { x: CITY.nodes[n][0], z: CITY.nodes[n][1], from: n, to: l.to, e: l.e, lane: e.oneway ? (Math.random() - 0.5) * Math.max(0, e.w - 4) : e.w / 4, speed: cop ? 17 + wanted * 2.5 : 0, top: cop ? 20 : rnd(9, 14), mesh, cop, h: 0 };
+}
+function nextLink(c, chase) {
+  const opts = (chase ? CITY.anyLinks : CITY.links)[c.to].filter((l) => l.to !== c.from);
+  const all = opts.length ? opts : CITY.anyLinks[c.to].filter((l) => l.to !== c.from);
+  if (!all.length) return CITY.anyLinks[c.to][0];
+  if (chase) return all.slice().sort((a, b) => Math.hypot(CITY.nodes[a.to][0] - car.x, CITY.nodes[a.to][1] - car.z) - Math.hypot(CITY.nodes[b.to][0] - car.x, CITY.nodes[b.to][1] - car.z))[0];
+  return pick(all);
 }
 function moveRoadCar(c, dt, chase) {
-  const dx = c.to[0] - c.x, dz = c.to[1] - c.z, d = Math.hypot(dx, dz);
-  if (d < 0.6) {
-    const opts = neighbours(c.to[0], c.to[1]).filter((p) => !(p[0] === c.from[0] && p[1] === c.from[1]));
-    let next = pick(opts.length ? opts : neighbours(c.to[0], c.to[1]));
-    if (chase) next = opts.concat([]).sort((a, b) => Math.hypot(a[0] - car.x, a[1] - car.z) - Math.hypot(b[0] - car.x, b[1] - car.z))[0] || next;
-    c.from = c.to; c.to = next;
+  const T = CITY.nodes[c.to], dx = T[0] - c.x, dz = T[1] - c.z, d = Math.hypot(dx, dz);
+  if (d < 0.8) {
+    const l = nextLink(c, chase), e = CITY.edges[l.e];
+    c.from = c.to; c.to = l.to; c.e = l.e;
+    c.lane = e.oneway ? Math.max(-e.w / 2 + 2, Math.min(e.w / 2 - 2, c.lane)) : e.w / 4;
     return;
   }
-  // a cop that's close leaves the road grid and comes straight at you
-  let tx = c.to[0], tz = c.to[1];
-  if (chase && Math.hypot(car.x - c.x, car.z - c.z) < 22) { tx = car.x; tz = car.z; }
-  const ax = tx - c.x, az = tz - c.z, ad = Math.hypot(ax, az) || 1, step = Math.min(ad, c.speed * dt);
+  const hx = dx / d, hz = dz / d;
+  // red light ahead, or your car in front: slow down and stop
+  let want = c.top;
+  if (!chase) {
+    const ph = world.signal(clockT), axis = Math.abs(hz) > Math.abs(hx) ? 0 : 1, jr = 9;
+    if (SIGNAL[c.to] && ph !== axis && d > jr - 1 && d < jr + 9) want = 0;
+    const ax = car.x - c.x, az = car.z - c.z, ahead = ax * hx + az * hz, sideways = Math.abs(ax * hz - az * hx);
+    if (ahead > 0 && ahead < 10 && sideways < 3) want = 0;
+  } else want = 17 + wanted * 2.5;
+  c.speed += Math.max(-14 * dt, Math.min(6 * dt, want - c.speed));
+  // a cop that's close leaves the road and comes straight at you (unless a building is in the way)
+  let tx = T[0], tz = T[1];
+  if (chase && Math.hypot(car.x - c.x, car.z - c.z) < 26) { const mx = (car.x + c.x) / 2, mz = (car.z + c.z) / 2; if (!blocked(mx, mz)) { tx = car.x; tz = car.z; } }
+  const ax = tx - c.x, az = tz - c.z, ad = Math.hypot(ax, az) || 1, step = Math.min(ad, Math.max(0, c.speed) * dt);
   c.x += (ax / ad) * step; c.z += (az / ad) * step;
-  // keep right of the centre line
-  const side = 1.8, hx = ax / ad, hz = az / ad;
-  c.mesh.position.set(c.x - hz * side * (chase ? 0 : 1), 0, c.z + hx * side * (chase ? 0 : 1));
-  c.mesh.rotation.y = Math.atan2(hx, hz);
-  if (c.mesh.userData.siren) { const on = Math.floor(performance.now() / 180) % 2; c.mesh.userData.siren[0].visible = !!on; c.mesh.userData.siren[1].visible = !on; }
-  if (!chase && Math.hypot(c.x - car.x, c.z - car.z) < 3.2) { car.vx *= 0.4; car.vz *= 0.4; shake = Math.max(shake, 0.4); }
+  const off = chase ? 0 : c.lane, ux = ax / ad, uz = az / ad;
+  c.mesh.position.set(c.x - uz * off, 0, c.z + ux * off);
+  let dh = Math.atan2(ux, uz) - c.mesh.rotation.y; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); c.mesh.rotation.y += dh * Math.min(1, dt * 8);
+  const u = c.mesh.userData; for (const w of u.wheels) { w.w.rotation.x += c.speed * dt / 0.48; if (w.front) w.pivot.rotation.y = Math.max(-0.5, Math.min(0.5, dh * 2)); }
+  u.tailMat.color.setHex(c.speed < want - 1 || want === 0 ? 0xff2020 : 0x550000);
+  if (u.siren) { const on = Math.floor(performance.now() / 180) % 2; u.siren[0].visible = !!on; u.siren[1].visible = !on; }
+  if (!chase && Math.hypot(c.mesh.position.x - car.x, c.mesh.position.z - car.z) < 3.2) { car.vx *= 0.4; car.vz *= 0.4; shake = Math.max(shake, 0.4); }
 }
+// traffic stays round you: cars that end up far away come back somewhere nearer
+function trafficTick() {
+  for (let i = 0; i < traffic.length; i++) {
+    const c = traffic[i];
+    if (Math.hypot(c.x - car.x, c.z - car.z) > 360) { C.scene.remove(c.mesh); traffic[i] = spawnRoadCar(c.mesh.userData.paint.color.getHex(), false, true); }
+  }
+}
+let clockT = 0;
 
 // ---------------------------------------------------------------- cops and the wanted level
 function setWanted(n) {
   wanted = Math.max(0, Math.min(5, n)); escapeT = 0; bustT = 0;
   while (cops.length > Math.min(4, wanted)) { const c = cops.pop(); C.scene.remove(c.mesh); }
-  while (cops.length < Math.min(4, wanted)) cops.push(spawnRoadCar(0xf0f0f0, true, true));
+  while (cops.length < Math.min(4, wanted)) cops.push(spawnRoadCar(0x101820, true, true));
   window.__rbWanted = wanted;
   const el = document.getElementById("wanted-val"); if (el) el.innerText = "★".repeat(wanted) + "☆".repeat(5 - wanted);
   ui.wanted.style.display = wanted ? "block" : "none";
@@ -386,13 +383,7 @@ function busted() {
 }
 
 // ---------------------------------------------------------------- hustle jobs
-function roadPoint(minFrom) {
-  for (let k = 0; k < 40; k++) {
-    const a = pick(roadLines), b = rnd(-HALF, HALF), p = Math.random() < 0.5 ? [a, b] : [b, a];
-    if (!minFrom || Math.hypot(p[0] - minFrom[0], p[1] - minFrom[1]) > 90) return p;
-  }
-  return [roadLines[0], 0];
-}
+function roadPoint(away, minFrom = 250, near) { return CITY.roadPoint({ away, minFrom, near, maxFrom: near ? 420 : undefined }); }
 function setBeacon(p, color) {
   if (beacon) C.scene.remove(beacon);
   if (!p) { beacon = null; return; }
@@ -402,7 +393,7 @@ function setBeacon(p, color) {
 function openJobs() {
   if (job) return panel(`<h2>${job.icon} ${esc(job.name)}</h2><div class="subtitle">${job.stage === 0 ? "Drive to the pickup (the gold light)." : "Drive to the drop (the green light)."} ${Math.ceil(job.left)}s left.</div>
     <button class="btn-ghost" data-e="quit">GIVE UP</button>`, { quit: () => { endJob(false, "You walked away from the job."); hidePanel(); } });
-  const offers = JOBS.map((j) => { const a = roadPoint([car.x, car.z]), b = roadPoint(a), dist = Math.hypot(a[0] - car.x, a[1] - car.z) + Math.hypot(b[0] - a[0], b[1] - a[1]); return { ...j, a, b, dist, reward: Math.round((dist * 18 * j.pay) / 100) * 100, limit: Math.round(dist / 14 * j.time + 15) }; });
+  const offers = JOBS.map((j) => { const a = roadPoint([car.x, car.z], 90, [car.x, car.z]), b = roadPoint(a, 300), dist = Math.hypot(a[0] - car.x, a[1] - car.z) + Math.hypot(b[0] - a[0], b[1] - a[1]); return { ...j, a, b, dist, reward: Math.round((dist * 9 * j.pay) / 100) * 100, limit: Math.round(dist / 13 * j.time + 20) }; });
   const acts = {};
   const rows = offers.map((o, i) => { acts["j" + i] = () => startJob(o); return `<div class="rb-card"><div><b>${o.icon} ${esc(o.name)}</b> ${o.wanted ? '<span class="rb-red">★★★</span>' : ""}<div class="rb-muted">${esc(o.desc)}</div><div class="rb-muted">${Math.round(o.dist)} m · ${o.limit}s</div></div><button class="rb-btn" data-e="j${i}">${money(o.reward)}</button></div>`; }).join("");
   panel(`<h2 style="color:var(--red)">HUSTLE</h2><div class="subtitle">Pick a job. Faster jobs pay more; heists pay most and bring the cops.</div>${rows}<button class="btn-ghost" data-e="close">CLOSE</button>`, { ...acts, close: hidePanel });
@@ -462,7 +453,7 @@ function dropMesh(kind) {
   g.userData.core = core; C.scene.add(g); return g;
 }
 function spawnDrop() {
-  const p = roadPoint(), roll = Math.random(), kind = roll < 0.5 ? "cash" : roll < 0.8 ? "token" : "card";
+  const p = roadPoint([car.x, car.z], 40, [car.x, car.z]), roll = Math.random(), kind = roll < 0.5 ? "cash" : roll < 0.8 ? "token" : "card";
   const d = { x: p[0], z: p[1], kind, mesh: dropMesh(kind) }; d.mesh.position.set(d.x, 0, d.z); drops.push(d);
 }
 function collect(kind, source) {
@@ -475,7 +466,9 @@ function collect(kind, source) {
 function dropsTick(dt, t) {
   for (let i = drops.length - 1; i >= 0; i--) {
     const d = drops[i]; d.mesh.userData.core.rotation.y = t * 2; d.mesh.userData.core.position.y = 2 + Math.sin(t * 3 + i) * 0.3;
-    if (Math.hypot(d.x - car.x, d.z - car.z) < 3.8) { collect(d.kind, "city"); C.scene.remove(d.mesh); drops.splice(i, 1); setTimeout(spawnDrop, 8000); }
+    const far = Math.hypot(d.x - car.x, d.z - car.z);
+    if (far < 3.8) { collect(d.kind, "city"); C.scene.remove(d.mesh); drops.splice(i, 1); setTimeout(spawnDrop, 8000); }
+    else if (far > 480) { C.scene.remove(d.mesh); drops.splice(i, 1); spawnDrop(); } // keep drops round you
   }
 }
 // Real-world drops: the same for everyone standing in the same place, from the map cell and the quarter hour.
@@ -547,22 +540,32 @@ function tycoonTick(dt) {
     if (crowd) {
       const n = Math.max(0, Math.min(12, Math.round(f.customers / (f.b.cap * 0.25)))); crowd.count = n;
       const m = new THREE.Matrix4(), t = performance.now() / 1000;
-      for (let i = 0; i < n; i++) { const p = ((t * 0.25 + i / n) % 1); m.makeTranslation(-6 + i * 1.1, 0.6, BLOCK / 2 - 1 - p * 8); crowd.setMatrixAt(i, m); }
+      for (let i = 0; i < n; i++) { const p = ((t * 0.12 + i / n) % 1); m.makeTranslation(-9 + p * 18, 0.85, -4.6 - (i % 2) * 0.8); crowd.setMatrixAt(i, m); }
       crowd.instanceMatrix.needsUpdate = true;
     }
   }
   C.player.netWorth = Math.max(0, C.player.netWorth + total);
   if (total > 0) { S.stats.earned += total; emit("income", total); }
   C.player.empireValue = myLots().reduce((a, l) => { const s = lots[l.id], b = businessByKey(s.business); return a + l.price + (b ? b.cost + Array.from({ length: (s.level || 1) - 1 }, (_, i) => upgradeCost(b, i + 1)).reduce((x, y) => x + y, 0) : 0); }, 0);
-  // day and night
-  const h = S.clock / 60, sunUp = Math.max(0, Math.sin(((h - 6) / 12) * Math.PI));
-  dayLight.intensity = 0.35 + sunUp * 1.3; sun.intensity = 0.15 + sunUp * 1.6; windowMat.emissiveIntensity = 0.2 + (1 - sunUp) * 0.8;
-  C.scene.fog.density = 0.003 + (1 - sunUp) * 0.004;
-  const dusk = Math.max(0, 1 - Math.abs(sunUp - 0.25) * 4);
-  sky.material.uniforms.top.value.setRGB(0.02 + sunUp * 0.18, 0.03 + sunUp * 0.32, 0.08 + sunUp * 0.55);
-  sky.material.uniforms.bottom.value.setRGB(0.05 + sunUp * 0.45 + dusk * 0.5, 0.04 + sunUp * 0.4 + dusk * 0.2, 0.03 + sunUp * 0.45);
-  C.scene.fog.color.setRGB(0.03 + sunUp * 0.25, 0.03 + sunUp * 0.25, 0.04 + sunUp * 0.3);
-  stars.material.opacity = Math.max(0, 1 - sunUp * 3); lampMat.color.setHex(sunUp > 0.35 ? 0x555044 : 0xFFE2A0);
+  // day and night: the sun across the sky, lights on after dark, the city's windows lit
+  const h = S.clock / 60, sunUp = Math.max(0, Math.sin(((h - 6) / 12) * Math.PI)), dir = sunDir(h); sunV = dir.y > 0.05 ? dir.clone() : new THREE.Vector3(0.3, 0.9, 0.2); const dusk = Math.max(0, 1 - Math.abs(sunUp - 0.18) * 5);
+  sky.material.uniforms.sunPosition.value.copy(dir);
+  sky.material.uniforms.rayleigh.value = 0.9 + dusk * 1.6; sky.material.uniforms.turbidity.value = 2.2 + dusk * 5;
+  sun.intensity = sunUp > 0 ? 0.3 + sunUp * 2.4 : 0; sun.color.setRGB(1, 0.82 + sunUp * 0.18, 0.66 + sunUp * 0.3);
+  dayLight.intensity = 0.18 + sunUp * 0.75; dayLight.color.setRGB(0.55 + sunUp * 0.3, 0.62 + sunUp * 0.28, 0.85 + sunUp * 0.1);
+  moon.intensity = sunUp > 0.05 ? 0 : 0.35;
+  const lit = Math.max(0, 1 - sunUp * 2.2);
+  for (const m of world.night) m.emissiveIntensity = lit * (m.userData.shop ? 0.32 : 0.55);
+  for (const pl of pools) pl.intensity = lit * 55;
+  windowMat.emissiveIntensity = 0.2 + lit;
+  C.scene.fog.density = 0.0009 + (1 - sunUp) * 0.0007;
+  C.scene.fog.color.setRGB(0.05 + sunUp * 0.6 + dusk * 0.2, 0.06 + sunUp * 0.62 + dusk * 0.08, 0.1 + sunUp * 0.66);
+  stars.material.opacity = Math.max(0, 1 - sunUp * 4); lampMat.color.setHex(lit > 0.3 ? 0xFFD9A0 : 0x6b665c);
+  if (headlight) headlight.intensity = lit > 0.3 ? 120 : 0;
+  if (C.renderer) C.renderer.toneMappingExposure = 0.5 + sunUp * 0.22;
+  // the sky in the reflections (glass towers, car paint), refreshed as the light changes
+  const step = Math.round(h * 2);
+  if (pmrem && step !== envAt) { envAt = step; const skyScene = new THREE.Scene(); const sk = new Sky(); sk.scale.setScalar(1000); sk.material.uniforms.sunPosition.value.copy(dir); for (const k of ["rayleigh", "turbidity", "mieCoefficient", "mieDirectionalG"]) sk.material.uniforms[k].value = sky.material.uniforms[k].value; skyScene.add(sk); const rt = pmrem.fromScene(skyScene); if (C.scene.environment) C.scene.environment.dispose(); C.scene.environment = rt.texture; sk.material.dispose(); }
   ui.clock.textContent = `${sunUp > 0.05 ? "☀️" : "🌙"} ${String(Math.floor(h)).padStart(2, "0")}:${String(Math.floor(S.clock % 60)).padStart(2, "0")} · ${Math.round(Math.abs(car.speed) * 3.6)} km/h`;
 }
 // While you were away: a quarter of the rate, for up to four hours.
@@ -609,8 +612,8 @@ async function payRent(l) {
 // ---------------------------------------------------------------- the lot you're next to
 function adjacentLot() {
   let best = null, bd = Infinity;
-  for (const l of LOTS) { const r = blockRect(l), dx = Math.max(r.x0 - car.x, 0, car.x - r.x1), dz = Math.max(r.z0 - car.z, 0, car.z - r.z1), d = Math.hypot(dx, dz); if (d < bd) { bd = d; best = l; } }
-  return bd < 5.5 ? best : null;
+  for (const l of LOTS) { if (l.x == null) continue; const d = Math.hypot(l.x - car.x, l.z - car.z); if (d < bd) { bd = d; best = l; } }
+  return bd < 10 ? best : null;
 }
 function lotTick(dt) {
   const l = adjacentLot();
@@ -787,10 +790,12 @@ export function initEmpire(ctx) {
   buildCity();
   for (const l of LOTS) renderLot(l);
   car.mesh = makeCar(0xC9A84C, false, true);
-  const under = new THREE.PointLight(0xC9A84C, 2, 14); under.position.y = 3; car.mesh.add(under);
+  car.mesh.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  // headlights for the night
+  headlight = new THREE.SpotLight(0xfff1d6, 0, 90, 0.55, 0.5, 1.3); headlight.position.set(0, 1.1, 2.0); headlight.target.position.set(0, 0, 18); car.mesh.add(headlight); car.mesh.add(headlight.target);
   if (C.mesh()) C.mesh().visible = false;
-  for (let i = 0; i < 10; i++) traffic.push(spawnRoadCar(pick([0x7FD3F7, 0xE53935, 0x2EB872, 0xF5F5F5, 0x8B5A2B, 0xE05AA8]), false, false));
-  for (let i = 0; i < 12; i++) spawnDrop();
+  for (let i = 0; i < 24; i++) traffic.push(spawnRoadCar(pick(COLOURS), false, false));
+  for (let i = 0; i < 14; i++) spawnDrop();
   onBeat((d) => {
     if (d.lots) applyLots(d.lots);
     if (d.rent > 0) { C.player.netWorth += d.rent; C.sync(); C.play("cash"); toast(`🏠 You collected ${money(d.rent)} rent from players who stopped on your lots.`); }
@@ -799,15 +804,16 @@ export function initEmpire(ctx) {
   let acc = 0, gpsAcc = 9;
   C.onFrame((dt, t) => {
     dt = Math.min(dt, 0.1);
+    clockT += dt; world.tick(clockT);
     driveCar(dt);
     for (const c of traffic) moveRoadCar(c, dt, false);
     copsTick(dt); jobTick(dt); dropsTick(dt, t); lotTick(dt); skidsTick(dt); emit("frame", dt);
     for (const g of Object.values(lotMeshes)) for (const o of g.children) if (o.userData.spin) o.rotation.y += dt;
-    acc += dt; if (acc >= 1) { tycoonTick(acc); acc = 0; S.lastTick = Date.now(); }
+    acc += dt; if (acc >= 1) { tycoonTick(acc); trafficTick(); poolsTick(); acc = 0; S.lastTick = Date.now(); }
     gpsAcc += dt; if (gpsAcc >= 5) { gpsAcc = 0; gpsTick(); save(); }
   });
   window.addEventListener("beforeunload", () => { S.lastTick = Date.now(); save(); });
   return { openLot, openEmpire, openJobs, setWanted, state: S, lots, car, toast, panel, hidePanel, emit, money,
-    radar: () => ({ car, cops, traffic, drops, job, lots, wanted, roadLines, mine: (l) => mine(l), lotOwner }), camName: () => CAMS[camMode], save,
+    radar: () => ({ car, cops, traffic, drops, job, lots, wanted, mine: (l) => mine(l), lotOwner }), camName: () => CAMS[camMode], save, city: CITY, camera: C.camera,
     giveCard: (key) => giveCard("reward", RARITY.find((r) => r.key === key)) };
 }
