@@ -100,8 +100,10 @@ function drawRadar(t) {
   for (const cp of R.cops) dot(cp.x, cp.z, 6.5, blink ? "#ff2a2a" : "#2a6bff", "#fff");
   // combat.js: crews, police on foot, dropped cash and other players on foot
   for (const b of window.__rbBlips || []) dot(b.x, b.z, b.r || 4, b.c, "#000");
+  // events.js: cash crates, speed cameras and the armored truck
+  for (const b of window.__rbBlips2 || []) dot(b.x, b.z, b.r || 4, b.c, "#000");
   // the target: job or race checkpoint, on the rim with an arrow when it's out of range
-  const tgt = R.job ? R.job.stops[R.job.stage].at : window.__rbRaceTarget || window.__rbMissionTarget || null;
+  const tgt = R.job ? R.job.stops[R.job.stage].at : window.__rbRaceTarget || window.__rbMissionTarget || window.__rbStoryTarget || window.__rbEventTarget || null;
   if (tgt) {
     let [px, pz] = at(tgt[0], tgt[1]); const col = R.job && R.job.stage ? "#00E676" : "#F5D547";
     const dx = px - mid, dz = pz - mid, dd = Math.hypot(dx, dz), lim = mid - 14;
@@ -148,11 +150,11 @@ export function help() {
     <tr><td><kbd>Space</kbd></td><td>Handbrake: drift round corners</td></tr>
     <tr><td><kbd>G</kbd></td><td>Horn</td></tr>
     <tr><td><kbd>M</kbd> or 📻</td><td>Car radio: RB Radio live, the same song as everyone</td></tr>
-    <tr><td><kbd>T</kbd> or 📱</td><td>Your phone: jobs, empire, races, goals, messages, radio, leaders, events and settings</td></tr>
+    <tr><td><kbd>T</kbd> or 📱</td><td>Your phone: jobs, empire, races, goals, messages, radio, leaders, events, story, customs, wardrobe and settings</td></tr>
     <tr><td><kbd>O</kbd> near an ad</td><td>Opens the sponsor's page (the card at the bottom shows whose ad it is)</td></tr>
     <tr><td><kbd>F</kbd> or GET OUT</td><td>Get out and walk; next to a car, get in (yours, or take one from the traffic)</td></tr>
     <tr><td>On foot</td><td><kbd>WASD</kbd> move, mouse looks (click to lock it, <kbd>Esc</kbd> to let go), <kbd>Shift</kbd> sprint, <kbd>Space</kbd> jump, <kbd>V</kbd> first or third person</td></tr>
-    <tr><td>Combat (18+, ⚔️)</td><td>Right mouse aims, left mouse fires, <kbd>R</kbd> reloads, <kbd>1</kbd>-<kbd>6</kbd> or the mouse wheel switch, hold <kbd>Tab</kbd> for the weapon wheel, <kbd>X</kbd> puts it away, <kbd>G</kbd> throws a grenade (3 a life); kills in a row earn armour, cash and health</td></tr>
+    <tr><td>Combat (18+, ⚔️)</td><td>Right mouse aims, left mouse fires, <kbd>R</kbd> reloads, <kbd>1</kbd>-<kbd>6</kbd> or the mouse wheel switch, hold <kbd>Tab</kbd> for the weapon wheel, <kbd>X</kbd> puts it away, <kbd>G</kbd> throws a grenade (3 a life); kills in a row earn armour, cash and health. Attachments (suppressor, extended magazine, red dot, scope) are in the ⚔️ panel</td></tr>
     <tr><td><kbd>P</kbd></td><td>Photo mode: the HUD hides, orbit the car, set the blur and a filter, save the picture</td></tr>
     <tr><td><kbd>Shift</kbd> or <kbd>N</kbd></td><td>Nitro (the blue gauge refills)</td></tr>
     <tr><td><kbd>E</kbd></td><td>The lot you're next to: buy, build, manage</td></tr>
@@ -173,6 +175,10 @@ export function help() {
     <tr><td>🏁 Races</td><td>Host a race and everyone in the city gets an invite, or join one. Podium places win $25,000 / $15,000 / $8,000. Blue canisters fill your nitro; driving close behind another racer (slipstream) refills it and adds speed.</td></tr>
     <tr><td>🎨 Paint</td><td>In the race menu: colours for your car. Other players see it, with your name and level.</td></tr>
     <tr><td>📋 Goals</td><td>Daily rewards, three daily quests, achievements and your level.</td></tr>
+    <tr><td>📖 Story</td><td>Rise of RB: five chapters in the phone, each with its own reward.</td></tr>
+    <tr><td>🔧 Customs</td><td>Upgrade your own car: engine, brakes, tyres, nitro and armour. Every car drives like what it is: sports cars are quick, vans are slow.</td></tr>
+    <tr><td>👕 Wardrobe</td><td>Your clothes, hair and skin tone. Other players see your look.</td></tr>
+    <tr><td>📦📸🚚 On the street</td><td>Cash crates land near you now and then (green on the radar). Speed cameras (yellow) pay for 120 km/h and up. With combat on, ram the armored truck (orange), deal with the guards and take the cash.</td></tr>
   </table>
   <div class="rb-muted" style="margin-top:12px">Everything here is game money. Signed in with your RB account, your play time can also earn RB Badge points.</div>
   <button class="btn-ghost" data-e="close">CLOSE</button></div>`, { close: E.hidePanel });

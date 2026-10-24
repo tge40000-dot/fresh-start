@@ -7,7 +7,7 @@
 //     have combat on; their car stays parked where they left it.
 //   - Fights (combat.js, 18+ opt-in on both sides): your hits on them go to the room, which checks them; their hits
 //     on you come back and you take the damage; the kill feed shows who took out whom.
-import { person, pose, gun, tag } from "./char.js";
+import { person, pose, gun, tag, fromLook } from "./char.js";
 import { model } from "./combat.js";
 
 export const LIVE_URL = "wss://rb-world-live.tge40000.workers.dev/room/rb-city-1";
@@ -55,7 +55,9 @@ export function initLive(E, ctx, foot, combat) {
     p.name = m.name || p.name; p.s = m; p.at = performance.now();
     if (m.m === "f") {
       // on foot: a person, and their car parked where they left it
-      if (!p.mesh) { p.mesh = person({ top: m.col ? parseInt(m.col.slice(1), 16) : 0x333333 }); tag(p.mesh, p.name); scene.add(p.mesh); p.x = m.x; p.z = m.z; }
+      // in the clothes they picked (wardrobe.js); a new look swaps the figure
+      if (p.mesh && m.lk && p.lk !== m.lk) { scene.remove(p.mesh); p.mesh = null; p.weapon = null; }
+      if (!p.mesh) { p.lk = m.lk || null; p.mesh = person(m.lk ? fromLook(m.lk) : { top: m.col ? parseInt(m.col.slice(1), 16) : 0x333333 }); tag(p.mesh, p.name); scene.add(p.mesh); if (p.x == null) { p.x = m.x; p.z = m.z; } }
       if (window.RBRace && window.RBRace.see && m.car) window.RBRace.see(m.id, p.name, lvl(m.id), m.col, [m.car[0], m.car[1], m.car[2], 0], false);
       const want = m.c && m.w ? m.w : null;
       if (want !== p.weapon) { p.weapon = want; gun(p.mesh, want ? model(want) : null); }
@@ -78,6 +80,7 @@ export function initLive(E, ctx, foot, combat) {
     const f = foot && foot.on, paint = car.mesh && car.mesh.userData.paint ? "#" + car.mesh.userData.paint.color.getHexString() : null;
     const s = { t: "s", x: +car.x.toFixed(2), z: +car.z.toFixed(2), h: +car.heading.toFixed(3), v: +(car.speed || 0).toFixed(1), m: f ? "f" : "c", col: paint,
       w: combat && combat.on && f ? combat.armed : null, aim: !!(f && foot.aim), c: !!(combat && combat.on), hp: Math.round(P.health || 0), ar: Math.round(P.armor || 0),
+      lk: foot && foot.look ? foot.look() : null,
       car: f && foot.parked ? [+foot.parked.x.toFixed(2), +foot.parked.z.toFixed(2), +foot.parked.h.toFixed(3)] : null };
     if (spawn) { s.spawn = 1; spawn = false; }
     return s;

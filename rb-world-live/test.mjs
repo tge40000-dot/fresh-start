@@ -30,11 +30,11 @@ const join = (id, name, extra = {}) => { const ws = new Sock(); const p = { id, 
 const say = (ws, m) => room.webSocketMessage(ws, JSON.stringify(m));
 const A = join("aaaaaaaa-1111", "Ace"), B = join("bbbbbbbb-2222", "Bree"), X = join("xxxxxxxx-9999", "Hidden", { banned: true });
 // moves go to everyone else, cleaned
-await say(A, { t: "s", x: 10, z: 5, h: 1, v: 3, m: "f", w: "rifle", c: true, col: "#C9A84C", car: [8, 5, 0] });
-assert.deepEqual(B.last("p"), { t: "p", id: "aaaaaaaa-1111", name: "Ace", x: 10, z: 5, h: 1, v: 3, m: "f", w: "rifle", aim: false, c: true, hp: 0, col: "#C9A84C", car: [8, 5, 0] });
+await say(A, { t: "s", x: 10, z: 5, h: 1, v: 3, m: "f", w: "rifle", c: true, col: "#C9A84C", lk: "t2,j0,p1,s3,h0,c0,b1,k2", car: [8, 5, 0] });
+assert.deepEqual(B.last("p"), { t: "p", id: "aaaaaaaa-1111", name: "Ace", x: 10, z: 5, h: 1, v: 3, m: "f", w: "rifle", aim: false, c: true, hp: 0, col: "#C9A84C", lk: "t2,j0,p1,s3,h0,c0,b1,k2", car: [8, 5, 0] });
 assert.equal(A.last("p"), undefined, "not echoed back");
-await say(A, { t: "s", x: 1e9, z: "x", h: 0, m: "boat", w: "laser", col: "red" });
-assert.deepEqual([B.last("p").x, B.last("p").z, B.last("p").m, B.last("p").w, B.last("p").col], [5e4, 0, "c", null, null], "numbers clamped, junk dropped");
+await say(A, { t: "s", x: 1e9, z: "x", h: 0, m: "boat", w: "laser", col: "red", lk: "<script>" });
+assert.deepEqual([B.last("p").x, B.last("p").z, B.last("p").m, B.last("p").w, B.last("p").col, B.last("p").lk], [5e4, 0, "c", null, null, null], "numbers clamped, junk dropped");
 // a blocked player: their moves go nowhere
 await say(X, { t: "s", x: 1, z: 1, h: 0, m: "c" });
 assert.ok(!A.out.some((m) => m.id === "xxxxxxxx-9999") && !B.out.some((m) => m.id === "xxxxxxxx-9999"), "blocked players aren't seen");

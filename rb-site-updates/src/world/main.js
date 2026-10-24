@@ -19,6 +19,10 @@ import { initFoot } from './onfoot.js';
 import { initCombat } from './combat.js';
 import { initLive } from './live.js';
 import { initDamage } from './damage.js';
+import { initGarage } from './garage.js';
+import { initWardrobe } from './wardrobe.js';
+import { initStory } from './story.js';
+import { initEvents } from './events.js';
 
 // --- CORE ---
 const db = init();
@@ -443,6 +447,10 @@ async function startGame() {
     window.RBCombat = initCombat(window.RBEmpire, ectx, window.RBFoot); // 18+ opt-in: weapons, crews, missions, fights with other players
     window.RBDamage = initDamage(window.RBEmpire, ectx); // car damage, smoke and bumping into other cars
     window.RBLive = initLive(window.RBEmpire, ectx, window.RBFoot, window.RBCombat); // other players in real time (rb-world-live)
+    window.RBGarage = initGarage(window.RBEmpire, ectx); // RB Customs: car classes and upgrades for your own car (🔧)
+    window.RBWardrobe = initWardrobe(window.RBEmpire, ectx, window.RBFoot); // clothes other players see too (👕)
+    window.RBStory = initStory(window.RBEmpire, ectx, window.RBFoot, window.RBCombat); // Rise of RB, five chapters (📖)
+    window.RBEvents = initEvents(window.RBEmpire, ectx, window.RBFoot, window.RBCombat); // cash crates, speed cameras, the armored truck
     const notice = (window.RB_WORLD_CFG || {}).notice; if (notice) setTimeout(() => window.RBEmpire.toast('📣 ' + notice), 2500);
     fx.build(); window.RBFx = fx;
     // sharper textures at a glance (roads and walls seen at a slant): as much anisotropic filtering as the device has,

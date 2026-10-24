@@ -240,16 +240,17 @@ function driveCar(dt) {
   if (car.stall && t > 0) { t = 0; boost = false; } // the engine's wrecked (damage.js)
   const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
   let fwd = car.vx * fx + car.vz * fz, side = car.vx * fz - car.vz * fx;
+  const T = car.tune || { max: 1, accel: 1, grip: 1, brake: 1, nitro: 1 }; // the car's class and RB Customs upgrades (garage.js)
   const boosting = boost && car.boost > 0.02 && t > 0;
-  car.boost = Math.max(0, Math.min(1, car.boost + (boosting ? -0.35 : 0.09) * dt));
-  const max = (boosting ? 44 : 30) + (car.draft || 0), accel = boosting ? 34 : 19; // draft: a slipstream bonus in races
+  car.boost = Math.max(0, Math.min(1, car.boost + (boosting ? -0.35 / T.nitro : 0.09 * T.nitro) * dt));
+  const max = ((boosting ? 44 : 30) + (car.draft || 0)) * T.max, accel = (boosting ? 34 : 19) * T.accel; // draft: a slipstream bonus in races
   if (t > 0) fwd += accel * dt * (fwd < max ? 1 : 0);
-  else if (t < 0) fwd -= (fwd > 0 ? 42 : 14) * dt;
+  else if (t < 0) fwd -= (fwd > 0 ? 42 * T.brake : 14) * dt;
   else fwd *= Math.pow(0.45, dt);
   fwd = Math.max(-12, Math.min(max, fwd));
   // steering: easier at low speed, a little less sharp flat out; the handbrake tightens it and lets the back go
   car.steer += (s - car.steer) * Math.min(1, dt * 8);
-  const grip = hand ? 1.4 : 9, turn = car.steer * dt * (hand ? 3.2 : 2.3) * Math.min(1, Math.abs(fwd) / 7) * (1 - Math.min(0.35, Math.abs(fwd) / 120)) * Math.sign(fwd || 1);
+  const grip = (hand ? 1.4 : 9) * T.grip, turn = car.steer * dt * (hand ? 3.2 : 2.3) * Math.min(1, Math.abs(fwd) / 7) * (1 - Math.min(0.35, Math.abs(fwd) / 120)) * Math.sign(fwd || 1);
   car.heading += turn + (car.spin || 0) * dt; car.spin = (car.spin || 0) * Math.pow(0.04, dt); // spin from a hit (damage.js)
   side *= Math.pow(0.5, dt * grip);
   if (hand) fwd *= Math.pow(0.7, dt);
@@ -838,7 +839,7 @@ export function initEmpire(ctx) {
   buildUi();
   buildCity();
   for (const l of LOTS) renderLot(l);
-  car.mesh = makeCar(0xC9A84C, false, true);
+  car.mesh = makeCar(0xC9A84C, false, true); car.mesh.userData.personal = true; // your own car (RB Customs upgrades it)
   car.mesh.traverse((o) => { if (o.isMesh && !o.userData.noAO) o.castShadow = true; }); // not the underglow or the flames
   // headlights for the night
   headlight = new THREE.SpotLight(0xfff1d6, 0, 90, 0.55, 0.5, 1.3); headlight.position.set(0, 1.1, 2.0); headlight.target.position.set(0, 0, 18); car.mesh.add(headlight); car.mesh.add(headlight.target);

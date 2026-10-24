@@ -145,3 +145,22 @@ export function tag(p, text, color = "#F5E6A3") {
   p.userData.tag = s; p.add(s);
   return s;
 }
+
+// ---------------------------------------------------------------- looks (wardrobe.js), shared with other players
+// A look is a short string of choices ("t2,j1,p0,s3,h0,c2,b1,k4"), so it travels in the live room's messages.
+export const LOOK = {
+  t: { name: "Top", list: [0xf2f2f2, 0x111111, 0xb03030, 0x1f3b6a, 0x2e7d32, 0xC9A84C, 0x6a4c93, 0xe0a030, 0x777777] },
+  j: { name: "Jacket", list: [null, 0x121212, 0x5a3b22, 0x1f2a44, 0x8a1c1c, 0xC9A84C, 0xe9e6df] },
+  p: { name: "Trousers", list: [0x1c2a44, 0x111111, 0x4a4a4a, 0x6b5b45, 0x223344, 0xe9e6df] },
+  s: { name: "Hair", list: ["short", "buzz", "afro", "cap", "tail"] },
+  h: { name: "Hair colour", list: [0x0d0d0d, 0x3b2414, 0x7a4a24, 0xd9b27a, 0x9a9a9a, 0xb03030] },
+  c: { name: "Cap colour", list: [0x111111, 0xb03030, 0x1f3b6a, 0xC9A84C, 0xf2f2f2] },
+  b: { name: "Beard", list: [false, true] },
+  k: { name: "Skin", list: SKIN },
+};
+export const DEFAULT_LOOK = "t0,j1,p0,s0,h0,c0,b1,k1";
+export function fromLook(str) {
+  const pick = {}; for (const part of String(str || DEFAULT_LOOK).split(",")) { const k = part[0], i = Number(part.slice(1)); if (LOOK[k] && Number.isInteger(i) && i >= 0 && i < LOOK[k].list.length) pick[k] = i; }
+  const v = (k, d) => LOOK[k].list[pick[k] ?? d];
+  return { top: v("t", 0), jacket: v("j", 1), pants: v("p", 0), style: v("s", 0), hair: v("h", 0), capColor: v("c", 0), beard: v("b", 1), skin: v("k", 1), shoes: 0x0b0b0b };
+}

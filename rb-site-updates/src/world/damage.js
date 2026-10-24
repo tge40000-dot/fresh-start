@@ -33,7 +33,7 @@ export function initDamage(E, ctx) {
   }
   function hurt(hit) {
     if (car.onFoot || !car.mesh) return;
-    const before = dmg(); setDmg(before + Math.max(0, hit - 5) * 1.6);
+    const before = dmg(); setDmg(before + Math.max(0, hit - 5) * 1.6 * (1 - ((car.tune && car.tune.armour) || 0) * 0.2)); // RB Customs armour takes the edge off
     if (before < 100 && dmg() >= 100) E.toast("💥 The engine's wrecked. Get out (F) and take another car, or fix it from the 🔧 chip.", true);
   }
   on("crash", hurt);

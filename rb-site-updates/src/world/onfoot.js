@@ -7,7 +7,7 @@
 //   - Shift sprints, Space jumps. Not during a race, a race countdown or photo mode.
 // combat.js adds aiming and shooting on top (out.aim, out.onShoot), for players who've opted in to 18+ combat.
 import * as THREE from "three";
-import { person, pose, tag } from "./char.js";
+import { person, pose, tag, fromLook, DEFAULT_LOOK } from "./char.js";
 import { joy } from "./empire.js";
 
 const WALK = 1.9, JOG = 4.2, SPRINT = 7.2, GRAVITY = 22;
@@ -16,10 +16,11 @@ const typing = () => /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.ta
 
 export function initFoot(E, ctx) {
   const car = E.car, CITY = E.city, cam = E.camera;
-  const me = person({ top: 0xf2f2f2, jacket: 0x121212, pants: 0x1c2a44, shoes: 0x0b0b0b, skin: 0x8d5524, hair: 0x0d0d0d, style: "short", beard: true }); // white tee, black jacket, dark denim
+  const myLook = () => { try { return localStorage.getItem("rb_world_look") || DEFAULT_LOOK; } catch (e) { return DEFAULT_LOOK; } };
+  let me = person(fromLook(myLook())); // your look (wardrobe.js); the first one is a white tee, black jacket and dark denim
   me.visible = false; ctx.scene.add(me);
   const out = {
-    on: false, me, yaw: 0, pitch: -0.12, h: 0, speed: 0, y: 0, vy: 0, parked: null, aim: false, sprint: false,
+    on: false, get me() { return me; }, look: myLook, yaw: 0, pitch: -0.12, h: 0, speed: 0, y: 0, vy: 0, parked: null, aim: false, sprint: false,
     fp: (() => { try { return localStorage.getItem("rb_world_fp") === "1"; } catch (e) { return false; } })(), bob: 0,
     view: (on) => { out.fp = on == null ? !out.fp : !!on; try { localStorage.setItem("rb_world_fp", out.fp ? "1" : "0"); } catch (e) {} E.toast(out.fp ? "👁️ First person (V to switch back)" : "🎮 Third person (V for first person)"); out.onView.forEach((f) => f(out.fp)); },
     onView: [],
@@ -237,5 +238,14 @@ body:has(.overlay[style*="flex"]) #rb-door,body:has(.overlay[style*="flex"]) .rb
     door.style.display = doorLabel ? "" : "none";
   });
   out.tag = (text) => tag(me, text);
+  // a new look from the wardrobe: the new you takes the old one's place
+  out.setLook = (str) => {
+    try { localStorage.setItem("rb_world_look", str); } catch (e) {}
+    const old = me, n = person(fromLook(str));
+    n.position.copy(old.position); n.rotation.copy(old.rotation); n.visible = old.visible;
+    ctx.scene.remove(old); ctx.scene.add(n); me = n;
+    out.onLook.forEach((f) => f(str));
+  };
+  out.onLook = [];
   return out;
 }
