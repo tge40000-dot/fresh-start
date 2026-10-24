@@ -31,10 +31,18 @@ function G() {
   geo.jacket = new THREE.CapsuleGeometry(0.178, 0.25, 6, 14, 1); geo.jacket.scale(1.17, 1, 0.71);
   return geo;
 }
-function mat(color, rough = 0.8) {
-  const k = color + ":" + rough;
-  if (!mats.has(k)) mats.set(k, new THREE.MeshStandardMaterial({ color, roughness: rough }));
+// cloth has a soft sheen at grazing angles; skin and hard things are plain
+function mat(color, rough = 0.8, cloth = false) {
+  const k = color + ":" + rough + ":" + cloth;
+  if (!mats.has(k)) mats.set(k, cloth ? new THREE.MeshPhysicalMaterial({ color, roughness: rough, sheen: 0.6, sheenRoughness: 0.7, sheenColor: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.35) }) : new THREE.MeshStandardMaterial({ color, roughness: rough }));
   return mats.get(k);
+}
+// a soft shadow on the ground under each person (with or without the sun's shadows)
+let blobMat = null;
+function blob() {
+  if (!blobMat) { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"), r = g.createRadialGradient(32, 32, 2, 32, 32, 31); r.addColorStop(0, "rgba(0,0,0,.55)"); r.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64); blobMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }); }
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95), blobMat); m.rotation.x = -Math.PI / 2; m.position.y = 0.025; m.userData.noAO = true; m.renderOrder = 1;
+  return m;
 }
 const SKIN = [0x5c3a21, 0x8d5524, 0xa16e4b, 0xc68642, 0xe0ac69, 0xf1c27d, 0xffdbac];
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -44,15 +52,15 @@ const HAIRS = ["short", "short", "buzz", "afro", "cap", "tail"];
 //   jacket (a colour for an open jacket over the top), hood, vest (body armour) }
 export function person(o = {}) {
   const g = G();
-  const skin = mat(o.skin ?? pick(SKIN), 0.6), top = mat(o.top ?? 0x1a1a1a), pants = mat(o.pants ?? 0x23262e), shoes = mat(o.shoes ?? 0x111111, 0.5), hair = mat(o.hair ?? 0x111111, 0.9);
-  const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
+  const skin = mat(o.skin ?? pick(SKIN), 0.6), top = mat(o.top ?? 0x1a1a1a, 0.85, true), pants = mat(o.pants ?? 0x23262e, 0.85, true), shoes = mat(o.shoes ?? 0x111111, 0.5), hair = mat(o.hair ?? 0x111111, 0.9);
+  const root = new THREE.Group(), body = new THREE.Group(); root.add(body); root.add(blob());
   const part = (geom, m, parent, x = 0, y = 0, z = 0) => { const mesh = new THREE.Mesh(geom, m); mesh.position.set(x, y, z); mesh.castShadow = true; parent.add(mesh); return mesh; };
   const joint = (parent, x, y, z) => { const j = new THREE.Group(); j.position.set(x, y, z); parent.add(j); return j; };
   // hips at 0.95 m; everything hangs off them
   const hips = joint(body, 0, 0.95, 0); part(g.hips, pants, hips, 0, 0.02, 0);
   const spine = joint(hips, 0, 0.1, 0); part(g.chest, top, spine, 0, 0.22, 0);
   if (o.vest) { const v = part(new THREE.BoxGeometry(0.36, 0.34, 0.25), mat(0x2b2f24, 0.9), spine, 0, 0.24, 0); v.scale.set(1, 1, 1); }
-  else if (o.jacket != null) { const jm = mat(o.jacket, 0.75); for (const s of [1, -1]) { const j = part(g.jacket, jm, spine, 0.07 * s, 0.22, 0); j.scale.set(0.55, 1, 1); } }
+  else if (o.jacket != null) { const jm = mat(o.jacket, 0.75, true); for (const s of [1, -1]) { const j = part(g.jacket, jm, spine, 0.07 * s, 0.22, 0); j.scale.set(0.55, 1, 1); } }
   if (o.hood) { const h = part(g.hood, top, spine, 0, 0.44, -0.07); h.rotation.x = Math.PI / 2.4; }
   part(g.belt, mat(0x15120f, 0.5), hips, 0, 0.09, 0);
   const neck = joint(spine, 0, 0.47, 0); part(g.neck, skin, neck, 0, 0.03, 0);
@@ -69,7 +77,7 @@ export function person(o = {}) {
   else if (style !== "buzz") part(g.hair, hair, head, 0, 0.012, -0.008);
   if (style === "tail") { const t = part(g.tail, hair, head, 0, 0.0, -0.13); t.rotation.x = 0.4; }
   if (style === "buzz") { const b = part(g.hair, hair, head, 0, 0.004, -0.004); b.scale.setScalar(0.97); }
-  const sleeve = o.jacket != null && !o.vest ? mat(o.jacket, 0.75) : top;
+  const sleeve = o.jacket != null && !o.vest ? mat(o.jacket, 0.75, true) : top;
   const arm = (s) => { const sh = joint(spine, 0.215 * s, 0.38, 0); part(g.upper, sleeve, sh); const el = joint(sh, 0, -0.3, 0); part(g.fore, skin, el); const hd = joint(el, 0, -0.29, 0); part(g.hand, skin, hd); return { sh, el, hd }; };
   const leg = (s) => { const hp = joint(hips, 0.095 * s, -0.04, 0); part(g.thigh, pants, hp); const kn = joint(hp, 0, -0.42, 0); part(g.shin, pants, kn); const an = joint(kn, 0, -0.43, 0); part(g.shoe, shoes, an); part(g.sole, mat(0xe8e4dc, 0.6), an); return { hp, kn, an }; };
   const L = arm(1), R = arm(-1), LL = leg(1), RL = leg(-1);

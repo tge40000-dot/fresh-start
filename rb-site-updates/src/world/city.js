@@ -580,15 +580,19 @@ export function timesSquare(scene, out) {
     ["RB WORLD", "BUILD YOUR EMPIRE", "#F5E6A3", "#1a1200"], ["RB TV", "WATCH NOW", "#ffffff", "#2a0050"], ["RB BADGE", "EARN · LEVEL UP", "#00E676", "#001a0c"],
     ["RB EVENTS", "SEE YOU THERE", "#ffb000", "#1a0800"], ["CREATE", "OWN · ELEVATE", "#C9A84C", "#0a0a0a"],
   ];
+  // RB's own screen art, drawn at 8:3 like the sponsors' (ads.js), with the words inside the 2:1 middle that every
+  // screen shows whatever its shape
   const textures = ADS.map(([a, b, fg, bg], k) => {
-    const c = canvas(512, 256, (g, W, H) => {
+    const c = canvas(1024, 384, (g, W, H) => {
       const grd = g.createLinearGradient(0, 0, W, H); grd.addColorStop(0, bg); grd.addColorStop(1, "#000"); g.fillStyle = grd; g.fillRect(0, 0, W, H);
-      g.strokeStyle = fg; g.lineWidth = 6; g.strokeRect(8, 8, W - 16, H - 16);
-      g.fillStyle = fg; g.textAlign = "center"; g.font = "900 78px Inter, Arial, sans-serif"; g.fillText(a, W / 2, 120);
-      g.fillStyle = "#fff"; g.font = "700 34px Inter, Arial, sans-serif"; g.fillText(b, W / 2, 190);
+      const sw = H * 0.9 * 2, sx = (W - sw) / 2;
+      g.strokeStyle = fg; g.lineWidth = 8; g.strokeRect(sx + 6, H * 0.05 + 6, sw - 12, H * 0.9 - 12);
+      g.fillStyle = fg; g.textAlign = "center"; g.font = "900 104px Inter, Arial, sans-serif"; g.fillText(a, W / 2, H * 0.5);
+      g.fillStyle = "#fff"; g.font = "700 44px Inter, Arial, sans-serif"; g.fillText(b, W / 2, H * 0.74);
     });
-    return tex(c, false);
+    const t = tex(c, false); t.anisotropy = 16; t.userData.avg = new THREE.Color(fg).multiplyScalar(0.6); return t;
   });
+  const ART = 8 / 3; // the art's shape; each screen shows the middle of it that matches its own shape
   // Sponsors' ads from RB Command (ads.js fills out.adPool) take turns with RB's own on every screen; with none live,
   // the screens show RB's own as before.
   out.adPool = out.adPool || { wide: [], tall: [] };
@@ -599,8 +603,10 @@ export function timesSquare(scene, out) {
   };
   out.adSpots = [];
   D.boards.forEach(([x, z, ang, w, h, y], i) => {
-    const mat = new THREE.MeshBasicMaterial({ map: textures[i % textures.length], color: new THREE.Color(1.6, 1.6, 1.6) }); // LED screens are bright
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    const mat = new THREE.MeshBasicMaterial({ map: textures[i % textures.length], color: new THREE.Color(1.6, 1.6, 1.6), fog: false }); // LED screens: bright, and clear through the haze
+    const geo = new THREE.PlaneGeometry(w, h), uv = geo.attributes.uv, ku = Math.min(1, w / h / ART), kv = Math.min(1, ART / (w / h));
+    for (let j = 0; j < uv.count; j++) uv.setXY(j, 0.5 + (uv.getX(j) - 0.5) * ku, 0.5 + (uv.getY(j) - 0.5) * kv); // no stretching
+    const m = new THREE.Mesh(geo, mat); m.userData.noAO = true;
     m.position.set(dm(x), y + h / 2, dm(z)); m.rotation.y = ang; scene.add(m);
     const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, h + 0.6, 0.3), new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6 }));
     frame.position.copy(m.position); frame.rotation.y = ang; frame.translateZ(-0.2); scene.add(frame);
@@ -629,8 +635,8 @@ export function timesSquare(scene, out) {
   }
   placed.forEach(([px, pz, along], i) => {
     const W = 1.9, H = 2.85, Y = 0.55;
-    const mat = new THREE.MeshBasicMaterial({ map: houseTall[i % houseTall.length], color: new THREE.Color(1.3, 1.3, 1.3), side: THREE.DoubleSide });
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat);
+    const mat = new THREE.MeshBasicMaterial({ map: houseTall[i % houseTall.length], color: new THREE.Color(1.3, 1.3, 1.3), side: THREE.DoubleSide, fog: false });
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat); face.userData.noAO = true;
     face.position.set(px, Y + H / 2, pz); face.rotation.y = along; scene.add(face); // faces up and down the street
     const box = new THREE.Mesh(new THREE.BoxGeometry(W + 0.24, H + 0.24, 0.16), post); box.position.copy(face.position); box.rotation.y = along; box.scale.z = 0.9; scene.add(box);
     face.position.x += Math.sin(along) * 0.09; face.position.z += Math.cos(along) * 0.09;

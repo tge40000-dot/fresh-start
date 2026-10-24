@@ -149,6 +149,7 @@ export function help() {
     <tr><td><kbd>G</kbd></td><td>Horn</td></tr>
     <tr><td><kbd>M</kbd> or 📻</td><td>Car radio: RB Radio live, the same song as everyone</td></tr>
     <tr><td><kbd>T</kbd> or 📱</td><td>Your phone: jobs, empire, races, goals, messages, radio, leaders, events and settings</td></tr>
+    <tr><td><kbd>O</kbd> near an ad</td><td>Opens the sponsor's page (the card at the bottom shows whose ad it is)</td></tr>
     <tr><td><kbd>F</kbd> or GET OUT</td><td>Get out and walk; next to a car, get in (yours, or take one from the traffic)</td></tr>
     <tr><td>On foot</td><td><kbd>WASD</kbd> move, mouse looks (click to lock it, <kbd>Esc</kbd> to let go), <kbd>Shift</kbd> sprint, <kbd>Space</kbd> jump, <kbd>V</kbd> first or third person</td></tr>
     <tr><td>Combat (18+, ⚔️)</td><td>Right mouse aims, left mouse fires, <kbd>R</kbd> reloads, <kbd>1</kbd>-<kbd>6</kbd> or the mouse wheel switch, hold <kbd>Tab</kbd> for the weapon wheel, <kbd>X</kbd> puts it away, <kbd>G</kbd> throws a grenade (3 a life); kills in a row earn armour, cash and health</td></tr>

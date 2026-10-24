@@ -430,7 +430,7 @@ async function startGame() {
         sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); },
         help: () => hud && hud.help(),
     });
-    const ectx = { scene, player, play, fx, music: (on) => { if (!sfx.bgm) return; if (on && player.settings.audio) sfx.bgm.play().catch(() => {}); else sfx.bgm.pause(); }, gps: () => gpsFix, minimap: () => minimap, onFrame: (f) => frameHooks.push(f), sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); } };
+    const ectx = { scene, player, play, fx, renderer, music: (on) => { if (!sfx.bgm) return; if (on && player.settings.audio) sfx.bgm.play().catch(() => {}); else sfx.bgm.pause(); }, gps: () => gpsFix, minimap: () => minimap, onFrame: (f) => frameHooks.push(f), sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); } };
     const hud = initHud(window.RBEmpire, ectx);
     window.RBProgress = initProgress(window.RBEmpire, ectx);
     window.RBRace = initRace(window.RBEmpire, ectx, window.RBProgress);
@@ -445,6 +445,10 @@ async function startGame() {
     window.RBLive = initLive(window.RBEmpire, ectx, window.RBFoot, window.RBCombat); // other players in real time (rb-world-live)
     const notice = (window.RB_WORLD_CFG || {}).notice; if (notice) setTimeout(() => window.RBEmpire.toast('📣 ' + notice), 2500);
     fx.build(); window.RBFx = fx;
+    // sharper textures at a glance (roads and walls seen at a slant): as much anisotropic filtering as the device has,
+    // above Low graphics; again later for things made after the start (cars, people, ads)
+    const sharpen = () => { if (fx.tier && fx.tier() === "low") return; const max = Math.min(16, renderer.capabilities.getMaxAnisotropy()); scene.traverse((o) => { const m = o.material; if (!m) return; for (const mm of Array.isArray(m) ? m : [m]) for (const k of ["map", "normalMap", "roughnessMap", "emissiveMap"]) { const t = mm[k]; if (t && t.anisotropy < max) { t.anisotropy = max; t.needsUpdate = true; } } }); };
+    setTimeout(sharpen, 4000); setTimeout(sharpen, 20000); setInterval(sharpen, 120000);
     bindGraphics();
     fetchCalendarEvents();
 }

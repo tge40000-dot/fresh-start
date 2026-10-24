@@ -870,5 +870,5 @@ export function initEmpire(ctx) {
     phase: () => world.signal(clockT), signalAt: (n) => SIGNAL[n], wanted: () => wanted,
     radar: () => ({ car, cops, traffic, drops, job, lots, wanted, mine: (l) => mine(l), lotOwner }), camName: () => CAMS[camMode], save, city: CITY, world: () => world, camera: C.camera,
     giveCard: (key) => giveCard("reward", RARITY.find((r) => r.key === key)),
-    setFoot: (fn) => { footTick = fn; }, nearMine: () => !!(nearLot && mine(nearLot)), sunAt, useCarMesh, takeTraffic, traffic: () => traffic, cops: () => cops, busted, cycleCam };
+    setFoot: (fn) => { footTick = fn; }, night: () => nightK, nearMine: () => !!(nearLot && mine(nearLot)), sunAt, useCarMesh, takeTraffic, traffic: () => traffic, cops: () => cops, busted, cycleCam };
 }
