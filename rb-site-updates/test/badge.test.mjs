@@ -259,7 +259,7 @@ USERS.u_bob = { email: "bob@example.com" };
   const csp = w.headers.get("Content-Security-Policy");
   assert.ok(/connect-src 'self'[^;]*basemaps\.cartocdn\.com/.test(csp) && !/esm\.sh|instantdb|stripe/i.test(csp), "the game's hosts only: no InstantDB, no Stripe");
   assert.ok(!/instantdb|esm\.sh|js\.stripe\.com|\$9\.99/i.test(wh), "no InstantDB, Stripe or the unbacked $9.99 offer");
-  assert.ok(wh.includes('src="/app/world/main.js?v=w13"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
+  assert.ok(wh.includes('src="/app/world/main.js?v=w14"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
   assert.ok(wh.includes("OPEN THE RB APP") && wh.includes("SEE MEMBERSHIPS"));
   // the car radio and the notice come from RB Command > RB World; "Enter as Admin" opens RB World's controls there
   assert.ok(wh.includes('window.RB_WORLD_CFG = {"radio":true,"notice":""}') && wh.includes("data-rb-radio-host") && wh.includes('id="radio-vol"'));
@@ -272,6 +272,11 @@ USERS.u_bob = { email: "bob@example.com" };
   for (const app of ["jobs", "empire", "races", "goals", "chat", "radio", "leaders", "events", "settings", "help"]) assert.ok(pj.includes(`["${app}", `), "phone app " + app);
   assert.ok(wh.includes('id="set-screen"') && wh.includes("Classic: everything on screen"));
   const mjs = await (await go("/app/world/main.js")).text(); assert.ok(mjs.includes("from './phone.js'") && mjs.includes("initPhone(window.RBEmpire, ectx)"));
+  // the billboards and posters: sponsors' ads from RB Command, labelled, counted, with a link when you drive close
+  assert.ok(mjs.includes("from './ads.js'") && mjs.includes("initAds(window.RBEmpire, ectx)"));
+  const aj = await (await go("/app/world/ads.js")).text();
+  assert.ok(aj.includes("export function initAds") && aj.includes("/api/world/billboards") && aj.includes("/api/world/ad-event") && aj.includes("SPONSORED · ") && aj.includes('rel = "sponsored noopener"'));
+  const cityj = await (await go("/app/world/city.js")).text(); assert.ok(cityj.includes("adSpots") && cityj.includes("adPool"));
   sql("UPDATE badge_config SET value='off' WHERE key='world_radio'"); sql("UPDATE badge_config SET value='Comedy night <Friday>' WHERE key='world_notice'");
   const wh2 = await (await go("/app/world/")).text();
   assert.ok(wh2.includes('"radio":false') && wh2.includes("Comedy night"), "radio off and the notice in the page");
@@ -306,6 +311,30 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.equal(ads[0].id, "notice"); assert.equal(ads[0].body, "Comedy night <Friday>", "the notice leads the ticker");
   sql("UPDATE badge_config SET value='' WHERE key='world_notice'");
   assert.ok(!(await api("/api/world/ads")).body.ads.some((x) => x.id === "notice"), "no notice, no ticker line");
+  // billboards: an ads table without the media columns yet answers with none, never an error
+  let bb = await api("/api/world/billboards"); assert.equal(bb.status, 200); assert.deepEqual(bb.body.ads, []);
+  for (const c of ["image_url TEXT", "video_url TEXT", "poster_url TEXT", "format TEXT DEFAULT 'image'", "click_url TEXT", "cta TEXT", "impressions INTEGER DEFAULT 0", "max_impressions INTEGER"]) sql("ALTER TABLE ads ADD COLUMN " + c);
+  sql("UPDATE ads SET image_url = 'https://media.example/acme.jpg', click_url = 'https://acme.example/' WHERE advertiser = 'Acme'");
+  sql("INSERT INTO ads (advertiser, headline, surface, format, video_url, image_url, click_url, cta, weight) VALUES ('Vid Co', 'Watch this', 'world', 'video', 'https://media.example/v.mp4', 'http://insecure.example/x.jpg', 'javascript:alert(1)', 'Watch', 5)");
+  sql("INSERT INTO ads (advertiser, headline, surface, image_url, status) VALUES ('Paused Co', 'p', 'all', 'https://media.example/p.jpg', 'paused'), ('Home Co', 'h', 'home', 'https://media.example/h.jpg', 'live'), ('Ended Co', 'e', 'world', 'https://media.example/e.jpg', 'live')");
+  sql("UPDATE ads SET ends_at = '2020-01-01' WHERE advertiser = 'Ended Co'");
+  sql("INSERT INTO ads (advertiser, headline, surface, image_url, impressions, max_impressions) VALUES ('Used Up', 'u', 'all', 'https://media.example/u.jpg', 1000, 1000)");
+  bb = await api("/api/world/billboards");
+  assert.deepEqual(bb.body.ads.map((a) => a.advertiser), ["Vid Co", "Acme"], "live, Everywhere/RB World/game, in their dates, package not used up; weight first");
+  const [vid, acme] = bb.body.ads;
+  assert.deepEqual([vid.format, vid.video_url, vid.image_url, vid.click], ["video", "https://media.example/v.mp4", null, null], "https only; no link to a bad URL");
+  assert.deepEqual([acme.format, acme.image_url, acme.click], ["image", "https://media.example/acme.jpg", `/go/ad/${acme.id}?s=world`]);
+  // counting views from the game: only live ads, only imp/view, a valid player id
+  const adEv = (body) => api("/api/world/ad-event", { method: "POST", body });
+  const pausedId = Number(one("SELECT id FROM ads WHERE advertiser = 'Paused Co'").id);
+  let ev = await adEv({ id: "aaaaaaaa-1111", events: [{ id: acme.id, kind: "imp" }, { id: acme.id, kind: "view" }, { id: acme.id, kind: "imp" }, { id: pausedId, kind: "imp" }, { id: vid.id, kind: "click" }, { id: "x", kind: "imp" }] });
+  assert.equal(ev.status, 200); assert.equal(ev.body.counted, 2, "one view and one viewable for Acme; the paused ad, the repeat, a click and a bad id don't count");
+  await adEv({ id: "aaaaaaaa-1111", events: [{ id: vid.id, kind: "imp" }] });
+  const st = DB.raw.prepare("SELECT ad_id, impressions, viewable FROM world_ad_stats ORDER BY ad_id").all();
+  assert.deepEqual(st.map((x) => [Number(x.ad_id), Number(x.impressions), Number(x.viewable)]), [[Number(acme.id), 1, 1], [Number(vid.id), 1, 0]]);
+  assert.equal((await adEv({ id: "bad", events: [{ id: acme.id, kind: "imp" }] })).status, 400);
+  assert.equal(Number(one("SELECT sum(impressions) AS n FROM ads WHERE advertiser = 'Acme'").n || 0), 0, "the website's own counts are left alone");
+  sql("DELETE FROM ads WHERE advertiser IN ('Vid Co', 'Paused Co', 'Home Co', 'Ended Co', 'Used Up')");
   // a player blocked in RB Command > RB World: no chat, no races, off the leaderboard and other players' maps; still drives
   sql("INSERT INTO world_bans (id, name, reason, by, created_at) VALUES ('bbbbbbbb-2222', 'Rival', 'spam', 'owner', '2026-10-23T00:00:00Z')");
   NOW += 61000;
@@ -483,4 +512,4 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.ok(closed.includes("coming soon") && !closed.includes("main.js"), "the world page says coming soon");
   sql("UPDATE badge_config SET value='on' WHERE key='world_open'");
 }
-console.log("badge ok: RB World races on the server clock (lobby, join window, checkpoint order, distance and speed checks, places, best times, solo, full, leave), cars, level and lots boards; RB World on RB's backend (page, no InstantDB or Stripe, players, leaderboard, chat with limits, ads ticker, play-time points with gaps and daily cap), RB app and manifest, Gold Rush scores checked against the round (early, too high, twice, late, round and daily caps, rounds a day), off by default, terms for review, pulled points counted once, levels, achievements, signed QR read back, redeem with stock/balance/level checks, sign-in rules");
+console.log("badge ok: RB World races on the server clock (lobby, join window, checkpoint order, distance and speed checks, places, best times, solo, full, leave), cars, level and lots boards; RB World on RB's backend (page, no InstantDB or Stripe, players, leaderboard, chat with limits, ads ticker, sponsor ads on the billboards and posters with counted views, play-time points with gaps and daily cap), RB app and manifest, Gold Rush scores checked against the round (early, too high, twice, late, round and daily caps, rounds a day), off by default, terms for review, pulled points counted once, levels, achievements, signed QR read back, redeem with stock/balance/level checks, sign-in rules");

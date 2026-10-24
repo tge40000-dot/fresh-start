@@ -27,6 +27,7 @@ async function rows(env, sql, ...a) { try { return (await env.DB.prepare(sql).bi
 async function one(env, sql, ...a) { try { return await env.DB.prepare(sql).bind(...a).first(); } catch { return null; } }
 async function ensure(env) {
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS world_bans (id TEXT PRIMARY KEY, name TEXT, reason TEXT, by TEXT, created_at TEXT NOT NULL)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS world_ad_stats (ad_id INTEGER NOT NULL, day TEXT NOT NULL, impressions INTEGER NOT NULL DEFAULT 0, viewable INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (ad_id, day))").run();
 }
 async function config(env) {
   const out = {};
@@ -50,7 +51,7 @@ export async function summary(env, fetcher = fetch) {
   await ensure(env);
   const now = Date.now(), iso = (ms) => new Date(now - ms).toISOString(), today = new Date(now).toISOString().slice(0, 10);
   const c = await config(env);
-  const [counts, top, chat, bans, lots, races, bests, play, radio] = await Promise.all([
+  const [counts, top, chat, bans, lots, races, bests, play, radio, boards, adViews] = await Promise.all([
     one(env, "SELECT count(*) AS total, sum(seen_at >= ?) AS online, sum(seen_at >= ?) AS day, sum(seen_at >= ?) AS week FROM world_players", iso(120e3), iso(864e5), iso(7 * 864e5)),
     rows(env, "SELECT p.id, p.name, p.net_worth, p.tokens, p.kills, p.deaths, p.seen_at, p.clerk_user_id IS NOT NULL AS account, b.id IS NOT NULL AS blocked FROM world_players p LEFT JOIN world_bans b ON b.id = p.id WHERE p.seen_at >= ? ORDER BY p.net_worth DESC LIMIT 15", iso(30 * 864e5)),
     rows(env, "SELECT c.n, c.player_id, c.name, c.text, c.created_at, b.id IS NOT NULL AS blocked FROM world_chat c LEFT JOIN world_bans b ON b.id = c.player_id ORDER BY c.n DESC LIMIT 40"),
@@ -60,6 +61,9 @@ export async function summary(env, fetcher = fetch) {
     rows(env, "SELECT track, name, min(ms) AS ms, at FROM world_race_best GROUP BY track ORDER BY track"),
     one(env, "SELECT count(*) AS members, coalesce(sum(seconds), 0) AS seconds, coalesce(sum(awarded), 0) AS awarded FROM world_play WHERE day = ?", today),
     radioNow(fetcher),
+    // the sponsors on the billboards and posters right now: the same rule as the game (/api/world/billboards)
+    rows(env, "SELECT id, advertiser, headline, surface, format, image_url, video_url, ends_at FROM ads WHERE status = 'live' AND surface IN ('all', 'world', 'game') AND (starts_at IS NULL OR starts_at = '' OR datetime(starts_at) <= datetime('now')) AND (ends_at IS NULL OR ends_at = '' OR datetime(ends_at) >= datetime('now')) ORDER BY coalesce(weight, 1) DESC, id DESC LIMIT 8"),
+    rows(env, "SELECT s.ad_id, a.advertiser, a.headline, a.status, sum(s.impressions) AS views, sum(s.viewable) AS viewable FROM world_ad_stats s LEFT JOIN ads a ON a.id = s.ad_id WHERE s.day >= ? GROUP BY s.ad_id ORDER BY views DESC LIMIT 20", iso(30 * 864e5).slice(0, 10)),
   ]);
   return {
     ok: true, generated_at: new Date(now).toISOString(),
@@ -72,6 +76,8 @@ export async function summary(env, fetcher = fetch) {
     bans, lots: { owned: lots.length, total: LOTS, list: lots },
     races: races.map((r) => ({ ...r, racers: n(r.racers), finished: n(r.finished) })), bests: bests.map((b) => ({ ...b, ms: n(b.ms) })),
     radio,
+    billboards: { live: boards.map((a) => ({ id: n(a.id), advertiser: a.advertiser, headline: a.headline, surface: a.surface, video: a.format === "video" && !!a.video_url, image: !!a.image_url, ends_at: a.ends_at || null })),
+      stats: adViews.map((a) => ({ id: n(a.ad_id), advertiser: a.advertiser || "Ad #" + a.ad_id, headline: a.headline || "", status: a.status || "deleted", views: n(a.views), viewable: n(a.viewable) })) },
   };
 }
 
@@ -215,6 +221,10 @@ export function page(nonce, canEdit) {
   <section class="card"><h2>Owned lots</h2><div class="scroll"><table><thead><tr><th>Lot</th><th>Owner</th><th>Business</th><th></th></tr></thead><tbody id="lots"></tbody></table></div></section>
   <section class="card"><h2>Races</h2><div class="scroll"><table><thead><tr><th>Track</th><th>Host</th><th>Racers</th><th>When</th></tr></thead><tbody id="races"></tbody></table></div>
     <h2 class="mt">Best times</h2><div class="scroll"><table><tbody id="bests"></tbody></table></div></section>
+  <section class="card wide"><h2>Billboards and posters</h2><p class="muted">Live ads from Money &gt; Ads set to Everywhere or RB World only take turns with RB's own on the 11 screens round RB Plaza and the street posters, with a Sponsored label. Up to 8 at a time; a new or paused ad shows in the game within five minutes.</p>
+    <div class="scroll"><table><thead><tr><th>On now</th><th>Shows on</th><th>Art</th><th>Ends</th></tr></thead><tbody id="boards"></tbody></table></div>
+    <h2 class="mt">In-game views (last 30 days)</h2><div class="scroll"><table><thead><tr><th>Ad</th><th>Views</th><th>Seen 1 s or more</th></tr></thead><tbody id="adviews"></tbody></table></div>
+    <p class="muted">Counted when an ad is on a player's screen and close enough to read, at most once per ad every 30 minutes for a player; kept apart from the website's numbers. Clicks from the game count with the ad's other clicks under Ads (tagged utm_content=world for the advertiser).</p></section>
   <section class="card wide"><h2>Blocked players</h2><div class="scroll"><table><thead><tr><th>Player</th><th>Why</th><th>By</th><th>When</th><th></th></tr></thead><tbody id="bans"></tbody></table></div></section>
 </div>
 </main>
@@ -258,6 +268,12 @@ function render(d){
   d.races.forEach(function(r){ var tr = el("tr"); cell(tr, r.track); cell(tr, r.solo ? "Solo" : (r.host_name || "")); cell(tr, r.finished + " of " + r.racers + " finished"); cell(tr, ago(new Date(Number(r.start_at)).toISOString())); rt.appendChild(tr); });
   var bt = $("bests"); bt.textContent = ""; if (!d.bests.length) empty(bt, 3, "No best times yet.");
   d.bests.forEach(function(b){ var tr = el("tr"); cell(tr, b.track); cell(tr, b.name); cell(tr, (b.ms / 1000).toFixed(2) + " s"); bt.appendChild(tr); });
+  var bb = $("boards"); bb.textContent = ""; if (!d.billboards.live.length) empty(bb, 4, "No sponsor ads on the billboards: RB's own show. Add one under Money > Ads and set Shows on to Everywhere or RB World only.");
+  d.billboards.live.forEach(function(a){ var tr = el("tr"), nm = el("span", null, a.advertiser || ("Ad #" + a.id)); if (a.headline) nm.appendChild(el("span", "muted", "  " + a.headline));
+    cell(tr, nm); cell(tr, a.surface === "world" ? "RB World only" : "Everywhere"); cell(tr, a.video ? "Video" : a.image ? "Image" : "Words only"); cell(tr, a.ends_at ? String(a.ends_at).slice(0, 10) : "No end date"); bb.appendChild(tr); });
+  var av = $("adviews"); av.textContent = ""; if (!d.billboards.stats.length) empty(av, 3, "No in-game views yet.");
+  d.billboards.stats.forEach(function(a){ var tr = el("tr"), nm = el("span", null, a.advertiser); if (a.status !== "live") nm.appendChild(el("span", "tag", a.status));
+    cell(tr, nm); cell(tr, fmt(a.views)); cell(tr, fmt(a.viewable)); av.appendChild(tr); });
   var bn = $("bans"); bn.textContent = ""; if (!d.bans.length) empty(bn, 5, "Nobody is blocked.");
   d.bans.forEach(function(b){ var tr = el("tr"); cell(tr, b.name || b.id); cell(tr, b.reason || ""); cell(tr, b.by || ""); cell(tr, ago(b.created_at)); cell(tr, btn("Unblock", "", function(){ return api("/api/world-admin/unblock", { id: b.id }).then(function(){ say("Unblocked."); }); })); bn.appendChild(tr); });
 }

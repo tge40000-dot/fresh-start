@@ -39,3 +39,4 @@ INSERT OR IGNORE INTO badge_config (key, value, label, help, sort_order) VALUES 
 INSERT OR IGNORE INTO badge_config (key, value, label, help, sort_order) VALUES ('world_radio', 'on', 'RB World car radio', 'on or off. While on, the car radio in RB World plays RB Radio live (the same song as everyone, and live shows when RB goes on air). Players turn it on themselves.', 50);
 INSERT OR IGNORE INTO badge_config (key, value, label, help, sort_order) VALUES ('world_notice', '', 'RB World notice', 'A short message players see when they start RB World and on the city ticker (up to 200 characters). Empty: no notice.', 51);
 CREATE TABLE IF NOT EXISTS world_bans (id TEXT PRIMARY KEY, name TEXT, reason TEXT, by TEXT, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS world_ad_stats (ad_id INTEGER NOT NULL, day TEXT NOT NULL, impressions INTEGER NOT NULL DEFAULT 0, viewable INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (ad_id, day));

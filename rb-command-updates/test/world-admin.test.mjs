@@ -34,6 +34,14 @@ assert.deepEqual(d.radio, { live: false, title: "Midnight Wave", artist: "Relent
 assert.equal(d.lots.owned, 1); assert.equal(d.lots.total, 32); assert.equal(d.races[0].racers, 2); assert.equal(d.races[0].finished, 1); assert.equal(d.bests[0].ms, 51234);
 assert.equal((await W.summary(env, async () => new Response(JSON.stringify({ live: { title: "Comedy Night", host: "RB" } })))).radio.title, "Comedy Night");
 assert.equal((await W.summary(env, async () => { throw new Error("down"); })).radio, null, "radio unreachable: shown as such, the page still loads");
+// 1b. the billboards: live sponsor ads for Everywhere or RB World, inside their dates; views from the game
+assert.deepEqual(d.billboards, { live: [], stats: [] }, "no ads table yet: the page still loads");
+db.exec("CREATE TABLE ads (id INTEGER PRIMARY KEY, advertiser TEXT, headline TEXT, image_url TEXT, video_url TEXT, format TEXT, status TEXT, surface TEXT, weight INTEGER, starts_at TEXT, ends_at TEXT)");
+db.exec("INSERT INTO ads (id, advertiser, headline, image_url, video_url, format, status, surface, weight, ends_at) VALUES (1, 'Acme', 'Big sale', 'https://x/a.jpg', NULL, 'image', 'live', 'all', 1, NULL), (2, 'Vid Co', 'Watch', NULL, 'https://x/v.mp4', 'video', 'live', 'world', 5, '2099-01-01'), (3, 'Radio Only', 'r', 'https://x/r.jpg', NULL, 'image', 'live', 'radio', 9, NULL), (4, 'Paused', 'p', 'https://x/p.jpg', NULL, 'image', 'paused', 'all', 9, NULL), (5, 'Ended', 'e', 'https://x/e.jpg', NULL, 'image', 'live', 'world', 9, '2020-01-01')");
+db.exec(`INSERT INTO world_ad_stats (ad_id, day, impressions, viewable) VALUES (1, '${iso(864e5).slice(0, 10)}', 7, 5), (1, '${iso(0).slice(0, 10)}', 3, 2), (2, '${iso(0).slice(0, 10)}', 4, 1), (1, '${iso(60 * 864e5).slice(0, 10)}', 99, 99)`);
+d = await W.summary(env, radio);
+assert.deepEqual(d.billboards.live.map((a) => [a.advertiser, a.surface, a.video, a.image]), [["Vid Co", "world", true, false], ["Acme", "all", false, true]], "highest weight first; radio-only, paused and ended ads left out");
+assert.deepEqual(d.billboards.stats.map((a) => [a.advertiser, a.views, a.viewable]), [["Acme", 10, 7], ["Vid Co", 4, 1]], "the last 30 days only");
 // 2. switches: validated, saved to the rows the game reads, logged
 let r = await W.saveSettings(env, who, { open: false, radio: false, notice: "  Comedy night\n Friday  ", points: { block: 10, minutes: 15, daily: 60 } });
 assert.equal(r.changed.length, 6, JSON.stringify(r.changed));
@@ -69,4 +77,10 @@ const idx = readFileSync(join(dir, "index.js"), "utf8"), ui = readFileSync(join(
 assert.ok(idx.includes('if (path === "/world") {\n      needs(user, "Badges", "view");') && idx.includes('if (path === "/api/world-admin") { needs(user, "Badges", "view");'));
 for (const a of ["settings", "chat-delete", "block", "unblock", "lot-release"]) assert.ok(idx.includes(`if (path === "/api/world-admin/${a}") { needs(user, "Badges", "edit");`), a);
 assert.ok(ui.includes('NAV_TOP.push(["/world", "RB World"])'));
-console.log("world admin ok: switches (validated, logged), car radio now playing, players, chat delete, block/unblock, lot release, races, page and routes");
+// an ad can be set to show in RB World only: in the Ads table and in the ad maker, and the server keeps it
+const tables = readFileSync(join(dir, "tables.js"), "utf8"), aff = readFileSync(join(dir, "affiliate.js"), "utf8");
+assert.ok(tables.includes('["all", "home", "radio", "tv", "world"]') && tables.includes('world: "RB World only (billboards and posters)"') && !tables.includes("don't show ads yet"));
+assert.equal((tables.match(/surface: f\.pick\("Shows on"/g) || []).length, 1, "one Shows on field");
+assert.ok(ui.includes('<option value="world">RB World only (billboards and posters)</option>') && !ui.includes("don\\'t show ads yet"));
+assert.ok(aff.includes('const SURFACES = ["all", "home", "radio", "tv", "world"];'));
+console.log("world admin ok: switches (validated, logged), car radio now playing, players, chat delete, block/unblock, lot release, races, billboards and their views, RB World only ads, page and routes");

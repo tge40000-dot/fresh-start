@@ -855,6 +855,6 @@ export function initEmpire(ctx) {
   window.addEventListener("beforeunload", () => { S.lastTick = Date.now(); save(); });
   return { openLot, openEmpire, openJobs, setWanted, state: S, lots, car, toast, panel, hidePanel, emit, money,
     phase: () => world.signal(clockT), signalAt: (n) => SIGNAL[n], wanted: () => wanted,
-    radar: () => ({ car, cops, traffic, drops, job, lots, wanted, mine: (l) => mine(l), lotOwner }), camName: () => CAMS[camMode], save, city: CITY, camera: C.camera,
+    radar: () => ({ car, cops, traffic, drops, job, lots, wanted, mine: (l) => mine(l), lotOwner }), camName: () => CAMS[camMode], save, city: CITY, world: () => world, camera: C.camera,
     giveCard: (key) => giveCard("reward", RARITY.find((r) => r.key === key)) };
 }

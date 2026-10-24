@@ -13,7 +13,7 @@ const PAGE_BYTES = 768 * 1024;
 const IMAGE_BYTES = 8 * 1024 * 1024;
 const IMAGE_TYPES = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif" };
 const PLACEMENTS = ["sidebar", "spotlight", "both"];
-const SURFACES = ["all", "home", "radio", "tv"];
+const SURFACES = ["all", "home", "radio", "tv", "world"];
 const UA = "Mozilla/5.0 (compatible; RBCommand/1.0; +https://relentlessbillionaire.com)";
 
 const mediaBase = (env) => (env.MEDIA_PUBLIC_URL || "https://media.relentlessbillionaire.com").replace(/\/$/, "");

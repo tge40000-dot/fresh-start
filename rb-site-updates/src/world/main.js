@@ -14,6 +14,7 @@ import { initPeds } from './peds.js';
 import { initAudio as initSound } from './audio.js';
 import { initRadio } from './radio.js';
 import { initPhone } from './phone.js';
+import { initAds } from './ads.js';
 
 // --- CORE ---
 const db = init();
@@ -433,6 +434,7 @@ async function startGame() {
     window.RBAudio = initSound(window.RBEmpire, ectx); // engine, tyres, city, rain, sirens and the horn (G)
     window.RBCarRadio = initRadio(window.RBEmpire, ectx); // RB Radio live in the car (📻 or M)
     window.RBPhone = initPhone(window.RBEmpire, ectx); // everything else on screen, in one phone (📱 or T)
+    window.RBAds = initAds(window.RBEmpire, ectx); // sponsors' ads from RB Command on the billboards and posters
     const notice = (window.RB_WORLD_CFG || {}).notice; if (notice) setTimeout(() => window.RBEmpire.toast('📣 ' + notice), 2500);
     fx.build(); window.RBFx = fx;
     bindGraphics();
