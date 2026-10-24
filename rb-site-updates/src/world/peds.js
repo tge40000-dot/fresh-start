@@ -77,7 +77,7 @@ function spawn(p, near) {
   return false;
 }
 function tick(dt, t) {
-  const car = E.car, phase = E.phase(), carSp = Math.abs(car.speed);
+  const car = E.car, phase = E.phase(), carSp = car.onFoot ? 0 : Math.abs(car.speed); // on foot you don't knock people over
   walkers.length = 0;
   for (const p of peds) {
     if (!p.path) { if (!spawn(p, true)) continue; }
@@ -100,6 +100,7 @@ function tick(dt, t) {
     }
     if (p.state === "dodge") {
       p.t0 -= dt; const nx = p.x + p.dx * 5 * dt, nz = p.z + p.dz * 5 * dt;
+      p.h = Math.atan2(p.dx, p.dz); p.phase += 5 * dt * 3.2; // running, facing the way they're going
       if (!CITY.blocked(nx, nz, 0.3)) { p.x = nx; p.z = nz; }
       if (p.t0 <= 0) { p.state = "walk"; p.path = [p.path[p.path.length - 1]]; }
       continue;
@@ -126,7 +127,7 @@ function tick(dt, t) {
 }
 
 // ---------------------------------------------------------------- drawing: a few instanced meshes for everyone
-let M = null;
+let M = null, shadows = null;
 const o3 = new THREE.Object3D(), mat4 = new THREE.Matrix4(), part = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), xAxis = new THREE.Vector3(1, 0, 0);
 function build(scene) {
   const g = (geo, y) => { geo.translate(0, y, 0); return geo; };
@@ -144,6 +145,10 @@ function build(scene) {
   const armL = new THREE.InstancedMesh(g(new THREE.CapsuleGeometry(0.045, 0.5, 3, 8), -0.3), std(0xffffff, 0.7), COUNT);
   const armR = new THREE.InstancedMesh(armL.geometry, armL.material, COUNT);
   M = { torso, head, hair, legL, legR, armL, armR };
+  // soft shadows on the sidewalk under everyone, so the crowd stands on the ground even without the sun's shadows
+  const sc = document.createElement("canvas"); sc.width = sc.height = 64; const sg = sc.getContext("2d"), rg = sg.createRadialGradient(32, 32, 2, 32, 32, 31); rg.addColorStop(0, "rgba(0,0,0,.5)"); rg.addColorStop(1, "rgba(0,0,0,0)"); sg.fillStyle = rg; sg.fillRect(0, 0, 64, 64);
+  shadows = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.9, 0.9).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc), transparent: true, depthWrite: false }), COUNT);
+  shadows.userData.noAO = true; shadows.frustumCulled = false; shadows.renderOrder = 1; scene.add(shadows);
   const col = new THREE.Color();
   peds.forEach((p, i) => {
     torso.setColorAt(i, col.setHex(p.top)); head.setColorAt(i, col.setHex(p.skin));
@@ -159,8 +164,9 @@ function put(mesh, i, base, x, y, z, rx) {
 function draw() {
   const base = new THREE.Matrix4();
   peds.forEach((p, i) => {
-    if (!p.path && p.x == null) { base.makeScale(0, 0, 0); for (const m of Object.values(M)) m.setMatrixAt(i, base); return; }
+    if (!p.path && p.x == null) { base.makeScale(0, 0, 0); for (const m of Object.values(M)) m.setMatrixAt(i, base); shadows.setMatrixAt(i, base); return; }
     const s = p.scale, down = p.state === "down";
+    o3.position.set(p.x, 0.025, p.z); o3.rotation.set(0, 0, 0); o3.scale.set(s * (down ? 1.6 : 1), 1, s * (down ? 1.6 : 1)); o3.updateMatrix(); shadows.setMatrixAt(i, o3.matrix);
     o3.position.set(p.x, 0, p.z); o3.rotation.set(0, down ? p.downH : p.h, 0); o3.scale.set(s, s, s); o3.updateMatrix(); base.copy(o3.matrix);
     if (down) base.multiply(part.compose(v.set(0, 0.2, 0), q.setFromAxisAngle(xAxis, -Math.PI / 2), one)); // flat on the ground
     const moving = !p.waiting && !down, sw = moving ? Math.sin(p.phase) * 0.55 : 0, bob = moving ? Math.abs(Math.cos(p.phase)) * 0.04 : 0;
@@ -169,6 +175,7 @@ function draw() {
     put(M.armL, i, base, -0.27, 1.38 + bob, 0, -sw * 0.8); put(M.armR, i, base, 0.27, 1.38 + bob, 0, sw * 0.8);
   });
   for (const m of Object.values(M)) m.instanceMatrix.needsUpdate = true;
+  shadows.instanceMatrix.needsUpdate = true;
 }
 
 // ---------------------------------------------------------------- start
@@ -178,5 +185,7 @@ export function initPeds(empire, ctx) {
   for (const p of peds) spawn(p, false);
   build(ctx.scene);
   on("frame", (dt) => tick(Math.min(dt, 0.1), 0));
-  return { peds };
+  // gunfire nearby (combat.js): everyone within r runs away from it for a few seconds
+  function scare(x, z, r) { for (const p of peds) { if (!p.path || p.state === "down") continue; const dx = p.x - x, dz = p.z - z, d = Math.hypot(dx, dz); if (d < r && d > 0.1) { p.state = "dodge"; p.t0 = rnd(2.5, 4); p.dx = dx / d; p.dz = dz / d; } } }
+  return { peds, scare };
 }

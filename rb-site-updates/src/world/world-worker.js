@@ -14,7 +14,7 @@
 // relentlessbillionaire.com/game/ keeps working); play-time points only start once RB Badge itself is switched on.
 const WORLD_PEER_SECONDS = 20;
 const WORLD_BEAT_CREDIT = 10;
-const WORLD_VERSION = "w13";
+const WORLD_VERSION = "w15";
 const WORLD_OWNER_DAYS = 14; // a lot whose owner hasn't played for this long is for sale again
 const WORLD_CAR_COLOR = /^#[0-9a-fA-F]{6}$/;
 
@@ -294,11 +294,56 @@ async function worldChat(request, env, body) {
   return rbcJson({ ok: true });
 }
 
+// The sponsors' ads on RB World's billboards and posters (src/world/ads.js): live ads from RB Command set to
+// "Everywhere ads show" or "RB World only", with an image or a video, inside their dates. Clicks go through
+// /go/ad/<id>?s=world, the same counted redirect as the website's ad slots.
+async function worldBillboards(env) {
+  const ok = (u) => { try { const x = new URL(String(u || "")); return x.protocol === "https:" ? x.href : ""; } catch { return ""; } };
+  // ads that have used up a bought package (max_impressions) stop, where that column exists
+  const base = "SELECT id, advertiser, headline, body, image_url, video_url, poster_url, format, click_url, cta, weight FROM ads WHERE status = 'live' AND surface IN ('all', 'world', 'game') AND (starts_at IS NULL OR starts_at = '' OR datetime(starts_at) <= datetime('now')) AND (ends_at IS NULL OR ends_at = '' OR datetime(ends_at) >= datetime('now'))";
+  const tail = " ORDER BY coalesce(weight, 1) DESC, id DESC LIMIT 8";
+  let rows = [];
+  try { rows = (await env.DB.prepare(base + " AND (coalesce(max_impressions, 0) = 0 OR coalesce(impressions, 0) < max_impressions)" + tail).all()).results || []; }
+  catch { try { rows = (await env.DB.prepare(base + tail).all()).results || []; } catch {} }
+  const ads = rows.map((a) => {
+    const video = a.format === "video" ? ok(a.video_url) : "", image = ok(a.image_url) || ok(a.poster_url);
+    return { id: Number(a.id), advertiser: String(a.advertiser || "").slice(0, 120), headline: String(a.headline || "").slice(0, 140), body: String(a.body || "").slice(0, 200),
+      image_url: image || null, video_url: video || null, format: video ? "video" : "image", cta: String(a.cta || "").slice(0, 24), click: ok(a.click_url) ? `/go/ad/${a.id}?s=world` : null };
+  }).filter((a) => a.image_url || a.video_url || a.headline);
+  return rbcJson({ ok: true, ads }, 200, { "Cache-Control": "public, max-age=60" });
+}
+
+// In-game views, kept apart from the website's (world_ad_stats): "imp" when an ad is on screen within range,
+// "view" once it has stayed there 1 second (2 for video). The game sends each at most once per ad every 30 minutes;
+// here a player can count at most 40 events a minute, and only for ads that are live.
+async function worldAdEvent(request, env, body) {
+  const pid = String(body?.id || "");
+  if (!WORLD_ID.test(pid)) return rbcJson({ ok: false, error: "Start the game again." }, 400);
+  if (/bot|crawl|spider|headless|lighthouse|preview/i.test(request.headers.get("User-Agent") || "")) return rbcJson({ ok: true, counted: 0 });
+  if (!(await worldRateOk(env, "ad:" + pid, 40))) return rbcJson({ ok: false, error: "Too fast." }, 429);
+  const want = [], seen = new Set();
+  for (const e of (Array.isArray(body.events) ? body.events : []).slice(0, 24)) {
+    const id = Number(e?.id), kind = e?.kind;
+    if (!Number.isInteger(id) || id <= 0 || !["imp", "view"].includes(kind) || seen.has(id + kind)) continue;
+    seen.add(id + kind); want.push([id, kind]);
+  }
+  if (!want.length) return rbcJson({ ok: true, counted: 0 });
+  const ids = [...new Set(want.map((x) => x[0]))];
+  const live = new Set(((await env.DB.prepare(`SELECT id FROM ads WHERE status = 'live' AND id IN (${ids.map(() => "?").join(",")})`).bind(...ids).all()).results || []).map((x) => Number(x.id)));
+  const day = new Date(Date.now()).toISOString().slice(0, 10), stmts = [];
+  for (const [id, kind] of want) if (live.has(id)) {
+    const col = kind === "imp" ? "impressions" : "viewable";
+    stmts.push(env.DB.prepare(`INSERT INTO world_ad_stats (ad_id, day, ${col}) VALUES (?, ?, 1) ON CONFLICT(ad_id, day) DO UPDATE SET ${col} = ${col} + 1`).bind(id, day));
+  }
+  if (stmts.length) { try { await env.DB.batch(stmts); } catch (e) { console.error("world ad-event", e && e.message); return rbcJson({ ok: true, counted: 0 }); } }
+  return rbcJson({ ok: true, counted: stmts.length });
+}
+
 async function worldAds(env, g) {
   const out = [];
   if (g && g.worldNotice) out.push({ id: "notice", status: "live", channel: "Ticker", title: "RB World", body: g.worldNotice });
   try {
-    const r = await env.DB.prepare("SELECT id, advertiser, headline, body FROM ads WHERE status = 'live' AND surface IN ('all', 'game') AND (starts_at IS NULL OR starts_at = '' OR datetime(starts_at) <= datetime('now')) AND (ends_at IS NULL OR ends_at = '' OR datetime(ends_at) >= datetime('now')) ORDER BY weight DESC, id LIMIT 10").all();
+    const r = await env.DB.prepare("SELECT id, advertiser, headline, body FROM ads WHERE status = 'live' AND surface IN ('all', 'game', 'world') AND (starts_at IS NULL OR starts_at = '' OR datetime(starts_at) <= datetime('now')) AND (ends_at IS NULL OR ends_at = '' OR datetime(ends_at) >= datetime('now')) ORDER BY weight DESC, id LIMIT 10").all();
     for (const a of r.results || []) out.push({ id: "ad" + a.id, status: "live", channel: "Ticker", title: a.headline || a.advertiser, body: a.body || a.advertiser || "" });
   } catch {}
   try {
@@ -320,7 +365,7 @@ function worldCsp(env) {
   // The game builds its panels with inline handlers and styles, as it always has, so scripts allow 'unsafe-inline'.
   return ["default-src 'self'", `script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://relentlessbillionaire.com https://static.cloudflareinsights.com ${clerk} https://challenges.cloudflare.com`,
     "style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com", "font-src 'self' https://fonts.gstatic.com data:", "img-src 'self' data: blob: https:", "media-src 'self' https: blob:",
-    `connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://*.basemaps.cartocdn.com https://tiles.basemaps.cartocdn.com https://relentlessbillionaire.com https://cloudflareinsights.com ${clerk} https://clerk-telemetry.com`,
+    `connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://*.basemaps.cartocdn.com https://tiles.basemaps.cartocdn.com https://relentlessbillionaire.com https://cloudflareinsights.com wss://rb-world-live.tge40000.workers.dev ${clerk} https://clerk-telemetry.com`,
     "worker-src 'self' blob:", `frame-src https://challenges.cloudflare.com ${clerk}`, "object-src 'none'", "base-uri 'self'", "frame-ancestors 'self'"].join("; ");
 }
 
@@ -334,7 +379,7 @@ async function rbWorldRoute(request, env, url, path, method) {
       return new Response(request.method === "HEAD" ? null : RB_APP_HTML.replaceAll("__NONCE__", nonce).replace("__STATUS__", "off").replace("__CLERK_KEY__", '""').replace("__STATE__", () => rbcScriptJson(rbbPublicState(g))), { headers: rbcPageHeaders(env, nonce) });
     }
     const html = RB_WORLD_HTML.replace("__CLERK_KEY__", () => rbcScriptJson(String(env.CLERK_PUBLISHABLE_KEY || ""))).replaceAll("__VERSION__", WORLD_VERSION)
-      .replace("__WORLD_CFG__", () => rbcScriptJson({ radio: g.worldRadio, notice: g.worldNotice }));
+      .replace("__WORLD_CFG__", () => rbcScriptJson({ radio: g.worldRadio, notice: g.worldNotice, combat: g.worldCombat }));
     return new Response(request.method === "HEAD" ? null : html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Content-Security-Policy": worldCsp(env), "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN", "Referrer-Policy": "strict-origin-when-cross-origin" } });
   }
   const file = /^\/app\/world\/([a-z_]+\.js)$/.exec(path)?.[1];
@@ -354,13 +399,15 @@ async function rbWorldRoute(request, env, url, path, method) {
   if (!path.startsWith("/api/world/")) return null;
   if (!g.worldOpen) return rbcJson({ ok: false, error: "RB World is coming soon." }, 403);
   if (path === "/api/world/ads" && method === "GET") return await worldAds(env, g);
-  if (["/api/world/beat", "/api/world/chat", "/api/world/lot", "/api/world/rent", "/api/world/race"].includes(path) && method === "POST") {
+  if (path === "/api/world/billboards" && method === "GET") return await worldBillboards(env);
+  if (["/api/world/beat", "/api/world/chat", "/api/world/lot", "/api/world/rent", "/api/world/race", "/api/world/ad-event"].includes(path) && method === "POST") {
     const origin = request.headers.get("Origin");
     if (origin && origin !== url.origin) return rbcJson({ ok: false, error: "Not allowed from another site." }, 403);
     if (!/^application\/json/i.test(request.headers.get("Content-Type") || "")) return rbcJson({ ok: false, error: "Send JSON." }, 415);
     const body = await request.json().catch(() => ({}));
     if (path !== "/api/world/beat" && WORLD_ID.test(String(body?.id || "")) && (await env.DB.prepare("SELECT 1 FROM world_bans WHERE id = ?").bind(String(body.id)).first()))
       return rbcJson({ ok: false, error: "This player can't do that in RB World." }, 403);
+    if (path === "/api/world/ad-event") return await worldAdEvent(request, env, body);
     if (path === "/api/world/lot") return await worldLot(env, body);
     if (path === "/api/world/rent") return await worldRent(env, body);
     if (path === "/api/world/race") return await worldRace(env, body);

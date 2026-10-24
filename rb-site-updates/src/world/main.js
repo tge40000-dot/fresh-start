@@ -14,6 +14,11 @@ import { initPeds } from './peds.js';
 import { initAudio as initSound } from './audio.js';
 import { initRadio } from './radio.js';
 import { initPhone } from './phone.js';
+import { initAds } from './ads.js';
+import { initFoot } from './onfoot.js';
+import { initCombat } from './combat.js';
+import { initLive } from './live.js';
+import { initDamage } from './damage.js';
 
 // --- CORE ---
 const db = init();
@@ -407,7 +412,7 @@ async function startGame() {
     db.subscribeQuery({ ads: {} }, r => { if (r.data) { allAds = r.data.ads || []; } });
 
     setInterval(() => {
-        try { room.publishPresence({ id: player.id, name: player.name, pos: player.pos, netWorth: player.netWorth, health: player.health }); } catch(e){}
+        try { room.publishPresence({ id: player.id, name: player.name, pos: player.pos, netWorth: player.netWorth, health: player.health, kills: player.kills, deaths: player.deaths }); } catch(e){}
     }, 1000);
 
     safeTransact(db.tx.users[player.id].update({ name: player.name, netWorth: player.netWorth, tokens: player.tokens, lastActive: Date.now() }));
@@ -425,7 +430,7 @@ async function startGame() {
         sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); },
         help: () => hud && hud.help(),
     });
-    const ectx = { scene, player, play, fx, music: (on) => { if (!sfx.bgm) return; if (on && player.settings.audio) sfx.bgm.play().catch(() => {}); else sfx.bgm.pause(); }, gps: () => gpsFix, minimap: () => minimap, onFrame: (f) => frameHooks.push(f), sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); } };
+    const ectx = { scene, player, play, fx, renderer, music: (on) => { if (!sfx.bgm) return; if (on && player.settings.audio) sfx.bgm.play().catch(() => {}); else sfx.bgm.pause(); }, gps: () => gpsFix, minimap: () => minimap, onFrame: (f) => frameHooks.push(f), sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); } };
     const hud = initHud(window.RBEmpire, ectx);
     window.RBProgress = initProgress(window.RBEmpire, ectx);
     window.RBRace = initRace(window.RBEmpire, ectx, window.RBProgress);
@@ -433,8 +438,17 @@ async function startGame() {
     window.RBAudio = initSound(window.RBEmpire, ectx); // engine, tyres, city, rain, sirens and the horn (G)
     window.RBCarRadio = initRadio(window.RBEmpire, ectx); // RB Radio live in the car (📻 or M)
     window.RBPhone = initPhone(window.RBEmpire, ectx); // everything else on screen, in one phone (📱 or T)
+    window.RBAds = initAds(window.RBEmpire, ectx); // sponsors' ads from RB Command on the billboards and posters
+    window.RBFoot = initFoot(window.RBEmpire, ectx); // get out and walk (F), take cars from the traffic
+    window.RBCombat = initCombat(window.RBEmpire, ectx, window.RBFoot); // 18+ opt-in: weapons, crews, missions, fights with other players
+    window.RBDamage = initDamage(window.RBEmpire, ectx); // car damage, smoke and bumping into other cars
+    window.RBLive = initLive(window.RBEmpire, ectx, window.RBFoot, window.RBCombat); // other players in real time (rb-world-live)
     const notice = (window.RB_WORLD_CFG || {}).notice; if (notice) setTimeout(() => window.RBEmpire.toast('📣 ' + notice), 2500);
     fx.build(); window.RBFx = fx;
+    // sharper textures at a glance (roads and walls seen at a slant): as much anisotropic filtering as the device has,
+    // above Low graphics; again later for things made after the start (cars, people, ads)
+    const sharpen = () => { if (fx.tier && fx.tier() === "low") return; const max = Math.min(16, renderer.capabilities.getMaxAnisotropy()); scene.traverse((o) => { const m = o.material; if (!m) return; for (const mm of Array.isArray(m) ? m : [m]) for (const k of ["map", "normalMap", "roughnessMap", "emissiveMap"]) { const t = mm[k]; if (t && t.anisotropy < max) { t.anisotropy = max; t.needsUpdate = true; } } }); };
+    setTimeout(sharpen, 4000); setTimeout(sharpen, 20000); setInterval(sharpen, 120000);
     bindGraphics();
     fetchCalendarEvents();
 }

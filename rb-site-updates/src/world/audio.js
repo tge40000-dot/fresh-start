@@ -59,7 +59,7 @@ export function initAudio(E, ctx) {
   const go = () => start();
   for (const ev of ["pointerdown", "keydown", "touchstart"]) window.addEventListener(ev, go, { passive: true });
   start(); // the START button press is a gesture already
-  window.addEventListener("keydown", (e) => { if (e.code === "KeyG" && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) honk(0.18); });
+  window.addEventListener("keydown", (e) => { if (e.code === "KeyG" && !E.car.onFoot && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) honk(0.18); });
   on("crash", (hit) => thud(hit));
   let lastSpeed = 0, t = 0;
   on("frame", (dt) => {
@@ -68,13 +68,13 @@ export function initAudio(E, ctx) {
     const audioOn = ctx.player.settings?.audio !== false && !document.hidden;
     set(A.master.gain, audioOn ? 0.9 * duckK : 0, 0.2);
     if (!audioOn) return;
-    const car = E.car, v = Math.abs(car.speed || 0), accel = (v - lastSpeed) / Math.max(dt, 1e-3); lastSpeed = v;
+    const car = E.car, v = car.onFoot ? 0 : Math.abs(car.speed || 0), accel = (v - lastSpeed) / Math.max(dt, 1e-3); lastSpeed = v;
     // gears every 9 m/s; revs climb through each gear and drop on the change
     const gear = Math.min(5, Math.floor(v / 9)), rpm = Math.min(1.25, (v - gear * 9) / 9 + (gear === 5 ? (v - 45) / 30 : 0));
     const base = 46 + gear * 7 + rpm * 70, throttle = Math.max(0, Math.min(1, accel / 12));
     for (const { o, mul } of A.oscs) set(o.frequency, base * mul, 0.05);
     set(A.lp.frequency, 260 + rpm * 900 + throttle * 600, 0.08);
-    set(A.eng.gain, car.photo ? 0.02 : 0.045 + throttle * 0.06 + Math.min(1, v / 40) * 0.03, 0.1);
+    set(A.eng.gain, car.photo || car.onFoot ? 0 : 0.045 + throttle * 0.06 + Math.min(1, v / 40) * 0.03, 0.1);
     const boosting = !!car.boosting;
     set(A.nitro.g.gain, boosting ? 0.07 : 0, 0.1);
     set(A.tyre.g.gain, (car.drift || 0) > 6 && v > 10 ? Math.min(0.09, (car.drift - 6) * 0.012) : 0, 0.06);
