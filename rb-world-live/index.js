@@ -1,11 +1,13 @@
 // rb-world-live: RB World's live rooms. One Durable Object per city room keeps a WebSocket open to every player in
 // it and passes their moves on about eight times a second, so other players drive and walk smoothly instead of
 // jumping every few seconds (the beat in world-worker.js still does the leaderboard, chat, lots and points).
-// It also referees fights between players who've turned on 18+ combat:
+// It also referees fights between players who've turned on 18+ combat, and keeps everyone's health itself:
 //   - a shot only lands if both players have combat on and are alive, the target is in the weapon's range of where
 //     the server last saw the shooter, and the shooter isn't firing faster than the weapon can;
-//   - the player who was hit applies the damage (with their armour) and says when they're down; the last player to
-//     hit them gets the kill, and everyone sees it in the kill feed.
+//   - the room takes the damage off the target's health (armour soaks 70% of it first) and tells them their new
+//     health; at zero they're down and the shooter gets the kill, which everyone sees in the kill feed. Health a player
+//     reports can only lower theirs (hurt by a crew in a mission), apart from the slow regain to half that the game
+//     allows, so a player can't shrug off hits from other players.
 // Players blocked in RB Command (world_bans) can drive, but others don't see them and they can't fight. With RB World
 // switched off (world_open) nobody can join; with combat off (world_combat) no shot lands.
 // Bindings: ROOMS (Durable Object namespace, class Room), DB (the shared D1 database). Nothing else.
@@ -63,7 +65,7 @@ export class Room {
     for (const [ws, p] of this.players) if (p.id === id) { try { ws.close(4000, "Opened somewhere else"); } catch (e) {} this.players.delete(ws); }
     const pair = new WebSocketPair(), [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server);
-    const p = { id, name, banned: url.searchParams.get("banned") === "1", fights: url.searchParams.get("combat") === "1", s: null, combat: false, alive: true, last: {}, lastBy: null, n: 0, win: Date.now() };
+    const p = { id, name, banned: url.searchParams.get("banned") === "1", fights: url.searchParams.get("combat") === "1", s: null, combat: false, alive: true, last: {}, lastBy: null, n: 0, win: Date.now(), hp: 100, ar: 0, hitAt: 0, armed: false };
     server.serializeAttachment(p); this.players.set(server, p);
     const others = [...this.players.values()].filter((o) => o !== p && o.s && !o.banned).map((o) => ({ id: o.id, name: o.name, ...o.s }));
     server.send(JSON.stringify({ t: "hello", you: id, fights: p.fights, players: others }));
@@ -84,7 +86,15 @@ export class Room {
         w: ARMS[m.w] ? m.w : null, aim: !!m.aim, c: !!m.c && p.fights && !p.banned, hp: num(m.hp, 0, 200), col: /^#[0-9a-f]{6}$/i.test(m.col || "") ? m.col : null,
         car: Array.isArray(m.car) && m.car.length === 3 ? m.car.map((v, i) => num(v, i === 2 ? -50 : -5e4, i === 2 ? 50 : 5e4)) : null };
       p.s = s; p.combat = s.c;
-      if (p.alive === false && m.spawn) p.alive = true;
+      if (p.alive === false && m.spawn) { p.alive = true; p.hp = 100; p.ar = Math.min(100, num(m.ar, 0, 100)); }
+      else if (p.alive) {
+        // what the player says: lower is believed (a crew hit them), higher only up to half after 6 s without a hit
+        if (m.hp != null && Number.isFinite(Number(m.hp))) {
+          const rep = num(m.hp, 0, 100);
+          if (rep < p.hp) p.hp = rep; else if (p.hp < 50 && now - p.hitAt > 6000) p.hp = Math.min(50, rep);
+        }
+        if (m.ar != null && Number.isFinite(Number(m.ar))) { const ar = num(m.ar, 0, 100); if (!p.armed) { p.ar = ar; p.armed = true; } else if (ar < p.ar) p.ar = ar; } // armour: set once per life, then only down
+      }
       ws.serializeAttachment(p);
       if (!p.banned) this.everyone({ t: "p", id: p.id, name: p.name, ...s }, ws);
       return;
@@ -103,14 +113,16 @@ export class Room {
       const d = Math.round(num(m.d, 0, w.dmg * 2.5));
       if (!d) return;
       t.lastBy = { id: p.id, name: p.name, w: m.w, at: now };
+      const soak = Math.min(t.ar, Math.round(d * 0.7)); t.ar -= soak; t.hp = Math.max(0, t.hp - (d - soak)); t.hitAt = now;
+      this.send(tws, JSON.stringify({ t: "hit", by: p.id, name: p.name, d, hd: !!m.hd, w: m.w, hp: t.hp, ar: t.ar, from: [p.s.x, p.s.z] }));
+      if (t.hp <= 0) { t.alive = false; t.armed = false; this.everyone({ t: "kill", id: t.id, name: t.name, by: p.id, byName: p.name, w: m.w }); }
       tws.serializeAttachment(t);
-      this.send(tws, JSON.stringify({ t: "hit", by: p.id, name: p.name, d, hd: !!m.hd, w: m.w }));
       return;
     }
     if (m.t === "dead") {
       // you went down: the last player who hit you in the last 10 seconds gets it
       if (!p.alive) return;
-      p.alive = false; ws.serializeAttachment(p);
+      p.alive = false; p.armed = false; p.hp = 0; ws.serializeAttachment(p);
       const by = p.lastBy && now - p.lastBy.at < 10000 ? p.lastBy : null;
       this.everyone({ t: "kill", id: p.id, name: p.name, by: by ? by.id : null, byName: by ? by.name : null, w: by ? by.w : null });
       return;

@@ -250,7 +250,7 @@ function driveCar(dt) {
   // steering: easier at low speed, a little less sharp flat out; the handbrake tightens it and lets the back go
   car.steer += (s - car.steer) * Math.min(1, dt * 8);
   const grip = hand ? 1.4 : 9, turn = car.steer * dt * (hand ? 3.2 : 2.3) * Math.min(1, Math.abs(fwd) / 7) * (1 - Math.min(0.35, Math.abs(fwd) / 120)) * Math.sign(fwd || 1);
-  car.heading += turn;
+  car.heading += turn + (car.spin || 0) * dt; car.spin = (car.spin || 0) * Math.pow(0.04, dt); // spin from a hit (damage.js)
   side *= Math.pow(0.5, dt * grip);
   if (hand) fwd *= Math.pow(0.7, dt);
   const nfx = Math.sin(car.heading), nfz = Math.cos(car.heading);

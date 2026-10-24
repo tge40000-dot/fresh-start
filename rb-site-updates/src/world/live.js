@@ -38,7 +38,7 @@ export function initLive(E, ctx, foot, combat) {
     if (m.t === "p") return see(m);
     if (m.t === "bye") return drop(m.id);
     if (m.t === "f") { if (combat) combat.remoteShot(m.a, m.b, m.w); return; }
-    if (m.t === "hit") { if (combat && combat.on) { lastBy = m.name; combat.hurt(m.d, m.name); } return; }
+    if (m.t === "hit") { if (combat && combat.on) { lastBy = m.name; if (m.hp != null) combat.remoteHit(m.hp, m.ar, m.name, m.from); else combat.hurt(m.d, m.name); } return; }
     if (m.t === "kill") {
       if (m.by && m.by === P.id) { P.kills = (P.kills || 0) + 1; P.streak = (P.streak || 0) + 1; if (combat) combat.feed(`🎯 You took out ${m.name}`); }
       else if (m.id === P.id) { if (combat) combat.feed(`☠️ ${m.byName || "Someone"} took you out`); }
@@ -77,7 +77,7 @@ export function initLive(E, ctx, foot, combat) {
   function state() {
     const f = foot && foot.on, paint = car.mesh && car.mesh.userData.paint ? "#" + car.mesh.userData.paint.color.getHexString() : null;
     const s = { t: "s", x: +car.x.toFixed(2), z: +car.z.toFixed(2), h: +car.heading.toFixed(3), v: +(car.speed || 0).toFixed(1), m: f ? "f" : "c", col: paint,
-      w: combat && combat.on && f ? combat.armed : null, aim: !!(f && foot.aim), c: !!(combat && combat.on), hp: Math.round(P.health || 0),
+      w: combat && combat.on && f ? combat.armed : null, aim: !!(f && foot.aim), c: !!(combat && combat.on), hp: Math.round(P.health || 0), ar: Math.round(P.armor || 0),
       car: f && foot.parked ? [+foot.parked.x.toFixed(2), +foot.parked.z.toFixed(2), +foot.parked.h.toFixed(3)] : null };
     if (spawn) { s.spawn = 1; spawn = false; }
     return s;

@@ -3,13 +3,15 @@
 // older (⚔️ in the phone, or the Combat button); RB Command can switch it off for everyone (world_combat).
 //   Weapons: the ones bought in the Armory (main.js WEAPONS), drawn in code: pistol, SMG, shotgun, assault rifle,
 //     sniper rifle and RPG, each with its own fire rate, damage, spread, range, magazine, reload, recoil and sound.
-//     Right mouse (or AIM) aims over the shoulder, left mouse (or FIRE) shoots, R reloads, 1-6 or the wheel switches,
-//     X puts the weapon away.
+//     Right mouse (or AIM) aims over the shoulder, left mouse (or FIRE) shoots, R reloads, 1-6 or the mouse wheel
+//     switches, holding Tab opens the weapon wheel, X puts the weapon away. A marker round the crosshair shows where
+//     a hit came from.
 //   Shots are hitscan from the crosshair (the RPG fires a rocket): buildings, the ground and cars stop them; head
 //     shots do 2.5x. People on the street never get hurt: they run from gunfire. Shooting in the open city brings the
 //     cops (two stars); inside a mission's area it doesn't.
 //   Missions (game money and tokens): Turf war (clear a crew), Stash raid (clear it, take the case to the drop) and
-//     Hold the block (three waves). Crews take positions, keep their distance, strafe and shoot back.
+//     Hold the block (three waves). Crews take cover, lean out to fire, reload behind walls and rush you now and then;
+//     fallen crew drop cash. With 3+ wanted stars, police get out of their cars armed (shooting them adds stars).
 //   You: health and armour (Armory security adds armour); health comes back to half if you aren't hit for a while.
 //     Wasted: a clinic bill (10% of your cash, at most $5,000) and you're back by RB Plaza next to your car.
 import * as THREE from "three";
@@ -77,7 +79,7 @@ export function initCombat(E, ctx, foot) {
   const allowed = () => cfg.combat !== false;
   const out = {
     on: false, armed: null, ammo: {}, enemies: [], mission: null, remote: new Map(), onRemoteHit: null, onShot: null, onDeath: [],
-    hurt, feed, remoteShot, open: openPanel, ARMS, isDead: () => dead, stats: { fired: 0, hits: 0, kills: 0 },
+    hurt, remoteHit, feed, remoteShot, open: openPanel, ARMS, isDead: () => dead, stats: { fired: 0, hits: 0, kills: 0 },
   };
   out.on = allowed() && store.get(AGE_KEY) === "yes" && store.get(ON_KEY) === "on";
   if (out.on && !(P.weapons || []).length) { P.weapons = ["pistol"]; P.equippedWeapon = "pistol"; } // the starter pistol
@@ -95,6 +97,8 @@ export function initCombat(E, ctx, foot) {
 body.rb-touch #rb-vitals{bottom:calc(216px + env(safe-area-inset-bottom));width:150px}
 #rb-vitals .b{height:7px;border-radius:4px;background:rgba(0,0,0,.6);overflow:hidden;margin:4px 0}#rb-vitals .b i{display:block;height:100%;transition:width .2s}
 #rb-vitals .hp i{background:linear-gradient(90deg,#1f9d55,#38d27a)}#rb-vitals .ar i{background:linear-gradient(90deg,#2d6cdf,#5aa0ff)}#rb-vitals .w{display:flex;justify-content:space-between;margin-top:6px;color:#F5E6A3;text-shadow:0 1px 2px #000}
+#rb-dmgdir{position:fixed;left:50%;top:50%;width:220px;height:220px;margin:-110px 0 0 -110px;z-index:7045;pointer-events:none;opacity:0;transition:opacity .4s}#rb-dmgdir i{position:absolute;left:80px;top:0;width:60px;height:14px;border-radius:50% 50% 0 0;background:radial-gradient(ellipse at 50% 100%,rgba(255,40,40,.9),rgba(255,40,40,0) 70%)}
+#rb-wheel{position:fixed;inset:0;z-index:7900;display:none;background:radial-gradient(circle,rgba(0,0,0,.55),rgba(0,0,0,.25) 60%,transparent 75%)}#rb-wheel button{position:absolute;transform:translate(-50%,-50%);width:118px;padding:10px 8px;border-radius:14px;border:1px solid rgba(201,168,76,.45);background:rgba(10,10,10,.85);color:#fff;font:800 11px/1.25 Inter,sans-serif;cursor:pointer}#rb-wheel button span{display:block;font-weight:600;color:#F5E6A3;margin-top:3px}#rb-wheel button.on{border-color:#F5E6A3;background:rgba(201,168,76,.35)}#rb-wheel .mid{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font:900 12px Inter,sans-serif;letter-spacing:3px;color:#F5E6A3}
 #rb-hurt{position:fixed;inset:0;z-index:7040;pointer-events:none;box-shadow:inset 0 0 140px rgba(190,0,0,.0);transition:box-shadow .15s}
 #rb-feed{position:fixed;right:12px;top:120px;z-index:7000;display:grid;gap:4px;justify-items:end;pointer-events:none;font:700 11px/1.2 Inter,sans-serif}#rb-feed div{background:rgba(0,0,0,.7);color:#fff;border-radius:8px;padding:5px 9px}
 #rb-wasted{position:fixed;inset:0;z-index:8500;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(40,40,40,.55);backdrop-filter:grayscale(1);-webkit-backdrop-filter:grayscale(1);pointer-events:none}
@@ -109,6 +113,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
   const mk = (tag, id, html) => { const e = document.createElement(tag); if (id) e.id = id; if (html) e.innerHTML = html; document.body.appendChild(e); return e; };
   const xh = mk("div", "rb-xhair", "<i></i><i></i><i></i><i></i>");
   const vit = mk("div", "rb-vitals", '<div>HEALTH</div><div class="b hp"><i></i></div><div>ARMOUR</div><div class="b ar"><i></i></div><div class="w"><span id="rb-wname"></span><span id="rb-ammo"></span></div>');
+  const dir = mk("div", "rb-dmgdir", "<i></i>");
   const hurtFx = mk("div", "rb-hurt"), feedBox = mk("div", "rb-feed"), wasted = mk("div", "rb-wasted", "<b>WASTED</b><span></span>"), mchip = mk("div", "rb-mchip");
   const pad = mk("div", null, '<button data-k="aim">AIM</button><button data-k="fire">FIRE</button><button data-k="reload">RELOAD</button><button data-k="next">NEXT</button>'); pad.className = "rb-cpad";
   function hud() {
@@ -174,8 +179,19 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
   // ---------------------------------------------------------------- input
   const typing = () => /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "");
   const canvas = document.getElementById("three-canvas");
+  // the weapon wheel: hold Tab, point at a weapon (or press its number), let go to take it
+  const wheel = mk("div", "rb-wheel"); let wheelOn = false, wheelPick = null;
+  function wheelShow(on) {
+    wheelOn = on; wheel.style.display = on ? "block" : "none";
+    if (!on) { if (wheelPick !== null) arm(wheelPick); return; }
+    const own = owned(), all = [null, ...own], n = all.length; wheelPick = out.armed;
+    wheel.innerHTML = all.map((k, i) => { const a = (i / n) * Math.PI * 2 - Math.PI / 2, x = Math.cos(a) * 120, y = Math.sin(a) * 120;
+      return `<button type="button" data-k="${k || ""}" style="left:calc(50% + ${x}px);top:calc(50% + ${y}px)" class="${k === out.armed ? "on" : ""}"><b>${k ? ARMS[k].name : "Unarmed"}</b><span>${k ? out.ammo[k] + " / " + ARMS[k].mag : "fists away"}</span></button>`; }).join("") + '<div class="mid">WEAPONS</div>';
+    wheel.querySelectorAll("button").forEach((b) => { const pickIt = () => { wheelPick = b.dataset.k || null; wheel.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); }; b.addEventListener("mouseenter", pickIt); b.addEventListener("click", () => { pickIt(); wheelShow(false); }); });
+  }
   window.addEventListener("keydown", (e) => {
     if (typing() || !out.on || !foot.on) return;
+    if (e.code === "Tab") { e.preventDefault(); if (!e.repeat) { if (document.pointerLockElement) document.exitPointerLock(); wheelShow(true); } return; }
     if (e.code === "KeyR") reload();
     else if (e.code === "KeyX") arm(null);
     else if (/^Digit[1-6]$/.test(e.code)) { const k = ORDER[Number(e.code.slice(5)) - 1]; if ((P.weapons || []).includes(k)) arm(k); }
@@ -186,6 +202,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     if (e.button === 2) { foot.aim = true; hud(); }
     if (e.button === 0 && (document.pointerLockElement === canvas || foot.aim)) { firing = true; trigger(); }
   });
+  window.addEventListener("keyup", (e) => { if (e.code === "Tab" && wheelOn) wheelShow(false); });
   window.addEventListener("mouseup", (e) => { if (e.button === 2) { foot.aim = false; hud(); } if (e.button === 0) firing = false; });
   canvas.addEventListener("wheel", (e) => { if (out.on && foot.on) cycle(e.deltaY > 0 ? 1 : -1); }, { passive: true });
   pad.querySelectorAll("button").forEach((b) => {
@@ -230,7 +247,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     else for (let i = 0; i < (w.pellets || 1); i++) {
       const sp = w.spread * (foot.aim ? 0.6 : 1.4) * (foot.speed > 1 ? 1.6 : 1);
       const d = ray.d.clone().add(new THREE.Vector3(rnd(-sp, sp), rnd(-sp, sp), rnd(-sp, sp))).normalize();
-      const end = bullet(ray.o, d, from, w, id, muzzle); first ||= end;
+      const end = bullet(ray.o, d, from, w, id, muzzle); first ||= end; suppress(ray.o, d, w.range);
     }
     if (out.onShot) out.onShot(muzzle, first, id); // live.js: other players see the shot
     flash(muzzle); shot(w.snd); recoil += w.kick;
@@ -312,14 +329,29 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
   }
 
   // ---------------------------------------------------------------- you getting hurt
-  function hurt(n, by) {
+  function hurt(n, by, from) {
     if (dead || !out.on) return;
     let left = n;
     if ((P.armor || 0) > 0) { const a = Math.min(P.armor, Math.round(left * 0.7)); P.armor -= a; left -= a; }
-    P.health = Math.max(0, Math.round(P.health - left)); lastHit = performance.now();
-    hurtFx.style.boxShadow = "inset 0 0 160px rgba(200,0,0,.75)"; setTimeout(() => (hurtFx.style.boxShadow = "inset 0 0 140px rgba(190,0,0,0)"), 160);
+    P.health = Math.max(0, Math.round(P.health - left)); ouch(from);
     if (P.health <= 0) die(by);
     hud();
+  }
+  // a hit from another player: the live room has already worked out your health and armour
+  function remoteHit(hp, ar, by, from) {
+    if (dead || !out.on) return;
+    P.health = Math.max(0, Math.round(hp)); P.armor = Math.max(0, Math.round(ar)); ouch(from);
+    if (P.health <= 0) die(by);
+    hud();
+  }
+  // the red flash, and a marker round the crosshair pointing at whoever shot you
+  function ouch(from) {
+    lastHit = performance.now();
+    hurtFx.style.boxShadow = "inset 0 0 160px rgba(200,0,0,.75)"; setTimeout(() => (hurtFx.style.boxShadow = "inset 0 0 140px rgba(190,0,0,0)"), 160);
+    if (from) {
+      const view = foot.on ? foot.yaw : car.heading; let rel = Math.atan2(from[0] - car.x, from[1] - car.z) - view; rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+      dir.style.transform = `rotate(${(-rel * 180) / Math.PI}deg)`; dir.style.opacity = "1"; clearTimeout(dir.t); dir.t = setTimeout(() => (dir.style.opacity = "0"), 900);
+    }
   }
   function die(by) {
     if (dead) return; dead = true; P.deaths = (P.deaths || 0) + 1; P.streak = 0;
@@ -344,60 +376,147 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     hud(); feed("Patched up by RB Plaza.");
   }
 
-  // ---------------------------------------------------------------- crews (combat missions)
+  // ---------------------------------------------------------------- crews (combat missions) and armed police
+  // Crews fight like people who want to live: each picks a spot behind a wall that hides it from you, crouches
+  // there, leans out to fire a burst, ducks back to reload, and moves to new cover when you flank it or it's
+  // pinned by your fire. One in three is a rusher who comes straight for you. With 3+ wanted stars and combat on,
+  // cops who reach you get out with their weapons; shooting them adds stars. Fallen crew drop cash.
   const CREW_TOPS = [0x1d1d1d, 0x3a2a1a, 0x2a2f3a, 0x4a1a1a, 0x22331f];
-  function spawnEnemy(x, z, kind = "pistol", vest = false) {
-    const p = person({ top: CREW_TOPS[Math.floor(Math.random() * CREW_TOPS.length)], pants: 0x1a1a1a, vest });
+  const MAGS = { pistol: 8, smg: 20, rifle: 18 };
+  function spawnEnemy(x, z, kind = "pistol", vest = false, cop = false) {
+    const p = person(cop ? { top: 0x1b2a4a, pants: 0x14161c, vest: true, hair: 0x111111, style: "cap", capColor: 0x14213d, beard: false }
+      : { top: CREW_TOPS[Math.floor(Math.random() * CREW_TOPS.length)], pants: 0x1a1a1a, vest, hood: !vest && Math.random() < 0.5, jacket: !vest && Math.random() < 0.35 ? 0x2a2a2a : null });
     gun(p, model(kind)); p.position.set(x, 0, z); scene.add(p);
-    const e = { p, x, z, h: Math.random() * 6.28, hp: vest ? 150 : 100, kind, alert: false, dead: false, cool: rnd(0.5, 1.5), strafe: Math.random() < 0.5 ? 1 : -1, sw: rnd(1.5, 3), deadT: 0 };
+    const e = { p, x, z, h: Math.random() * 6.28, hp: vest || cop ? 150 : 100, kind, cop, alert: cop, dead: false, cool: rnd(0.5, 1.5), deadT: 0,
+      rusher: !cop && Math.random() < 0.33, state: "move", cover: null, peek: null, t: 0, mag: MAGS[kind] || 10, pinned: 0 };
     out.enemies.push(e); return e;
   }
   function damageEnemy(e, n, head) {
-    if (e.dead) return; e.hp -= n; e.alert = true;
+    if (e.dead) return; e.hp -= n; e.alert = true; e.pinned = 1.5;
     puff(new THREE.Vector3(e.x, head ? 1.65 : 1.15, e.z), 0x7a1010, 0.6, 0.25);
-    if (e.hp <= 0) { e.dead = true; e.deadT = 0; out.stats.kills++; feed(head ? "💀 Headshot" : "💀 Crew member down"); P.npcKills = (P.npcKills || 0) + 1; E.emit("crew-down"); missionCheck(); }
+    if (e.hp > 0) return;
+    e.dead = true; e.deadT = 0; out.stats.kills++; P.npcKills = (P.npcKills || 0) + 1;
+    if (e.cop) { feed("💀 Officer down"); E.setWanted(Math.min(5, E.wanted() + 1)); return; }
+    feed(head ? "💀 Headshot" : "💀 Crew member down"); E.emit("crew-down");
+    drop(e.x, e.z, Math.round(rnd(100, 400) / 10) * 10);
+    missionCheck();
   }
-  const ENEMY = { pistol: { dmg: [5, 8], rate: 0.9, range: 45 }, smg: { dmg: [3, 6], rate: 0.3, range: 35 }, rifle: { dmg: [6, 10], rate: 0.4, range: 70 } };
-  let volley = []; // when crew members fired: no more than three shoot in any one second, so a fight is hard but fair
   function clear(x0, z0, x1, z1) { const d = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(d / 1.5); for (let i = 1; i < n; i++) { const t = i / n; if (CITY.blocked(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t, 0)) return false; } return true; }
+  // a spot 6-16 m away that you can't see from where you are, with a wall between, and somewhere to lean out from
+  function findCover(e) {
+    let best = null, bs = -Infinity;
+    for (let k = 0; k < 18; k++) {
+      const a = Math.random() * 6.28, r = rnd(4, 16), x = e.x + Math.sin(a) * r, z = e.z + Math.cos(a) * r;
+      const dp = Math.hypot(x - car.x, z - car.z);
+      if (dp < 7 || dp > 40 || CITY.blocked(x, z, 0.45) || clear(x, z, car.x, car.z)) continue;
+      const peek = leanOut(x, z); if (!peek) continue;
+      const score = -Math.abs(dp - 16) - r * 0.3;
+      if (score > bs) { bs = score; best = { x, z, peek }; }
+    }
+    return best;
+  }
+  function leanOut(x, z) {
+    const ux = car.x - x, uz = car.z - z, d = Math.hypot(ux, uz) || 1, px = -uz / d, pz = ux / d;
+    for (const s of [1.3, -1.3, 2.2, -2.2]) { const lx = x + px * s, lz = z + pz * s; if (!CITY.blocked(lx, lz, 0.35) && clear(lx, lz, car.x, car.z)) return { x: lx, z: lz }; }
+    return null;
+  }
+  function stepTo(e, tx, tz, sp, dt) {
+    const dx = tx - e.x, dz = tz - e.z, d = Math.hypot(dx, dz); if (d < 0.25) return true;
+    const st = Math.min(d, sp * dt), nx = e.x + (dx / d) * st, nz = e.z + (dz / d) * st;
+    if (!CITY.blocked(nx, nz, 0.35)) { e.x = nx; e.z = nz; } else if (!CITY.blocked(nx, e.z, 0.35)) e.x = nx; else if (!CITY.blocked(e.x, nz, 0.35)) e.z = nz; else return true;
+    return false;
+  }
+  const ENEMY = { pistol: { dmg: [5, 8], rate: 0.6, range: 45 }, smg: { dmg: [3, 6], rate: 0.12, range: 35 }, rifle: { dmg: [6, 10], rate: 0.18, range: 70 } };
+  let volley = []; // when crew members fired: no more than three shoot in any one second, so a fight is hard but fair
+  function fire(e, d) {
+    const W = ENEMY[e.kind] || ENEMY.pistol, nowS = performance.now() / 1000;
+    volley = volley.filter((t) => nowS - t < 1);
+    if (e.cool > 0 || d > W.range || volley.length >= 3) return;
+    e.cool = W.rate * rnd(0.8, 1.4); volley.push(nowS); e.mag--;
+    const moving = foot.on ? foot.speed > 2 : Math.abs(car.speed) > 8;
+    const chance = Math.max(0.05, Math.min(0.45, 0.45 - d / 90 - (moving ? 0.18 : 0) - (foot.on && foot.sprint ? 0.08 : 0) - (foot.on && foot.aim ? 0 : 0)));
+    const hit = Math.random() < chance;
+    const muzzle = new THREE.Vector3(); e.p.userData.gun.userData.tip.getWorldPosition(muzzle);
+    const aimAt = new THREE.Vector3(car.x + (hit ? 0 : rnd(-1.6, 1.6)), (foot.on ? 1.2 : 1) + (hit ? 0 : rnd(-0.4, 0.9)), car.z + (hit ? 0 : rnd(-1.6, 1.6)));
+    tracer(muzzle, aimAt); flash(muzzle); shot(ARMS[e.kind].snd, d);
+    e.p.userData.recoil = 0.12;
+    if (hit) hurt(Math.round(rnd(...W.dmg) * (foot.on ? 1 : 0.5)), e.cop ? "the police" : "a rival crew", [e.x, e.z]);
+  }
+  // armed police: with 3+ stars and combat on, a cop car that gets close lets out two officers (four at most)
+  let copT = 0;
+  function policeTick(dt) {
+    copT -= dt; if (copT > 0) return; copT = 1;
+    const cops = out.enemies.filter((e) => e.cop && !e.dead);
+    if (!out.on || E.wanted() < 3 || !foot.on) { if (E.wanted() === 0) for (const c of cops) { c.dead = true; c.deadT = 13.6; } return; }
+    if (cops.length >= 4) return;
+    for (const c of E.cops()) {
+      if (Math.hypot(c.x - car.x, c.z - car.z) > 32 || c.dropped) continue;
+      c.dropped = true; c.speed = 0;
+      for (const s of [1.6, -1.6]) { const h = c.mesh.rotation.y, x = c.x + Math.cos(h) * s, z = c.z - Math.sin(h) * s; if (!CITY.blocked(x, z, 0.4)) spawnEnemy(x, z, E.wanted() >= 4 ? "rifle" : "pistol", true, true); }
+      feed("🚓 The police are out of the car"); break;
+    }
+  }
+  // cash dropped by a fallen crew member: walk over it
+  const drops = [];
+  const cashMat = new THREE.MeshStandardMaterial({ color: 0x2e8b3a, roughness: 0.6, emissive: 0x0b3010 });
+  function drop(x, z, amount) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.12, 0.18), cashMat); m.position.set(x, 0.3, z); m.userData.noAO = true; scene.add(m); drops.push({ m, x, z, amount, t: 60 }); }
+  function dropsTick(dt) {
+    for (let i = drops.length - 1; i >= 0; i--) {
+      const d = drops[i]; d.t -= dt; d.m.rotation.y += dt * 2.5; d.m.position.y = 0.3 + Math.sin(d.t * 3) * 0.06;
+      if (foot.on && Math.hypot(d.x - car.x, d.z - car.z) < 1.6) { P.netWorth += d.amount; ctx.play && ctx.play("cash", 0.35); feed(`💵 +${E.money(d.amount)}`); scene.remove(d.m); drops.splice(i, 1); ctx.sync && ctx.sync(); continue; }
+      if (d.t <= 0) { scene.remove(d.m); drops.splice(i, 1); }
+    }
+  }
   function enemiesTick(dt) {
+    policeTick(dt);
     for (let i = out.enemies.length - 1; i >= 0; i--) {
       const e = out.enemies[i];
       if (e.dead) { e.deadT += dt; pose(e.p, "down", dt); if (e.deadT > 14) { scene.remove(e.p); out.enemies.splice(i, 1); } continue; }
       const dx = car.x - e.x, dz = car.z - e.z, d = Math.hypot(dx, dz);
-      if (d > 220) { pose(e.p, "idle", dt); continue; }
+      if (d > 220) { if (e.cop) { e.dead = true; e.deadT = 13.6; } pose(e.p, "idle", dt); continue; }
       const see = d < 75 && clear(e.x, e.z, car.x, car.z);
       if (!e.alert && see && d < 30) e.alert = true;
-      let sp = 0;
+      let sp = 0, crouch = false;
+      e.cool -= dt; e.t -= dt; e.pinned = Math.max(0, e.pinned - dt);
       if (e.alert && !dead) {
-        const want = Math.atan2(dx, dz); let dh = want - e.h; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); e.h += dh * Math.min(1, dt * 6);
-        // keep 9-18 m away, strafing; close in when you can't be seen
-        let mx = 0, mz = 0; const ux = dx / (d || 1), uz = dz / (d || 1);
-        if (d > 18 || !see) { mx += ux; mz += uz; } else if (d < 8) { mx -= ux; mz -= uz; }
-        e.sw -= dt; if (e.sw <= 0) { e.strafe *= -1; e.sw = rnd(1.2, 3); }
-        if (see) { mx += uz * e.strafe * 0.8; mz += -ux * e.strafe * 0.8; }
-        const m = Math.hypot(mx, mz);
-        if (m > 0.01) { sp = see ? 2.6 : 4.2; const nx = e.x + (mx / m) * sp * dt, nz = e.z + (mz / m) * sp * dt; if (!CITY.blocked(nx, nz, 0.35)) { e.x = nx; e.z = nz; } else { e.strafe *= -1; sp = 0; } }
-        // shoot
-        e.cool -= dt; const W = ENEMY[e.kind] || ENEMY.pistol;
-        const nowS = performance.now() / 1000; volley = volley.filter((t) => nowS - t < 1);
-        if (see && d < W.range && e.cool <= 0 && volley.length < 3) {
-          e.cool = W.rate * rnd(0.8, 1.6); volley.push(nowS);
-          const moving = foot.on ? foot.speed > 2 : Math.abs(car.speed) > 8;
-          const chance = Math.max(0.05, Math.min(0.45, 0.45 - d / 90 - (moving ? 0.18 : 0) - (foot.on && foot.sprint ? 0.08 : 0)));
-          const hit = Math.random() < chance;
-          const muzzle = new THREE.Vector3(); e.p.userData.gun.userData.tip.getWorldPosition(muzzle);
-          const aimAt = new THREE.Vector3(car.x + (hit ? 0 : rnd(-1.6, 1.6)), (foot.on ? 1.2 : 1) + (hit ? 0 : rnd(-0.4, 0.9)), car.z + (hit ? 0 : rnd(-1.6, 1.6)));
-          tracer(muzzle, aimAt); flash(muzzle); shot(ARMS[e.kind === "rifle" ? "rifle" : e.kind].snd, d);
-          e.p.userData.recoil = 0.12;
-          if (hit) hurt(Math.round(rnd(...W.dmg) * (foot.on ? 1 : 0.5)), "a rival crew");
+        const face = () => { const want = Math.atan2(dx, dz); let dh = want - e.h; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); e.h += dh * Math.min(1, dt * 7); };
+        if (e.rusher || e.cop && d > 30) {
+          // straight at you, firing when it can see you; stops close
+          face();
+          if (d > 6 || !see) { sp = see ? 3.4 : 4.6; const ux = dx / d, uz = dz / d, side = Math.sin(performance.now() / 700 + i) * 0.6; stepTo(e, e.x + (ux + uz * side) * 3, e.z + (uz - ux * side) * 3, sp, dt); }
+          if (see) fire(e, d);
+          if (e.mag <= 0) { e.mag = MAGS[e.kind] || 10; e.cool = 2; }
+        } else if (e.state === "move") {
+          // to cover (or straight at you if there's none), firing on the way if it has a clear shot
+          if (!e.cover || e.t <= 0) { e.cover = findCover(e); e.t = 6; }
+          const tx = e.cover ? e.cover.x : car.x, tz = e.cover ? e.cover.z : car.z;
+          sp = 4.4; const there = stepTo(e, tx, tz, sp, dt);
+          e.h = Math.atan2(tx - e.x, tz - e.z);
+          if (see && d < 25 && Math.random() < dt * 2) { face(); fire(e, d); }
+          if (there || (!e.cover && d < 14)) { e.state = "hide"; e.t = rnd(0.8, 2); }
+        } else if (e.state === "hide") {
+          crouch = true; face();
+          if (e.mag <= 0) { e.mag = MAGS[e.kind] || 10; e.t = Math.max(e.t, 2.2); } // reloading behind cover
+          // flanked (you can see it where it hides) or the spot's gone stale: move on
+          if (see && d < 20 && e.cover) { e.state = "move"; e.cover = null; }
+          else if (e.t <= 0 && e.pinned <= 0) { e.peek = e.cover ? leanOut(e.cover.x, e.cover.z) : { x: e.x, z: e.z }; e.state = e.peek ? "peek" : "move"; e.t = rnd(1.4, 2.6); if (!e.peek) e.cover = null; }
+        } else if (e.state === "peek") {
+          // lean out, fire a burst, duck back
+          face(); sp = stepTo(e, e.peek.x, e.peek.z, 3, dt) ? 0 : 2.5;
+          if (see) fire(e, d);
+          if (e.t <= 0 || e.mag <= 0 || e.pinned > 1.2) { e.state = "back"; }
+        } else if (e.state === "back") {
+          sp = 3.5; const c = e.cover || { x: e.x, z: e.z };
+          if (stepTo(e, c.x, c.z, sp, dt)) { e.state = "hide"; e.t = rnd(1, 2.4); if (Math.random() < 0.25) { e.state = "move"; e.cover = null; } }
         }
       }
-      e.p.userData.aiming = e.alert;
+      e.p.userData.aiming = e.alert && e.state !== "move";
       e.p.position.set(e.x, 0, e.z); e.p.rotation.y = e.h;
-      pose(e.p, sp > 3 ? "run" : sp > 0.3 ? "walk" : "idle", dt, sp);
+      pose(e.p, crouch ? "crouch" : sp > 3 ? "run" : sp > 0.3 ? "walk" : "idle", dt, sp);
     }
   }
+  // your shots near a crew member pin it down (it stays in cover longer)
+  function suppress(o, d, upto) { for (const e of out.enemies) { if (e.dead) continue; const t = (e.x - o.x) * d.x + (e.z - o.z) * d.z; if (t < 0 || t > upto) continue; const px = o.x + d.x * t, pz = o.z + d.z * t; if (Math.hypot(px - e.x, pz - e.z) < 3) e.pinned = Math.max(e.pinned, 1.2); } }
 
   // ---------------------------------------------------------------- missions
   let beacon = null, caseMesh = null;
@@ -423,7 +542,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     for (let i = 0; i < n; i++) { const [x, z] = spotNear([m.at[0] + Math.sin(from + i * 0.4) * 45, m.at[1] + Math.cos(from + i * 0.4) * 45], 0, 10); const e = spawnEnemy(x, z, m.wave >= 1 && i % 2 ? "rifle" : "smg", m.wave === 2 && i === 0); e.alert = true; }
     feed(`🛡️ Wave ${m.wave + 1} of ${m.def.waves.length}`);
   }
-  function alive() { return out.enemies.filter((e) => !e.dead).length; }
+  function alive() { return out.enemies.filter((e) => !e.dead && !e.cop).length; }
   function missionCheck() {
     const m = out.mission; if (!m || m.stage !== "fight" || alive()) return;
     if (m.def.key === "turf") endMission(true);
@@ -443,7 +562,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     if (ok) { P.netWorth += m.def.pay; P.tokens += m.def.tokens; ctx.play && ctx.play("cash"); E.toast(`✅ ${m.def.name} done: ${E.money(m.def.pay)} + ${m.def.tokens} tokens.`); E.emit("mission-done", m.def.key); ctx.sync && ctx.sync(); }
     else E.toast(`❌ ${m.def.name} failed. ${why || ""}`, true);
     // anyone left walks off
-    setTimeout(() => { for (const e of out.enemies) if (!e.dead) { e.dead = true; e.deadT = 13.5; } }, ok ? 0 : 2000);
+    setTimeout(() => { for (const e of out.enemies) if (!e.dead && !e.cop) { e.dead = true; e.deadT = 13.5; } }, ok ? 0 : 2000);
   }
   function missionTick(dt) {
     const m = out.mission; if (!m) return;
@@ -469,6 +588,14 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     mchip.innerHTML = `${m.def.icon} ${m.say}${left} · ${Math.round(d)} m <span style="display:inline-block;transform:rotate(${(-rel * 180) / Math.PI}deg)">⬆</span>`;
   }
 
+  // on the radar (hud.js): crew red, police blue, cash green; the mission marker as the target
+  function blips() {
+    const b = []; for (const e of out.enemies) if (!e.dead) b.push({ x: e.x, z: e.z, c: e.cop ? "#2a6bff" : "#ff3b3b", r: 4 });
+    for (const d of drops) b.push({ x: d.x, z: d.z, c: "#00E676", r: 3 });
+    for (const [, r] of out.remote) if (r.alive) b.push({ x: r.x, z: r.z, c: r.combat ? "#ff8a3b" : "#ffffff", r: 4 });
+    window.__rbBlips = b;
+    const m = out.mission; window.__rbMissionTarget = m ? (m.stage === "deliver" ? m.drop : m.stage === "case" || m.stage === "go" ? m.at : null) : null;
+  }
   // ---------------------------------------------------------------- every frame
   ctx.onFrame((dt) => {
     dt = Math.min(dt, 0.1);
@@ -487,7 +614,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
       for (const [x, z] of cands) { const a = Math.atan2(x - car.x, z - car.z); let rel = a - foot.yaw; rel = Math.atan2(Math.sin(rel), Math.cos(rel)); const d = Math.hypot(x - car.x, z - car.z); if (d < 80 && Math.abs(rel) < bd) { bd = Math.abs(rel); best = rel; } }
       if (best != null) foot.yaw += best * Math.min(1, dt * 4);
     }
-    enemiesTick(dt); rocketsTick(dt); missionTick(dt); fxTick(dt);
+    enemiesTick(dt); dropsTick(dt); rocketsTick(dt); missionTick(dt); fxTick(dt); blips();
     recoil *= Math.pow(0.001, dt);
   });
   setInterval(hud, 500);

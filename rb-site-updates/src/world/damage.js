@@ -49,7 +49,8 @@ export function initDamage(E, ctx) {
   }
 
   // ---------------------------------------------------------------- bumping into cars
-  const R = 2.3;
+  const R = 2.3, CITY = E.city;
+  const MASS = { sport: 1.2, sedan: 1.4, suv: 1.9, van: 2.2 }; // tonnes, roughly
   ctx.onFrame((dt) => {
     dt = Math.min(dt, 0.1);
     if (!car.onFoot && car.mesh && !car.photo) {
@@ -60,14 +61,30 @@ export function initDamage(E, ctx) {
         // closing speed along the line between the two cars
         const cv = Math.max(0, c.speed || 0), cvx = Math.sin(c.mesh.rotation.y) * cv, cvz = Math.cos(c.mesh.rotation.y) * cv;
         const rel = (car.vx - cvx) * nx + (car.vz - cvz) * nz;
-        // push apart, and bounce
-        const push = (R - d) / 2; car.x -= nx * push; car.z -= nz * push; c.x += nx * push; c.z += nz * push;
-        if (rel > 0) { car.vx -= nx * rel * 1.3; car.vz -= nz * rel * 1.3; c.speed = c.cop ? c.speed * 0.6 : 0; c.held = 2; }
+        // push apart (the lighter car moves more), then an impulse along the line between them: each car's
+        // velocity changes by its share, and a hit off-centre sets both spinning
+        const mP = MASS[car.mesh.userData.kind] || 1.3, mT = MASS[c.mesh.userData.kind] || 1.3, inv = 1 / mP + 1 / mT;
+        const push = R - d; car.x -= nx * push * (1 / mP) / inv; car.z -= nz * push * (1 / mP) / inv; c.x += nx * push * (1 / mT) / inv; c.z += nz * push * (1 / mT) / inv;
+        if (rel > 0) {
+          const J = (1 + 0.35) * rel / inv;
+          car.vx -= nx * J / mP; car.vz -= nz * J / mP;
+          const fx = Math.sin(car.heading), fz = Math.cos(car.heading), side = fx * nz - fz * nx; // which side of your car took it
+          car.spin = (car.spin || 0) + side * (J / mP) * 0.09;
+          const kv = J / mT; c.knock = { vx: nx * kv, vz: nz * kv, spin: -side * kv * 0.9, t: 0.7 };
+          c.speed = c.cop ? c.speed * 0.6 : 0; c.held = 2.5;
+        }
         if (rel > 4) { E.emit("crash", rel); if (rel > 10) ctx.play && ctx.play("alert", 0.2); }
       }
     }
-    // a car you hit waits a moment before it drives on
-    for (const c of E.traffic()) if (c.held > 0) { c.held -= dt; c.speed = 0; }
+    // a car you hit is shoved and spun, then waits a moment before it drives on
+    for (const c of [...E.traffic(), ...E.cops()]) {
+      if (c.held > 0 && !c.cop) { c.held -= dt; c.speed = 0; }
+      const k = c.knock; if (!k) continue;
+      // the traffic code steers the body back towards the road, so the spin shows while it's knocked and then settles
+      k.t -= dt; const nx = c.x + k.vx * dt, nz = c.z + k.vz * dt; if (!CITY.blocked(nx, nz, 1)) { c.x = nx; c.z = nz; }
+      k.vx *= Math.pow(0.08, dt); k.vz *= Math.pow(0.08, dt); c.mesh.rotation.y += k.spin * dt; k.spin *= Math.pow(0.15, dt);
+      if (k.t <= 0) c.knock = null;
+    }
     // smoke from a damaged car
     const d = dmg();
     if (!car.onFoot && car.mesh && d > 50) { smokeT -= dt * (d > 80 ? 3 : 1.4); if (smokeT <= 0) { smokeT = 0.18; puff(d > 80); } }

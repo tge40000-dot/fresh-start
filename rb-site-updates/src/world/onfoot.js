@@ -16,7 +16,7 @@ const typing = () => /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.ta
 
 export function initFoot(E, ctx) {
   const car = E.car, CITY = E.city, cam = E.camera;
-  const me = person({ top: 0x111111, pants: 0x1c2230, shoes: 0x0b0b0b, skin: 0x8d5524, hair: 0x0d0d0d });
+  const me = person({ top: 0xf2f2f2, jacket: 0x121212, pants: 0x1c2a44, shoes: 0x0b0b0b, skin: 0x8d5524, hair: 0x0d0d0d, style: "short", beard: true }); // white tee, black jacket, dark denim
   me.visible = false; ctx.scene.add(me);
   const out = {
     on: false, me, yaw: 0, pitch: -0.12, h: 0, speed: 0, y: 0, vy: 0, parked: null, aim: false, sprint: false,

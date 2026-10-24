@@ -98,8 +98,10 @@ function drawRadar(t) {
   for (const g of window.__rbGhosts || []) dot(g.x, g.z, 5, g.racer ? "#F5D547" : "#ffffff", "#000");
   const blink = Math.floor(t * 4) % 2;
   for (const cp of R.cops) dot(cp.x, cp.z, 6.5, blink ? "#ff2a2a" : "#2a6bff", "#fff");
+  // combat.js: crews, police on foot, dropped cash and other players on foot
+  for (const b of window.__rbBlips || []) dot(b.x, b.z, b.r || 4, b.c, "#000");
   // the target: job or race checkpoint, on the rim with an arrow when it's out of range
-  const tgt = R.job ? R.job.stops[R.job.stage].at : window.__rbRaceTarget || null;
+  const tgt = R.job ? R.job.stops[R.job.stage].at : window.__rbRaceTarget || window.__rbMissionTarget || null;
   if (tgt) {
     let [px, pz] = at(tgt[0], tgt[1]); const col = R.job && R.job.stage ? "#00E676" : "#F5D547";
     const dx = px - mid, dz = pz - mid, dd = Math.hypot(dx, dz), lim = mid - 14;
@@ -149,7 +151,7 @@ export function help() {
     <tr><td><kbd>T</kbd> or 📱</td><td>Your phone: jobs, empire, races, goals, messages, radio, leaders, events and settings</td></tr>
     <tr><td><kbd>F</kbd> or GET OUT</td><td>Get out and walk; next to a car, get in (yours, or take one from the traffic)</td></tr>
     <tr><td>On foot</td><td><kbd>WASD</kbd> move, mouse looks (click to lock it, <kbd>Esc</kbd> to let go), <kbd>Shift</kbd> sprint, <kbd>Space</kbd> jump</td></tr>
-    <tr><td>Combat (18+, ⚔️)</td><td>Right mouse aims, left mouse fires, <kbd>R</kbd> reloads, <kbd>1</kbd>-<kbd>6</kbd> or the wheel switch, <kbd>X</kbd> puts it away</td></tr>
+    <tr><td>Combat (18+, ⚔️)</td><td>Right mouse aims, left mouse fires, <kbd>R</kbd> reloads, <kbd>1</kbd>-<kbd>6</kbd> or the mouse wheel switch, hold <kbd>Tab</kbd> for the weapon wheel, <kbd>X</kbd> puts it away</td></tr>
     <tr><td><kbd>P</kbd></td><td>Photo mode: the HUD hides, orbit the car, set the blur and a filter, save the picture</td></tr>
     <tr><td><kbd>Shift</kbd> or <kbd>N</kbd></td><td>Nitro (the blue gauge refills)</td></tr>
     <tr><td><kbd>E</kbd></td><td>The lot you're next to: buy, build, manage</td></tr>
