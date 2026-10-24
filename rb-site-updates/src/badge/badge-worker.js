@@ -6,11 +6,11 @@
 //   lifetime = everything earned (minus hand removals), which sets the level; balance = lifetime minus redemptions.
 // The door desk in RB Command (badgedesk.js) checks members in by scanning the QR on their pass, which carries a token
 // signed with the member's own pass_secret and good for RBB_TOKEN_MINUTES, so a screenshot stops working.
-const RBB_SCHEMA_VERSION = "rb-badge-8";
+const RBB_SCHEMA_VERSION = "rb-badge-9";
 const RBB_DEFAULTS = { enabled: "off", eligibility: "Open to anyone with an RB account and a verified email address.", redeem_how: "",
   points_welcome: "50", points_daily: "5", points_signup: "25", points_membership_request: "50", points_per_dollar_spent: "10", order_cap: "5000",
   points_per_dollar_given: "10", contribution_cap: "5000", points_member_month: "100", points_release: "100", points_event_listed: "50", points_collect: "50",
-  checkin_points: "100", checkin_max: "1000", adjust_max: "10000", game_points_round: "20", game_score_per_point: "10", game_points_daily: "60", game_rounds_daily: "25", world_points_block: "5", world_block_minutes: "10", world_points_daily: "30", world_open: "on", world_radio: "on", world_notice: "" };
+  checkin_points: "100", checkin_max: "1000", adjust_max: "10000", game_points_round: "20", game_score_per_point: "10", game_points_daily: "60", game_rounds_daily: "25", world_points_block: "5", world_block_minutes: "10", world_points_daily: "30", world_open: "on", world_radio: "on", world_combat: "on", world_notice: "" };
 const RBB_TOKEN_MINUTES = 10;
 const RBB_WRITES_PER_MINUTE = 20;
 // Where each achievement rule counts from: the ledger source it counts rows of.
@@ -70,7 +70,7 @@ async function rbbLoad(env) {
     } catch {}
   }
   return { cfg, amounts, levels, rewards, achievements, events, on, status: on ? "live" : "off", worldOpen: String(cfg.world_open).trim().toLowerCase() !== "off",
-    worldRadio: String(cfg.world_radio).trim().toLowerCase() !== "off", worldNotice: String(cfg.world_notice || "").replace(/\s+/g, " ").trim().slice(0, 200) };
+    worldRadio: String(cfg.world_radio).trim().toLowerCase() !== "off", worldCombat: String(cfg.world_combat).trim().toLowerCase() !== "off", worldNotice: String(cfg.world_notice || "").replace(/\s+/g, " ").trim().slice(0, 200) };
 }
 
 // The level a lifetime total reaches, and the next one.

@@ -15,6 +15,10 @@ import { initAudio as initSound } from './audio.js';
 import { initRadio } from './radio.js';
 import { initPhone } from './phone.js';
 import { initAds } from './ads.js';
+import { initFoot } from './onfoot.js';
+import { initCombat } from './combat.js';
+import { initLive } from './live.js';
+import { initDamage } from './damage.js';
 
 // --- CORE ---
 const db = init();
@@ -408,7 +412,7 @@ async function startGame() {
     db.subscribeQuery({ ads: {} }, r => { if (r.data) { allAds = r.data.ads || []; } });
 
     setInterval(() => {
-        try { room.publishPresence({ id: player.id, name: player.name, pos: player.pos, netWorth: player.netWorth, health: player.health }); } catch(e){}
+        try { room.publishPresence({ id: player.id, name: player.name, pos: player.pos, netWorth: player.netWorth, health: player.health, kills: player.kills, deaths: player.deaths }); } catch(e){}
     }, 1000);
 
     safeTransact(db.tx.users[player.id].update({ name: player.name, netWorth: player.netWorth, tokens: player.tokens, lastActive: Date.now() }));
@@ -435,6 +439,10 @@ async function startGame() {
     window.RBCarRadio = initRadio(window.RBEmpire, ectx); // RB Radio live in the car (📻 or M)
     window.RBPhone = initPhone(window.RBEmpire, ectx); // everything else on screen, in one phone (📱 or T)
     window.RBAds = initAds(window.RBEmpire, ectx); // sponsors' ads from RB Command on the billboards and posters
+    window.RBFoot = initFoot(window.RBEmpire, ectx); // get out and walk (F), take cars from the traffic
+    window.RBCombat = initCombat(window.RBEmpire, ectx, window.RBFoot); // 18+ opt-in: weapons, crews, missions, fights with other players
+    window.RBDamage = initDamage(window.RBEmpire, ectx); // car damage, smoke and bumping into other cars
+    window.RBLive = initLive(window.RBEmpire, ectx, window.RBFoot, window.RBCombat); // other players in real time (rb-world-live)
     const notice = (window.RB_WORLD_CFG || {}).notice; if (notice) setTimeout(() => window.RBEmpire.toast('📣 ' + notice), 2500);
     fx.build(); window.RBFx = fx;
     bindGraphics();

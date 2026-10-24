@@ -52,6 +52,12 @@ await assert.rejects(W.saveSettings(env, who, { points: { minutes: 0 } }), /1 to
 await assert.rejects(W.saveSettings(env, who, { points: { block: 2.5 } }), /whole number/);
 assert.equal((await W.saveSettings(env, who, { notice: "x".repeat(500) })).changed.length, 1); assert.equal(db.prepare("SELECT value FROM badge_config WHERE key='world_notice'").get().value.length, 200);
 await W.saveSettings(env, who, { open: true, radio: true });
+// combat (18+) switch: on by default, saved and logged like the others
+assert.equal((await W.summary(env, radio)).settings.combat, true);
+assert.equal((await W.saveSettings(env, who, { combat: false })).changed.length, 1);
+assert.equal(db.prepare("SELECT value FROM badge_config WHERE key='world_combat'").get().value, "off");
+assert.equal((await W.summary(env, radio)).settings.combat, false);
+assert.ok(W.page("n0nce", true).includes('id="s-combat"'));
 // 3. moderation
 await W.block(env, who, { id: "p_bob123", reason: "spam", delete_chat: true });
 d = await W.summary(env, radio);
@@ -83,4 +89,4 @@ assert.ok(tables.includes('["all", "home", "radio", "tv", "world"]') && tables.i
 assert.equal((tables.match(/surface: f\.pick\("Shows on"/g) || []).length, 1, "one Shows on field");
 assert.ok(ui.includes('<option value="world">RB World only (billboards and posters)</option>') && !ui.includes("don\\'t show ads yet"));
 assert.ok(aff.includes('const SURFACES = ["all", "home", "radio", "tv", "world"];'));
-console.log("world admin ok: switches (validated, logged), car radio now playing, players, chat delete, block/unblock, lot release, races, billboards and their views, RB World only ads, page and routes");
+console.log("world admin ok: switches (validated, logged), car radio now playing, players, chat delete, block/unblock, lot release, races, billboards and their views, RB World only ads, combat switch, page and routes");

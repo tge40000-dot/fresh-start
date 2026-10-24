@@ -259,10 +259,10 @@ USERS.u_bob = { email: "bob@example.com" };
   const csp = w.headers.get("Content-Security-Policy");
   assert.ok(/connect-src 'self'[^;]*basemaps\.cartocdn\.com/.test(csp) && !/esm\.sh|instantdb|stripe/i.test(csp), "the game's hosts only: no InstantDB, no Stripe");
   assert.ok(!/instantdb|esm\.sh|js\.stripe\.com|\$9\.99/i.test(wh), "no InstantDB, Stripe or the unbacked $9.99 offer");
-  assert.ok(wh.includes('src="/app/world/main.js?v=w14"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
+  assert.ok(wh.includes('src="/app/world/main.js?v=w15"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
   assert.ok(wh.includes("OPEN THE RB APP") && wh.includes("SEE MEMBERSHIPS"));
   // the car radio and the notice come from RB Command > RB World; "Enter as Admin" opens RB World's controls there
-  assert.ok(wh.includes('window.RB_WORLD_CFG = {"radio":true,"notice":""}') && wh.includes("data-rb-radio-host") && wh.includes('id="radio-vol"'));
+  assert.ok(wh.includes('window.RB_WORLD_CFG = {"radio":true,"notice":"","combat":true}') && wh.includes("data-rb-radio-host") && wh.includes('id="radio-vol"'));
   assert.ok(wh.includes("https://team.relentlessbillionaire.com/world") && !wh.includes("location.href = '/admin'") && !wh.includes('getElementById("btn-radio"),R=window.RBRadio'));
   const rj = await (await go("/app/world/radio.js")).text();
   assert.ok(rj.includes("export function initRadio") && rj.includes("RBRadio") && rj.includes('"KeyM"'));
@@ -277,6 +277,15 @@ USERS.u_bob = { email: "bob@example.com" };
   const aj = await (await go("/app/world/ads.js")).text();
   assert.ok(aj.includes("export function initAds") && aj.includes("/api/world/billboards") && aj.includes("/api/world/ad-event") && aj.includes("SPONSORED · ") && aj.includes('rel = "sponsored noopener"'));
   const cityj = await (await go("/app/world/city.js")).text(); assert.ok(cityj.includes("adSpots") && cityj.includes("adPool"));
+  // on foot (F), 18+ combat, car damage and live play with other players
+  for (const [f, needs] of Object.entries({ "onfoot.js": ["export function initFoot", '"KeyF"', "takeTraffic"], "char.js": ["export function person", "export function pose"], "combat.js": ["export function initCombat", "rb_world_18", "I'M 18 OR OLDER"], "live.js": ["export function initLive", "wss://rb-world-live.tge40000.workers.dev"], "damage.js": ["export function initDamage", "car.stall"] })) {
+    const t = await (await go("/app/world/" + f)).text(); for (const n of needs) assert.ok(t.includes(n), f + ": " + n);
+  }
+  for (const n of ["initFoot(window.RBEmpire, ectx)", "initCombat(window.RBEmpire, ectx, window.RBFoot)", "initLive(window.RBEmpire, ectx, window.RBFoot, window.RBCombat)", "initDamage(window.RBEmpire, ectx)"]) assert.ok(mjs.includes(n), n);
+  assert.ok((await go("/app/world/")).headers.get("Content-Security-Policy").includes("wss://rb-world-live.tge40000.workers.dev"), "the live room is allowed");
+  sql("UPDATE badge_config SET value='off' WHERE key='world_combat'");
+  assert.ok((await (await go("/app/world/")).text()).includes('"combat":false'), "RB Command can switch combat off");
+  sql("UPDATE badge_config SET value='on' WHERE key='world_combat'");
   sql("UPDATE badge_config SET value='off' WHERE key='world_radio'"); sql("UPDATE badge_config SET value='Comedy night <Friday>' WHERE key='world_notice'");
   const wh2 = await (await go("/app/world/")).text();
   assert.ok(wh2.includes('"radio":false') && wh2.includes("Comedy night"), "radio off and the notice in the page");

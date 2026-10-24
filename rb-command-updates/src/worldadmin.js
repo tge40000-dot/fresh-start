@@ -31,7 +31,7 @@ async function ensure(env) {
 }
 async function config(env) {
   const out = {};
-  for (const r of await rows(env, "SELECT key, value FROM badge_config WHERE key IN ('enabled', 'world_open', 'world_radio', 'world_notice', 'world_points_block', 'world_block_minutes', 'world_points_daily')")) out[r.key] = r.value;
+  for (const r of await rows(env, "SELECT key, value FROM badge_config WHERE key IN ('enabled', 'world_open', 'world_radio', 'world_combat', 'world_notice', 'world_points_block', 'world_block_minutes', 'world_points_daily')")) out[r.key] = r.value;
   return out;
 }
 
@@ -67,7 +67,7 @@ export async function summary(env, fetcher = fetch) {
   ]);
   return {
     ok: true, generated_at: new Date(now).toISOString(),
-    settings: { open: onOff(c.world_open), radio: onOff(c.world_radio), notice: c.world_notice || "", badge_on: String(c.enabled || "").trim().toLowerCase() === "on",
+    settings: { open: onOff(c.world_open), radio: onOff(c.world_radio), combat: onOff(c.world_combat), notice: c.world_notice || "", badge_on: String(c.enabled || "").trim().toLowerCase() === "on",
       points: { block: n(c.world_points_block ?? 5), minutes: n(c.world_block_minutes ?? 10), daily: n(c.world_points_daily ?? 30) } },
     players: { total: n(counts?.total), online: n(counts?.online), day: n(counts?.day), week: n(counts?.week),
       top: top.map((p) => ({ id: p.id, name: p.name, net_worth: n(p.net_worth), tokens: n(p.tokens), kills: n(p.kills), deaths: n(p.deaths), seen_at: p.seen_at, account: !!n(p.account), blocked: !!n(p.blocked) })) },
@@ -87,6 +87,7 @@ export async function saveSettings(env, who, body) {
   const c = await config(env);
   if (body.open !== undefined && onOff(c.world_open) !== !!body.open) put("world_open", body.open ? "on" : "off", "RB World");
   if (body.radio !== undefined && onOff(c.world_radio) !== !!body.radio) put("world_radio", body.radio ? "on" : "off", "car radio");
+  if (body.combat !== undefined && onOff(c.world_combat) !== !!body.combat) put("world_combat", body.combat ? "on" : "off", "combat (18+)");
   if (body.notice !== undefined) { const t = clean(body.notice, 200); if (t !== (c.world_notice || "")) put("world_notice", t, "notice"); }
   for (const [key, [lo, hi]] of Object.entries(POINTS)) {
     const field = { world_points_block: "block", world_block_minutes: "minutes", world_points_daily: "daily" }[key];
@@ -99,6 +100,7 @@ export async function saveSettings(env, who, body) {
   // rows that a database from before these settings doesn't have yet
   await env.DB.batch([
     env.DB.prepare("INSERT OR IGNORE INTO badge_config (key, value) VALUES ('world_radio', 'on')"),
+    env.DB.prepare("INSERT OR IGNORE INTO badge_config (key, value) VALUES ('world_combat', 'on')"),
     env.DB.prepare("INSERT OR IGNORE INTO badge_config (key, value) VALUES ('world_notice', '')"),
     ...set]);
   await log(env, who, "world.settings", "RB World", changes.join(", "));
@@ -198,6 +200,7 @@ export function page(nonce, canEdit) {
   <section class="card"><h2>Switches</h2>
     <label class="sw"><input type="checkbox" id="s-open"><span>RB World open<small>Off: players see "coming soon" and nothing can be played.</small></span></label>
     <label class="sw"><input type="checkbox" id="s-radio"><span>Car radio<small>RB Radio live in every car: the same song as everyone, and live shows when RB goes on air.</small></span></label>
+    <label class="sw"><input type="checkbox" id="s-combat"><span>Combat (18+)<small>Players who confirm they're 18 or older can turn on weapons, combat missions and fights with each other. Off: nobody can, and combat missions stop.</small></span></label>
     <div class="mt"><label for="s-notice" class="muted">Notice for players (when they start, and on the city ticker; up to 200 characters)</label><textarea id="s-notice" maxlength="200" placeholder="For example: Comedy night Friday at 8, see /events"></textarea></div>
     <div class="mt muted">RB Badge points for play time <span id="badge-state"></span></div>
     <div class="row mt"><label class="muted">Points <input class="num" type="number" id="p-block" min="0" max="100"></label><label class="muted">every <input class="num" type="number" id="p-min" min="1" max="1440"> min</label><label class="muted">up to <input class="num" type="number" id="p-day" min="0" max="1000"> a day</label></div>
@@ -243,10 +246,10 @@ function empty(tb, cols, t){ var tr = el("tr"), td = el("td", "muted", t); td.co
 function block(id, name){ var why = prompt("Block " + name + " in RB World? They can still drive, but not chat, race or show on the leaderboard.\\n\\nWhy (optional):", ""); if (why === null) return Promise.reject(new Error("Not blocked.")); return api("/api/world-admin/block", { id: id, name: name, reason: why, delete_chat: confirm("Also delete their chat messages?") }).then(function(){ say("Blocked " + name + "."); }); }
 function render(d){
   D = d; var s = d.settings;
-  $("s-open").checked = s.open; $("s-radio").checked = s.radio; $("s-notice").value = s.notice;
+  $("s-open").checked = s.open; $("s-radio").checked = s.radio; $("s-combat").checked = s.combat; $("s-notice").value = s.notice;
   $("p-block").value = s.points.block; $("p-min").value = s.points.minutes; $("p-day").value = s.points.daily;
   $("badge-state").textContent = s.badge_on ? "(RB Badge is on, so these count)" : "(RB Badge is off, so these don't count yet)";
-  ["s-open","s-radio","s-notice","p-block","p-min","p-day","save"].forEach(function(id){ $(id).disabled = !EDIT; });
+  ["s-open","s-radio","s-combat","s-notice","p-block","p-min","p-day","save"].forEach(function(id){ $(id).disabled = !EDIT; });
   var r = d.radio, oa = $("onair"); oa.classList.toggle("live", !!(r && r.live));
   $("r-title").textContent = !r ? "RB Radio can't be reached right now" : r.live ? "LIVE: " + r.title : (r.title || "Getting the next song ready");
   $("r-artist").textContent = r ? (r.artist || "") : "";
@@ -279,7 +282,7 @@ function render(d){
 }
 function load(){ return api("/api/world-admin").then(render).catch(function(e){ say(e.message, true); }); }
 $("save").addEventListener("click", function(){ var b = this; b.disabled = true;
-  api("/api/world-admin/settings", { open: $("s-open").checked, radio: $("s-radio").checked, notice: $("s-notice").value, points: { block: Number($("p-block").value), minutes: Number($("p-min").value), daily: Number($("p-day").value) } })
+  api("/api/world-admin/settings", { open: $("s-open").checked, radio: $("s-radio").checked, combat: $("s-combat").checked, notice: $("s-notice").value, points: { block: Number($("p-block").value), minutes: Number($("p-min").value), daily: Number($("p-day").value) } })
     .then(function(r){ say(r.changed.length ? "Saved: " + r.changed.join(", ") + "." : "Nothing changed."); return load(); }, function(e){ say(e.message, true); }).then(function(){ b.disabled = !EDIT; }); });
 load(); setInterval(function(){ if (!document.hidden) load(); }, 30000);
 })();

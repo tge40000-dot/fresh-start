@@ -99,6 +99,8 @@ for t in affiliate showplanner analytics rehost scheduled signal; do node --no-w
 node "$T/create-upload.test.mjs" "$W/rb-command"
 node --no-warnings "$T/rewards-admin.test.mjs" "$W/rb-command"
 node --no-warnings "$ROOT/rb-surface/test/test.mjs" "$W/artist-router/artist-router-v14.js" --expect-surface
+# RB World live rooms (rb-world-live: its own Worker, a Durable Object per room)
+node --no-warnings "$ROOT/rb-world-live/test.mjs"
 node --no-warnings "$ROOT/rb-surface/test/fresh.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$ROOT/rb-site-updates/test/post-link.test.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$ROOT/rb-site-updates/test/create.test.mjs" "$W/artist-router/artist-router-v14.js"
@@ -152,6 +154,7 @@ else
 fi
 py "$ROOT/rb-tools/cfworker.py" push rb-tv "$W/rb-tv"
 py "$ROOT/rb-tools/cfworker.py" push rb-command "$W/rb-command"
+py "$ROOT/rb-tools/cflive.py" "$ROOT/rb-world-live/index.js"
 py "$ROOT/rb-tools/cfworker.py" push rb-email "$W/rb-email"
 # The old Pages copy: one deployment that redirects every path to the main site (earlier deployments stay, for rollback)
 (cd /tmp && CLOUDFLARE_ACCOUNT_ID=$ACCOUNT npx --yes wrangler@3.114.0 pages deploy "$ROOT/rb-site-updates/pages-redirect" --project-name relentless-billionaire --branch allme --commit-dirty=true)

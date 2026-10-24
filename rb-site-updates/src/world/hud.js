@@ -21,7 +21,7 @@ function css() {
 #rb-nitro{flex:1;height:6px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden}#rb-nitro i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#00BFFF,#66ccff)}
 body.rb-real #minimap{display:block!important;position:fixed!important;z-index:6970!important;border-radius:16px 16px 0 0!important;opacity:1!important;border:0!important}body:not(.rb-real) #minimap{display:none!important}
 #combat-hud,#events-bar{display:none!important}
-#btn-combat,#btn-vr{display:none!important}
+#btn-vr{display:none!important}
 #hud-stats .stat-card{padding:8px 12px!important}#hud-stats .stat-value{font-size:15px!important}
 .rb-pedals{position:fixed;right:14px;bottom:calc(282px + env(safe-area-inset-bottom));z-index:6900;display:grid;grid-template-columns:64px 64px;gap:10px;touch-action:none;user-select:none;-webkit-user-select:none}
 .rb-pedals button{height:64px;border-radius:18px;border:1px solid rgba(201,168,76,.5);background:rgba(0,0,0,.55);color:#F5E6A3;font:900 11px/1.1 Inter,sans-serif;letter-spacing:1px;touch-action:none}
@@ -147,6 +147,9 @@ export function help() {
     <tr><td><kbd>G</kbd></td><td>Horn</td></tr>
     <tr><td><kbd>M</kbd> or 📻</td><td>Car radio: RB Radio live, the same song as everyone</td></tr>
     <tr><td><kbd>T</kbd> or 📱</td><td>Your phone: jobs, empire, races, goals, messages, radio, leaders, events and settings</td></tr>
+    <tr><td><kbd>F</kbd> or GET OUT</td><td>Get out and walk; next to a car, get in (yours, or take one from the traffic)</td></tr>
+    <tr><td>On foot</td><td><kbd>WASD</kbd> move, mouse looks (click to lock it, <kbd>Esc</kbd> to let go), <kbd>Shift</kbd> sprint, <kbd>Space</kbd> jump</td></tr>
+    <tr><td>Combat (18+, ⚔️)</td><td>Right mouse aims, left mouse fires, <kbd>R</kbd> reloads, <kbd>1</kbd>-<kbd>6</kbd> or the wheel switch, <kbd>X</kbd> puts it away</td></tr>
     <tr><td><kbd>P</kbd></td><td>Photo mode: the HUD hides, orbit the car, set the blur and a filter, save the picture</td></tr>
     <tr><td><kbd>Shift</kbd> or <kbd>N</kbd></td><td>Nitro (the blue gauge refills)</td></tr>
     <tr><td><kbd>E</kbd></td><td>The lot you're next to: buy, build, manage</td></tr>
@@ -155,6 +158,7 @@ export function help() {
     <tr><td><kbd>L</kbd></td><td>Live leaderboard (🏆 on phones)</td></tr>
     <tr><td><kbd>H</kbd> / <kbd>Esc</kbd></td><td>This help / close a panel</td></tr>
     <tr><td>Phone</td><td>Stick to steer, GAS / BRAKE / DRIFT / NITRO on the right</td></tr>
+    <tr><td>Phone, on foot</td><td>Stick to walk, drag the right side to look, SPRINT / JUMP; with combat on, AIM / FIRE / RELOAD / NEXT</td></tr>
     <tr><td>Controller</td><td>Left stick steer, RT gas, LT brake, A nitro, B drift, Y lot, Back camera, Start help</td></tr>
   </table>
   <h3>MAKING MONEY</h3><table>
