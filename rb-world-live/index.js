@@ -20,6 +20,7 @@ const MAX_PLAYERS = 60;
 export const ARMS = {
   pistol: { range: 70, gap: 0.15, dmg: 26 }, smg: { range: 50, gap: 0.05, dmg: 16 }, shotgun: { range: 30, gap: 0.6, dmg: 13 * 9 },
   rifle: { range: 140, gap: 0.07, dmg: 29 }, sniper: { range: 420, gap: 1.1, dmg: 130 }, rpg: { range: 320, gap: 1.6, dmg: 220 },
+  grenade: { range: 45, gap: 1.0, dmg: 160 },
 };
 const SLACK = 12; // metres of lag allowed between where the server last saw someone and where they really were
 const num = (v, lo, hi) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : 0; };

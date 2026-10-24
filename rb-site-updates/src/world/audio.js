@@ -59,7 +59,7 @@ export function initAudio(E, ctx) {
   const go = () => start();
   for (const ev of ["pointerdown", "keydown", "touchstart"]) window.addEventListener(ev, go, { passive: true });
   start(); // the START button press is a gesture already
-  window.addEventListener("keydown", (e) => { if (e.code === "KeyG" && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) honk(0.18); });
+  window.addEventListener("keydown", (e) => { if (e.code === "KeyG" && !E.car.onFoot && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) honk(0.18); });
   on("crash", (hit) => thud(hit));
   let lastSpeed = 0, t = 0;
   on("frame", (dt) => {

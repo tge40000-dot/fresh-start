@@ -44,10 +44,10 @@ function box(g, m, w, h, d, x, y, z, rx = 0) { const o = new THREE.Mesh(new THRE
 function tube(g, m, r, len, x, y, z, seg = 12) { const o = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, seg), m); o.rotation.x = Math.PI / 2; o.position.set(x, y, z + len / 2); o.castShadow = true; g.add(o); return o; }
 export function model(id) {
   const g = new THREE.Group(), tip = new THREE.Object3D();
-  if (id === "pistol") { box(g, steel, 0.03, 0.035, 0.19, 0, 0.03, 0.06); box(g, poly, 0.028, 0.11, 0.045, 0, -0.03, -0.01, -0.25); tip.position.set(0, 0.035, 0.16); }
-  else if (id === "smg") { box(g, steel, 0.045, 0.06, 0.26, 0, 0.03, 0.06); tube(g, steel, 0.012, 0.09, 0, 0.04, 0.19); box(g, poly, 0.03, 0.1, 0.04, 0, -0.04, 0.0, -0.2); box(g, steel, 0.025, 0.14, 0.03, 0, -0.06, 0.1); box(g, poly, 0.03, 0.03, 0.16, 0, 0.03, -0.14); tip.position.set(0, 0.04, 0.29); }
+  if (id === "pistol") { box(g, steel, 0.03, 0.035, 0.19, 0, 0.03, 0.06); box(g, poly, 0.028, 0.11, 0.045, 0, -0.03, -0.01, -0.25); box(g, steel, 0.006, 0.012, 0.008, 0, 0.054, 0.15); box(g, steel, 0.02, 0.01, 0.008, 0, 0.052, -0.025); box(g, steel, 0.008, 0.03, 0.05, 0, -0.005, 0.04); tip.position.set(0, 0.035, 0.16); } // slide, grip, front and rear sights, trigger guard
+  else if (id === "smg") { box(g, steel, 0.045, 0.06, 0.26, 0, 0.03, 0.06); tube(g, steel, 0.012, 0.09, 0, 0.04, 0.19); box(g, poly, 0.03, 0.1, 0.04, 0, -0.04, 0.0, -0.2); box(g, steel, 0.025, 0.14, 0.03, 0, -0.06, 0.1); box(g, poly, 0.03, 0.03, 0.16, 0, 0.03, -0.14); box(g, steel, 0.012, 0.03, 0.012, 0, 0.075, 0.15); box(g, steel, 0.022, 0.025, 0.02, 0, 0.072, -0.02); tip.position.set(0, 0.04, 0.29); }
   else if (id === "shotgun") { tube(g, steel, 0.016, 0.62, 0, 0.04, 0.0); tube(g, wood, 0.022, 0.2, 0, 0.0, 0.25); box(g, steel, 0.05, 0.07, 0.2, 0, 0.02, -0.1); box(g, wood, 0.045, 0.1, 0.32, 0, -0.01, -0.36, 0.12); tip.position.set(0, 0.04, 0.62); }
-  else if (id === "rifle") { box(g, steel, 0.05, 0.08, 0.36, 0, 0.03, 0.05); tube(g, steel, 0.011, 0.34, 0, 0.045, 0.22); box(g, poly, 0.055, 0.06, 0.24, 0, 0.04, 0.33); box(g, steel, 0.03, 0.16, 0.06, 0, -0.06, 0.1, 0.25); box(g, poly, 0.035, 0.11, 0.045, 0, -0.04, -0.06, -0.3); box(g, poly, 0.04, 0.09, 0.26, 0, 0.0, -0.25); box(g, steel, 0.02, 0.04, 0.12, 0, 0.1, 0.04); tip.position.set(0, 0.045, 0.56); }
+  else if (id === "rifle") { box(g, steel, 0.05, 0.08, 0.36, 0, 0.03, 0.05); tube(g, steel, 0.011, 0.34, 0, 0.045, 0.22); box(g, poly, 0.055, 0.06, 0.24, 0, 0.04, 0.33); box(g, steel, 0.03, 0.16, 0.06, 0, -0.06, 0.1, 0.25); box(g, poly, 0.035, 0.11, 0.045, 0, -0.04, -0.06, -0.3); box(g, poly, 0.04, 0.09, 0.26, 0, 0.0, -0.25); box(g, steel, 0.02, 0.04, 0.12, 0, 0.1, 0.04); box(g, steel, 0.012, 0.06, 0.012, 0, 0.09, 0.43); tube(g, steel, 0.018, 0.04, 0, 0.045, 0.56); tip.position.set(0, 0.045, 0.6); } // front sight post and muzzle brake
   else if (id === "sniper") { tube(g, steel, 0.013, 0.78, 0, 0.045, 0.05); box(g, poly, 0.05, 0.08, 0.36, 0, 0.02, -0.02); box(g, poly, 0.05, 0.12, 0.34, 0, -0.01, -0.34, 0.1); tube(g, steel, 0.025, 0.3, 0, 0.12, -0.05, 16); box(g, steel, 0.03, 0.1, 0.05, 0, -0.06, 0.05); tip.position.set(0, 0.045, 0.83); }
   else if (id === "rpg") { tube(g, olive, 0.045, 1.0, 0, 0.06, -0.45, 16); const war = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.24, 14), olive); war.rotation.x = Math.PI / 2; war.position.set(0, 0.06, 0.66); g.add(war); box(g, poly, 0.03, 0.11, 0.04, 0, -0.03, 0.05, -0.2); box(g, steel, 0.03, 0.06, 0.1, -0.06, 0.1, 0.0); tip.position.set(0, 0.06, 0.78); }
   g.add(tip); g.userData.tip = tip;
@@ -85,6 +85,7 @@ export function initCombat(E, ctx, foot) {
   if (out.on && !(P.weapons || []).length) { P.weapons = ["pistol"]; P.equippedWeapon = "pistol"; } // the starter pistol
   for (const k of ORDER) out.ammo[k] = ARMS[k].mag;
   foot.down = () => dead;
+  let grenades = 3, streak = 0; // grenades this life; kills in a row without going down
   let reloading = 0, cool = 0, firing = false, lastHit = 0, dead = false, recoil = 0;
 
   // ---------------------------------------------------------------- HUD
@@ -115,7 +116,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
   const vit = mk("div", "rb-vitals", '<div>HEALTH</div><div class="b hp"><i></i></div><div>ARMOUR</div><div class="b ar"><i></i></div><div class="w"><span id="rb-wname"></span><span id="rb-ammo"></span></div>');
   const dir = mk("div", "rb-dmgdir", "<i></i>");
   const hurtFx = mk("div", "rb-hurt"), feedBox = mk("div", "rb-feed"), wasted = mk("div", "rb-wasted", "<b>WASTED</b><span></span>"), mchip = mk("div", "rb-mchip");
-  const pad = mk("div", null, '<button data-k="aim">AIM</button><button data-k="fire">FIRE</button><button data-k="reload">RELOAD</button><button data-k="next">NEXT</button>'); pad.className = "rb-cpad";
+  const pad = mk("div", null, '<button data-k="aim">AIM</button><button data-k="fire">FIRE</button><button data-k="reload">RELOAD</button><button data-k="next">NEXT</button><button data-k="nade">GRENADE</button><button data-k="view">VIEW</button>'); pad.className = "rb-cpad";
   function hud() {
     const show = out.on && foot.on && !dead;
     vit.style.display = out.on ? "block" : "none";
@@ -123,8 +124,8 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     vit.querySelector(".ar i").style.width = Math.min(100, P.armor || 0) + "%";
     const w = out.armed && ARMS[out.armed];
     document.getElementById("rb-wname").textContent = w ? w.name.toUpperCase() : out.on ? "UNARMED" : "";
-    document.getElementById("rb-ammo").textContent = w ? (reloading > 0 ? "RELOADING" : out.ammo[out.armed] + " / " + w.mag) : "";
-    xh.style.display = show && w && (foot.aim || matchMedia("(pointer:fine)").matches) ? "block" : "none";
+    document.getElementById("rb-ammo").textContent = (w ? (reloading > 0 ? "RELOADING" : out.ammo[out.armed] + " / " + w.mag) : "") + (out.on ? `  ·  💣 ${grenades}` : "");
+    xh.style.display = show && w && (foot.aim || matchMedia("(pointer:fine)").matches) && !(foot.fp && foot.aim && !w.zoom) ? "block" : "none";
     xh.classList.toggle("scope", !!(show && w && w.zoom && foot.aim));
     document.body.classList.toggle("rb-armed", !!(show && w));
   }
@@ -168,6 +169,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     out.armed = id; reloading = 0;
     if (id) P.equippedWeapon = id;
     gun(foot.me, id ? (models[id] ||= model(id)) : null);
+    vmArm(id);
     if (!id) foot.aim = false;
     hud();
   }
@@ -207,7 +209,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
   canvas.addEventListener("wheel", (e) => { if (out.on && foot.on) cycle(e.deltaY > 0 ? 1 : -1); }, { passive: true });
   pad.querySelectorAll("button").forEach((b) => {
     const k = b.dataset.k;
-    b.addEventListener("touchstart", (e) => { e.preventDefault(); if (k === "aim") { foot.aim = !foot.aim; b.classList.toggle("on", foot.aim); } else if (k === "fire") { firing = true; b.classList.add("on"); trigger(); } else if (k === "reload") reload(); else if (k === "next") cycle(1); hud(); }, { passive: false });
+    b.addEventListener("touchstart", (e) => { e.preventDefault(); if (k === "aim") { foot.aim = !foot.aim; b.classList.toggle("on", foot.aim); } else if (k === "fire") { firing = true; b.classList.add("on"); trigger(); } else if (k === "reload") reload(); else if (k === "next") cycle(1); else if (k === "nade") throwGrenade(); else if (k === "view") foot.view(); hud(); }, { passive: false });
     const up = (e) => { e.preventDefault(); if (k === "fire") { firing = false; b.classList.remove("on"); } };
     b.addEventListener("touchend", up); b.addEventListener("touchcancel", up);
   });
@@ -241,7 +243,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     // from the camera through the crosshair; the shot starts level with you, not behind you
     cam.getWorldDirection(ray.d); ray.o.copy(cam.position);
     const chest = tmp.set(car.x, 1.4 + foot.y, car.z), from = Math.max(0, tmp2.copy(chest).sub(ray.o).dot(ray.d));
-    const muzzle = new THREE.Vector3(); (models[id].userData.tip).getWorldPosition(muzzle);
+    const muzzle = new THREE.Vector3(); ((foot.fp && vm.gun ? vm.gun : models[id]).userData.tip).getWorldPosition(muzzle);
     let first = null;
     if (w.rocket) { rocket(muzzle, ray.d.clone(), from); first = muzzle.clone().addScaledVector(ray.d, 60); }
     else for (let i = 0; i < (w.pellets || 1); i++) {
@@ -251,7 +253,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     }
     if (out.onShot) out.onShot(muzzle, first, id); // live.js: other players see the shot
     flash(muzzle); shot(w.snd); recoil += w.kick;
-    foot.me.userData.recoil = (foot.me.userData.recoil || 0) + w.kick * 3;
+    foot.me.userData.recoil = (foot.me.userData.recoil || 0) + w.kick * 3; vm.kick += w.kick * 2.2;
     foot.pitch = Math.min(0.75, foot.pitch + w.kick * 0.6); foot.yaw += rnd(-w.kick, w.kick) * 0.3;
     gunfire(car.x, car.z);
     if (out.ammo[id] <= 0) setTimeout(reload, 250);
@@ -286,14 +288,14 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
       if (boom) { explode(next); scene.remove(r.g); rockets.splice(i, 1); } else { p.copy(next); puff(p.clone(), 0x999999, 0.25, 0.6); }
     }
   }
-  function explode(at) {
-    const w = ARMS.rpg; shot([300, 0.9, 1]);
+  function explode(at, w = ARMS.rpg, kind = "rpg", what = "your own rocket") {
+    shot([300, 0.9, 1]);
     const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff8a2a).multiplyScalar(3), transparent: true, opacity: 0.9, depthWrite: false }));
     ball.position.copy(at); ball.userData.noAO = true; scene.add(ball); fxs.push({ o: ball, t: 0.6, grow: 9 });
     const light = new THREE.PointLight(0xff9a40, 400, 40); light.position.copy(at).add(new THREE.Vector3(0, 2, 0)); scene.add(light); fxs.push({ o: light, t: 0.35 });
     for (const e of out.enemies) { const d = Math.hypot(e.x - at.x, e.z - at.z); if (!e.dead && d < w.blast) damageEnemy(e, w.dmg * (1 - d / w.blast), false); }
-    for (const [rid, rp] of out.remote) { const d = Math.hypot(rp.x - at.x, rp.z - at.z); if (rp.combat && rp.alive && d < w.blast && out.onRemoteHit) out.onRemoteHit(rid, Math.round(w.dmg * (1 - d / w.blast)), false, "rpg"); }
-    const me = Math.hypot(car.x - at.x, car.z - at.z); if (me < w.blast) hurt(Math.round(120 * (1 - me / w.blast)), "your own rocket");
+    for (const [rid, rp] of out.remote) { const d = Math.hypot(rp.x - at.x, rp.z - at.z); if (rp.combat && rp.alive && d < w.blast && out.onRemoteHit) out.onRemoteHit(rid, Math.round(w.dmg * (1 - d / w.blast)), false, kind); }
+    const me = Math.hypot(car.x - at.x, car.z - at.z); if (me < w.blast) hurt(Math.round(120 * (1 - me / w.blast)), what);
     gunfire(at.x, at.z, 90);
   }
 
@@ -354,7 +356,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     }
   }
   function die(by) {
-    if (dead) return; dead = true; P.deaths = (P.deaths || 0) + 1; P.streak = 0;
+    if (dead) return; dead = true; streak = 0; grenades = 3; P.deaths = (P.deaths || 0) + 1; P.streak = 0;
     out.onDeath.forEach((f) => f(by));
     const bill = Math.min(5000, Math.round(P.netWorth * 0.1));
     P.netWorth = Math.max(0, P.netWorth - bill);
@@ -395,7 +397,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     if (e.dead) return; e.hp -= n; e.alert = true; e.pinned = 1.5;
     puff(new THREE.Vector3(e.x, head ? 1.65 : 1.15, e.z), 0x7a1010, 0.6, 0.25);
     if (e.hp > 0) return;
-    e.dead = true; e.deadT = 0; out.stats.kills++; P.npcKills = (P.npcKills || 0) + 1;
+    e.dead = true; e.deadT = 0; out.stats.kills++; P.npcKills = (P.npcKills || 0) + 1; streakUp();
     if (e.cop) { feed("💀 Officer down"); E.setWanted(Math.min(5, E.wanted() + 1)); return; }
     feed(head ? "💀 Headshot" : "💀 Crew member down"); E.emit("crew-down");
     drop(e.x, e.z, Math.round(rnd(100, 400) / 10) * 10);
@@ -559,7 +561,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     const m = out.mission; if (!m) return;
     out.mission = null; setBeacon(null); if (caseMesh) { scene.remove(caseMesh); caseMesh = null; }
     mchip.style.display = "none";
-    if (ok) { P.netWorth += m.def.pay; P.tokens += m.def.tokens; ctx.play && ctx.play("cash"); E.toast(`✅ ${m.def.name} done: ${E.money(m.def.pay)} + ${m.def.tokens} tokens.`); E.emit("mission-done", m.def.key); ctx.sync && ctx.sync(); }
+    if (ok) { grenades++; P.netWorth += m.def.pay; P.tokens += m.def.tokens; ctx.play && ctx.play("cash"); E.toast(`✅ ${m.def.name} done: ${E.money(m.def.pay)} + ${m.def.tokens} tokens.`); E.emit("mission-done", m.def.key); ctx.sync && ctx.sync(); }
     else E.toast(`❌ ${m.def.name} failed. ${why || ""}`, true);
     // anyone left walks off
     setTimeout(() => { for (const e of out.enemies) if (!e.dead && !e.cop) { e.dead = true; e.deadT = 13.5; } }, ok ? 0 : 2000);
@@ -588,6 +590,73 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     mchip.innerHTML = `${m.def.icon} ${m.say}${left} · ${Math.round(d)} m <span style="display:inline-block;transform:rotate(${(-rel * 180) / Math.PI}deg)">⬆</span>`;
   }
 
+  // ---------------------------------------------------------------- first person: the weapon in your hands
+  // Drawn on top of everything (so it never sinks into a wall), with your forearms, a little sway when you turn,
+  // bob when you walk and a kick when you fire; aiming brings it up to the middle.
+  const vm = { g: new THREE.Group(), gun: null, kick: 0, sway: 0, lastYaw: 0, ads: 0 };
+  vm.g.visible = false; vm.g.renderOrder = 999; scene.add(vm.g);
+  const onTop = (o) => o.traverse((m) => { if (m.isMesh) { m.material = m.material.clone(); m.material.depthTest = false; m.material.depthWrite = false; m.renderOrder = 999; m.castShadow = false; m.userData.noAO = true; } });
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.8 }), handMat = new THREE.MeshStandardMaterial({ color: 0x8d5524, roughness: 0.6 });
+  for (const [x, len, rx] of [[0.07, 0.42, 1.35], [-0.12, 0.36, 1.1]]) { // right forearm on the grip, left one under the barrel
+    const a = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, len, 4, 8), armMat); a.rotation.x = rx; a.position.set(x, -0.07, -0.08); vm.g.add(a);
+    const h = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), handMat); h.position.set(x * 0.9, -0.04, x > 0 ? 0.1 : 0.2); vm.g.add(h);
+  }
+  onTop(vm.g);
+  function vmArm(id) { if (vm.gun) { vm.g.remove(vm.gun); vm.gun = null; } if (id) { vm.gun = model(id); vm.gun.rotation.y = Math.PI; onTop(vm.gun); vm.g.add(vm.gun); } }
+  const qv = new THREE.Quaternion(), off = new THREE.Vector3();
+  function vmTick(dt) {
+    const show = foot.on && foot.fp && out.on && !!out.armed && !dead;
+    vm.g.visible = show; if (!show) return;
+    vm.ads += ((foot.aim ? 1 : 0) - vm.ads) * Math.min(1, dt * 12);
+    let dy = foot.yaw - vm.lastYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); vm.lastYaw = foot.yaw;
+    vm.sway += (dy * 6 - vm.sway) * Math.min(1, dt * 10); vm.kick *= Math.pow(0.0005, dt);
+    const bob = Math.sin(foot.bob * 2) * 0.012 * Math.min(1, foot.speed / 4) * (1 - vm.ads), bx = Math.cos(foot.bob) * 0.01 * Math.min(1, foot.speed / 4) * (1 - vm.ads);
+    // hip: low and to the right; aiming: centred under your eye
+    off.set(0.2 * (1 - vm.ads) + bx - vm.sway * 0.05, -0.2 + 0.07 * vm.ads + bob, -0.42 + 0.1 * vm.ads + vm.kick * 0.6);
+    off.applyQuaternion(cam.quaternion); vm.g.position.copy(cam.position).add(off);
+    qv.setFromEuler(new THREE.Euler(vm.kick * 1.4, vm.sway * 0.3, 0)); vm.g.quaternion.copy(cam.quaternion).multiply(qv);
+  }
+  foot.onView.push(() => vmArm(out.armed));
+
+  // ---------------------------------------------------------------- grenades (G, or GRENADE on a phone)
+  // Three per life (and one more for each mission you finish): thrown where you're looking, they bounce and go off
+  // after 2.5 seconds, like the RPG's blast but smaller.
+  const GREN = { dmg: 160, blast: 6.5 };
+  const gGeo = new THREE.SphereGeometry(0.07, 10, 8), gMat = new THREE.MeshStandardMaterial({ color: 0x3d4a2c, roughness: 0.6, metalness: 0.3 });
+  const thrown = [];
+  function throwGrenade() {
+    if (!out.on || !foot.on || dead) return;
+    if (grenades <= 0) { feed("No grenades left"); return; }
+    grenades--; hud();
+    const d = new THREE.Vector3(); cam.getWorldDirection(d);
+    const m = new THREE.Mesh(gGeo, gMat); m.castShadow = true; m.position.set(car.x + d.x * 0.6, 1.5 + foot.y, car.z + d.z * 0.6); scene.add(m);
+    thrown.push({ m, v: new THREE.Vector3(d.x * 15, d.y * 15 + 5, d.z * 15), t: 2.5 });
+    foot.me.userData.recoil = 0.5; click(700, 0.06);
+  }
+  function grenadesTick(dt) {
+    for (let i = thrown.length - 1; i >= 0; i--) {
+      const g = thrown[i]; g.t -= dt; g.v.y -= 22 * dt;
+      const n = g.m.position.clone().addScaledVector(g.v, dt);
+      if (n.y < 0.07) { n.y = 0.07; g.v.y = -g.v.y * 0.35; g.v.x *= 0.6; g.v.z *= 0.6; if (Math.abs(g.v.y) > 1) click(300, 0.03); }
+      if (n.y < 10 && CITY.blocked(n.x, n.z, 0.1)) { g.v.x = -g.v.x * 0.4; g.v.z = -g.v.z * 0.4; n.x = g.m.position.x; n.z = g.m.position.z; }
+      g.m.position.copy(n); g.m.rotation.x += dt * 8;
+      if (g.t <= 0) { scene.remove(g.m); thrown.splice(i, 1); explode(n, GREN, "grenade", "your own grenade"); }
+    }
+  }
+  window.addEventListener("keydown", (e) => { if (e.code === "KeyG" && !e.repeat && foot.on && out.on && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) throwGrenade(); });
+  out.throwGrenade = throwGrenade; out.grenades = () => grenades;
+
+  // ---------------------------------------------------------------- kill streaks (crew and players, without going down)
+  function streakUp() {
+    streak++;
+    if (streak === 3) { P.armor = Math.min(100, (P.armor || 0) + 50); feed("🔥 3 in a row: +50 armour"); }
+    else if (streak === 5) { P.netWorth += 1000; ctx.sync && ctx.sync(); feed("🔥 5 in a row: +$1,000"); }
+    else if (streak === 7) { P.health = 100; grenades += 2; feed("🔥 7 in a row: full health and 2 grenades"); }
+    else if (streak > 7 && streak % 5 === 0) { P.netWorth += 2500; ctx.sync && ctx.sync(); feed(`🔥 ${streak} in a row: +$2,500`); }
+    hud();
+  }
+  out.streakUp = streakUp; out.streak = () => streak;
+
   // on the radar (hud.js): crew red, police blue, cash green; the mission marker as the target
   function blips() {
     const b = []; for (const e of out.enemies) if (!e.dead) b.push({ x: e.x, z: e.z, c: e.cop ? "#2a6bff" : "#ff3b3b", r: 4 });
@@ -614,7 +683,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
       for (const [x, z] of cands) { const a = Math.atan2(x - car.x, z - car.z); let rel = a - foot.yaw; rel = Math.atan2(Math.sin(rel), Math.cos(rel)); const d = Math.hypot(x - car.x, z - car.z); if (d < 80 && Math.abs(rel) < bd) { bd = Math.abs(rel); best = rel; } }
       if (best != null) foot.yaw += best * Math.min(1, dt * 4);
     }
-    enemiesTick(dt); dropsTick(dt); rocketsTick(dt); missionTick(dt); fxTick(dt); blips();
+    enemiesTick(dt); dropsTick(dt); rocketsTick(dt); grenadesTick(dt); missionTick(dt); fxTick(dt); blips(); vmTick(dt);
     recoil *= Math.pow(0.001, dt);
   });
   setInterval(hud, 500);

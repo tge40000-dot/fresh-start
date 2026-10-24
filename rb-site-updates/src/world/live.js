@@ -40,7 +40,7 @@ export function initLive(E, ctx, foot, combat) {
     if (m.t === "f") { if (combat) combat.remoteShot(m.a, m.b, m.w); return; }
     if (m.t === "hit") { if (combat && combat.on) { lastBy = m.name; if (m.hp != null) combat.remoteHit(m.hp, m.ar, m.name, m.from); else combat.hurt(m.d, m.name); } return; }
     if (m.t === "kill") {
-      if (m.by && m.by === P.id) { P.kills = (P.kills || 0) + 1; P.streak = (P.streak || 0) + 1; if (combat) combat.feed(`🎯 You took out ${m.name}`); }
+      if (m.by && m.by === P.id) { P.kills = (P.kills || 0) + 1; P.streak = (P.streak || 0) + 1; if (combat) { combat.feed(`🎯 You took out ${m.name}`); combat.streakUp(); } }
       else if (m.id === P.id) { if (combat) combat.feed(`☠️ ${m.byName || "Someone"} took you out`); }
       else if (combat && combat.on) combat.feed(m.byName ? `${m.byName} took out ${m.name}` : `${m.name} went down`);
       const p = peers.get(m.id); if (p) p.down = performance.now();

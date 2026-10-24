@@ -20,6 +20,9 @@ export function initFoot(E, ctx) {
   me.visible = false; ctx.scene.add(me);
   const out = {
     on: false, me, yaw: 0, pitch: -0.12, h: 0, speed: 0, y: 0, vy: 0, parked: null, aim: false, sprint: false,
+    fp: (() => { try { return localStorage.getItem("rb_world_fp") === "1"; } catch (e) { return false; } })(), bob: 0,
+    view: (on) => { out.fp = on == null ? !out.fp : !!on; try { localStorage.setItem("rb_world_fp", out.fp ? "1" : "0"); } catch (e) {} E.toast(out.fp ? "👁️ First person (V to switch back)" : "🎮 Third person (V for first person)"); out.onView.forEach((f) => f(out.fp)); },
+    onView: [],
     vehicle: () => (out.on && out.parked ? [out.parked.x, out.parked.z, out.parked.h, 0] : [car.x, car.z, car.heading, car.speed]),
     exit, enter, onShoot: null, onEnter: [], onExit: [],
   };
@@ -72,6 +75,7 @@ export function initFoot(E, ctx) {
     car.vx = car.vz = 0; car.speed = 0; car.onFoot = false;
     out.on = false; out.parked = null; out.aim = false; me.visible = false;
     document.body.classList.remove("rb-onfoot");
+    if (cam.near !== 0.5) { cam.near = 0.5; cam.updateProjectionMatrix(); }
     if (document.pointerLockElement) document.exitPointerLock();
     out.onEnter.forEach((f) => f());
     E.emit("on-foot", false);
@@ -106,6 +110,7 @@ export function initFoot(E, ctx) {
   window.addEventListener("keydown", (e) => {
     if (typing()) return;
     keys[e.code] = true;
+    if (e.code === "KeyV" && !e.repeat && out.on) out.view();
     if (e.code === "KeyF" && !e.repeat) {
       if (!out.on) exit(); else getIn();
     }
@@ -141,6 +146,8 @@ body.rb-photo #rb-door,body.rb-photo .rb-footpad{display:none!important}
 /* out of the way while a panel or the phone is open */
 body:has(.overlay[style*="flex"]) #rb-door,body:has(.overlay[style*="flex"]) .rb-footpad,body:has(#rb-phone.open) #rb-door,body:has(#rb-phone.open) .rb-footpad{display:none!important}`;
   document.head.appendChild(css);
+  const pov = document.getElementById("btn-pov");
+  if (pov) pov.addEventListener("click", (e) => { if (out.on) { e.stopImmediatePropagation(); out.view(); } }, true);
   const door = document.createElement("button"); door.id = "rb-door"; door.type = "button"; door.textContent = "🚶 GET OUT (F)"; document.body.appendChild(door);
   door.addEventListener("click", () => { if (!out.on) exit(); else getIn(); });
   const fp = document.createElement("div"); fp.className = "rb-footpad"; fp.innerHTML = '<button data-k="sprint">SPRINT</button><button data-k="jump">JUMP</button>'; document.body.appendChild(fp);
@@ -187,6 +194,21 @@ body:has(.overlay[style*="flex"]) #rb-door,body:has(.overlay[style*="flex"]) .rb
     me.position.set(car.x, out.y, car.z); me.rotation.y = out.h;
     me.userData.aiming = out.aim; me.userData.pitch = out.pitch;
     pose(me, out.y > 0.05 ? "walk" : out.speed > 5 ? "run" : out.speed > 0.4 ? "walk" : "idle", dt, out.speed);
+    // first person (V): the camera in your eyes, a little head bob; combat.js draws the weapon in your hands
+    if (out.fp) {
+      out.bob += dt * out.speed * 1.7; const bob = out.y > 0.05 ? 0 : Math.sin(out.bob * 2) * 0.035 * Math.min(1, out.speed / 4);
+      const fx = Math.sin(out.yaw), fz = Math.cos(out.yaw), cp = Math.cos(out.pitch);
+      cam.position.set(car.x + fx * 0.14, 1.62 + out.y + bob, car.z + fz * 0.14);
+      if (cam.near !== 0.05) { cam.near = 0.05; cam.updateProjectionMatrix(); }
+      cam.fov += ((out.aim ? 42 : 72) - cam.fov) * Math.min(1, dt * 10); cam.updateProjectionMatrix();
+      cam.lookAt(cam.position.x + fx * cp * 10, cam.position.y + Math.sin(out.pitch) * 10, cam.position.z + fz * cp * 10);
+      me.visible = false;
+      if (ctx.fx) ctx.fx.speed = 0;
+      E.sunAt(car.x, car.z);
+      setDoor(nearestCar() || nearLeft() ? "🚗 GET IN (F)" : "🚶 ON FOOT");
+      return;
+    }
+    if (cam.near !== 0.5) { cam.near = 0.5; cam.updateProjectionMatrix(); }
     // camera: over the right shoulder; closer while aiming; pulled in if a wall is in the way
     const dist = out.aim ? 2.3 : 4.4, side = out.aim ? 0.75 : 0.45, height = 1.65;
     const cx = Math.sin(out.yaw), cz = Math.cos(out.yaw), rx = -Math.cos(out.yaw), rz = Math.sin(out.yaw);
