@@ -48,6 +48,7 @@ function drawMap() {
   // the edge of the drivable city
   const [x0, z0] = P(-CITY.HALF[0], -CITY.HALF[1]); g.strokeStyle = "rgba(226,87,30,.6)"; g.lineWidth = 2; g.setLineDash([6, 6]); g.strokeRect(x0, z0, CITY.HALF[0] * 2 * MAP_K, CITY.HALF[1] * 2 * MAP_K); g.setLineDash([]);
 }
+let streamAt = -1, streamSegs = [];
 function radar() {
   const box = document.createElement("div"); box.id = "rb-radar"; box.title = "Radar (tap for the real-world map)";
   cv = document.createElement("canvas"); cv.width = 336; cv.height = 336; cx = cv.getContext("2d");
@@ -85,6 +86,12 @@ function drawRadar(t) {
   cx.translate(mid, mid); cx.rotate(th); const sc = k / MAP_K; cx.scale(sc, sc);
   cx.drawImage(mapCv, -(c.x + MAP_EXT) * MAP_K, -(c.z + MAP_EXT) * MAP_K);
   cx.restore();
+  // the rest of the Bay Area (stream.js): its roads round you, refreshed twice a second
+  if (window.RBStream) {
+    if (t - streamAt > 0.5) { streamAt = t; streamSegs = window.RBStream.roadsNear(c.x, c.z, (mid / k) * 1.5); }
+    cx.lineCap = "round";
+    for (let i = 0; i < streamSegs.length; i += 6) { const [ax, az] = at(streamSegs[i], streamSegs[i + 1]), [bx, bz] = at(streamSegs[i + 2], streamSegs[i + 3]); cx.strokeStyle = streamSegs[i + 5] & 1 ? "#7a8290" : streamSegs[i + 5] & 2 ? "#6a6f78" : "#4b4f57"; cx.lineWidth = Math.max(1.5, streamSegs[i + 4] * k); cx.beginPath(); cx.moveTo(ax, az); cx.lineTo(bx, bz); cx.stroke(); }
+  }
   // lots by owner: yours in the district colour, other players' grey, for sale outlined in the district colour
   for (const l of LOTS) {
     if (!l.building) continue;
@@ -175,6 +182,7 @@ export function help() {
     <tr><td>🏁 Races</td><td>Host a race and everyone in the city gets an invite, or join one. Podium places win $25,000 / $15,000 / $8,000. Blue canisters fill your nitro; driving close behind another racer (slipstream) refills it and adds speed.</td></tr>
     <tr><td>🎨 Paint</td><td>In the race menu: colours for your car. Other players see it, with your name and level.</td></tr>
     <tr><td>📋 Goals</td><td>Daily rewards, three daily quests, achievements and your level.</td></tr>
+    <tr><td>🌉 Bay Area</td><td>The whole Bay Area, streamed in from OpenStreetMap as you drive out of downtown Vallejo. Bridge tolls are real 2026 rates, charged the way they really are (FasTrak, plate or invoice: pick in 🌉). Fuel runs down as you drive; fill up at a real petrol station at the area's AAA average price (<kbd>U</kbd>). Each town shows its real typical home value and rent (Zillow).</td></tr>
     <tr><td>📖 Story</td><td>Rise of RB: five chapters in the phone, each with its own reward.</td></tr>
     <tr><td>🔧 Customs</td><td>Upgrade your own car: engine, brakes, tyres, nitro and armour. Every car drives like what it is: sports cars are quick, vans are slow.</td></tr>
     <tr><td>👕 Wardrobe</td><td>Your clothes, hair and skin tone. Other players see your look.</td></tr>

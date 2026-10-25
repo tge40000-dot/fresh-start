@@ -259,7 +259,7 @@ USERS.u_bob = { email: "bob@example.com" };
   const csp = w.headers.get("Content-Security-Policy");
   assert.ok(/connect-src 'self'[^;]*basemaps\.cartocdn\.com/.test(csp) && !/esm\.sh|instantdb|stripe/i.test(csp), "the game's hosts only: no InstantDB, no Stripe");
   assert.ok(!/instantdb|esm\.sh|js\.stripe\.com|\$9\.99/i.test(wh), "no InstantDB, Stripe or the unbacked $9.99 offer");
-  assert.ok(wh.includes('src="/app/world/main.js?v=w16"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
+  assert.ok(wh.includes('src="/app/world/main.js?v=w17"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
   assert.ok(wh.includes("OPEN THE RB APP") && wh.includes("SEE MEMBERSHIPS"));
   // the car radio and the notice come from RB Command > RB World; "Enter as Admin" opens RB World's controls there
   assert.ok(wh.includes('window.RB_WORLD_CFG = {"radio":true,"notice":"","combat":true}') && wh.includes("data-rb-radio-host") && wh.includes('id="radio-vol"'));
@@ -269,7 +269,7 @@ USERS.u_bob = { email: "bob@example.com" };
   // the phone: everything else on screen in one place (📱 or T), with a Classic layout in Settings
   const pj = await (await go("/app/world/phone.js")).text();
   assert.ok(pj.includes("export function initPhone") && pj.includes('"KeyT"') && pj.includes("rb-phone-ui") && pj.includes('"set-screen"'));
-  for (const app of ["jobs", "empire", "races", "goals", "chat", "radio", "leaders", "events", "story", "customs", "wardrobe", "settings", "help"]) assert.ok(pj.includes(`["${app}", `), "phone app " + app);
+  for (const app of ["jobs", "empire", "races", "goals", "chat", "radio", "leaders", "events", "bay", "story", "customs", "wardrobe", "settings", "help"]) assert.ok(pj.includes(`["${app}", `), "phone app " + app);
   assert.ok(wh.includes('id="set-screen"') && wh.includes("Classic: everything on screen"));
   const mjs = await (await go("/app/world/main.js")).text(); assert.ok(mjs.includes("from './phone.js'") && mjs.includes("initPhone(window.RBEmpire, ectx)"));
   // the billboards and posters: sponsors' ads from RB Command, labelled, counted, with a link when you drive close
@@ -278,13 +278,14 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.ok(aj.includes("export function initAds") && aj.includes("/api/world/billboards") && aj.includes("/api/world/ad-event") && aj.includes("SPONSORED · ") && aj.includes('rel = "sponsored noopener"'));
   const cityj = await (await go("/app/world/city.js")).text(); assert.ok(cityj.includes("adSpots") && cityj.includes("adPool"));
   // on foot (F), 18+ combat, car damage and live play with other players
-  for (const [f, needs] of Object.entries({ "onfoot.js": ["export function initFoot", '"KeyF"', "takeTraffic"], "char.js": ["export function person", "export function pose"], "combat.js": ["export function initCombat", "rb_world_18", "I'M 18 OR OLDER"], "live.js": ["export function initLive", "wss://rb-world-live.tge40000.workers.dev"], "damage.js": ["export function initDamage", "car.stall"], "garage.js": ["export function initGarage", "rb_customs_v1", "car.tune"], "wardrobe.js": ["export function initWardrobe", "foot.setLook"], "story.js": ["export function initStory", "RISE OF RB", "rb_story_v1"], "events.js": ["export function initEvents", "Speed camera", "armored truck"] })) {
+  for (const [f, needs] of Object.entries({ "onfoot.js": ["export function initFoot", '"KeyF"', "takeTraffic"], "char.js": ["export function person", "export function pose"], "combat.js": ["export function initCombat", "rb_world_18", "I'M 18 OR OLDER"], "live.js": ["export function initLive", "wss://rb-world-live.tge40000.workers.dev"], "damage.js": ["export function initDamage", "car.stall"], "garage.js": ["export function initGarage", "rb_customs_v1", "car.tune"], "wardrobe.js": ["export function initWardrobe", "foot.setLook"], "story.js": ["export function initStory", "RISE OF RB", "rb_story_v1"], "events.js": ["export function initEvents", "Speed camera", "armored truck"], "stream.js": ["export function initStream", "tiles.openfreemap.org", "CITY.ext.blocked"], "stream_worker.js": ["from \"./mvt.js\"", "from \"./earcut.js\"", "brunnel"], "mvt.js": ["export function decode"], "earcut.js": ["ISC License", "export default function earcut"], "bay.js": ["export function initBay", "FasTrak", "AAA average"], "bay_data.js": ["Golden Gate Bridge", "fastrak: 10.25", "Zillow", "export const CITIES"] })) {
     const t = await (await go("/app/world/" + f)).text(); for (const n of needs) assert.ok(t.includes(n), f + ": " + n);
   }
   assert.ok(mjs.includes("from './account.js'") && mjs.includes("applySave(who)") && mjs.includes("startSaving(player.id"), "the same player every visit, saved to RB");
   const acj = await (await go("/app/world/account.js")).text(); assert.ok(acj.includes("export async function whoAmI") && acj.includes("/api/world/save") && acj.includes("rb_empire_v1"));
   assert.ok((await (await go("/app/world/")).text()).includes('id="rb-acct"'), "the start screen says where the empire is saved");
-  for (const n of ["initFoot(window.RBEmpire, ectx)", "initCombat(window.RBEmpire, ectx, window.RBFoot)", "initLive(window.RBEmpire, ectx, window.RBFoot, window.RBCombat)", "initDamage(window.RBEmpire, ectx)", "initGarage(window.RBEmpire, ectx)", "initWardrobe(window.RBEmpire, ectx, window.RBFoot)", "initStory(window.RBEmpire, ectx, window.RBFoot, window.RBCombat)", "initEvents(window.RBEmpire, ectx, window.RBFoot, window.RBCombat)"]) assert.ok(mjs.includes(n), n);
+  for (const n of ["initFoot(window.RBEmpire, ectx)", "initCombat(window.RBEmpire, ectx, window.RBFoot)", "initLive(window.RBEmpire, ectx, window.RBFoot, window.RBCombat)", "initDamage(window.RBEmpire, ectx)", "initGarage(window.RBEmpire, ectx)", "initWardrobe(window.RBEmpire, ectx, window.RBFoot)", "initStory(window.RBEmpire, ectx, window.RBFoot, window.RBCombat)", "initEvents(window.RBEmpire, ectx, window.RBFoot, window.RBCombat)", "initStream(window.RBEmpire, ectx)", "initBay(window.RBEmpire, ectx, window.RBFoot, window.RBStream)"]) assert.ok(mjs.includes(n), n);
+  assert.ok((await go("/app/world/")).headers.get("Content-Security-Policy").includes("https://tiles.openfreemap.org"), "the map tiles for the Bay Area are allowed");
   assert.ok((await go("/app/world/")).headers.get("Content-Security-Policy").includes("wss://rb-world-live.tge40000.workers.dev"), "the live room is allowed");
   sql("UPDATE badge_config SET value='off' WHERE key='world_combat'");
   assert.ok((await (await go("/app/world/")).text()).includes('"combat":false'), "RB Command can switch combat off");
@@ -468,7 +469,7 @@ USERS.u_bob = { email: "bob@example.com" };
   const race = (id, action, extra = {}) => { NOW += 50; return api("/api/world/race", { method: "POST", body: { id, name: "R" + id.slice(0, 3), action, ...extra } }); };
   const beatR = (id, extra = {}) => { NOW += 4000; return api("/api/world/beat", { method: "POST", body: { id, name: "R" + id.slice(0, 3), ...extra } }); };
   const A = "raceaaaa-0001", B = "racebbbb-0002", Cc = "racecccc-0003";
-  await beatR(A, { car: [10, -114, 0.5, 20], level: 7, color: "#2F55D4" }); await beatR(B, { car: [2999, 0, 0, 0], color: "red" });
+  await beatR(A, { car: [10, -114, 0.5, 20], level: 7, color: "#2F55D4" }); await beatR(B, { car: [250000, 0, 0, 0], color: "red" }); await beatR(B, { car: [30000, -2000, 0, 0] }); assert.deepEqual({ ...one("SELECT x, z FROM world_cars WHERE id = ?", B) }, { x: 30000, z: -2000 }, "anywhere in the Bay Area");
   let wb = await beatR(B, { car: [5, 5, 0, 0], level: 2 });
   const pa = wb.body.peers.find((p) => p.id === A);
   assert.deepEqual(pa.car, [10, -114, 0.5, 20], "others see where your car is"); assert.equal(pa.level, 7); assert.equal(pa.color, "#2F55D4");

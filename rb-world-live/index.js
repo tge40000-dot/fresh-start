@@ -95,10 +95,10 @@ export class Room {
     if (!m || typeof m !== "object") return;
     if (m.t === "s") {
       // where you are: in the car (m "c") or on foot (m "f"), with the car you left when you're on foot
-      const s = { x: num(m.x, -5e4, 5e4), z: num(m.z, -5e4, 5e4), h: num(m.h, -50, 50), v: num(m.v, -80, 80), m: m.m === "f" ? "f" : "c",
+      const s = { x: num(m.x, -2e5, 2e5), z: num(m.z, -2e5, 2e5), h: num(m.h, -50, 50), v: num(m.v, -80, 80), m: m.m === "f" ? "f" : "c",
         w: ARMS[m.w] ? m.w : null, aim: !!m.aim, c: !!m.c && p.fights && !p.banned, hp: num(m.hp, 0, 200), col: /^#[0-9a-f]{6}$/i.test(m.col || "") ? m.col : null,
         lk: typeof m.lk === "string" && /^[a-z0-9,]{1,48}$/.test(m.lk) ? m.lk : null,
-        car: Array.isArray(m.car) && m.car.length === 3 ? m.car.map((v, i) => num(v, i === 2 ? -50 : -5e4, i === 2 ? 50 : 5e4)) : null };
+        car: Array.isArray(m.car) && m.car.length === 3 ? m.car.map((v, i) => num(v, i === 2 ? -50 : -2e5, i === 2 ? 50 : 2e5)) : null };
       p.s = s; p.combat = s.c;
       if (p.alive === false && m.spawn) { p.alive = true; p.hp = 100; p.ar = Math.min(100, num(m.ar, 0, 100)); }
       else if (p.alive) {
@@ -117,7 +117,7 @@ export class Room {
       // a shot: everyone sees it; if it names a target, check it could have landed and tell the target
       if (!p.s || p.banned || !p.combat || !p.alive) return;
       const w = ARMS[m.w]; if (!w) return;
-      const a = Array.isArray(m.a) && m.a.length === 3 ? m.a.map((v) => num(v, -5e4, 5e4)) : null, b = Array.isArray(m.b) && m.b.length === 3 ? m.b.map((v) => num(v, -5e4, 5e4)) : null;
+      const a = Array.isArray(m.a) && m.a.length === 3 ? m.a.map((v) => num(v, -2e5, 2e5)) : null, b = Array.isArray(m.b) && m.b.length === 3 ? m.b.map((v) => num(v, -2e5, 2e5)) : null;
       if (a && b) this.everyone({ t: "f", from: p.id, a, b, w: m.w }, ws);
       if (!m.to) return;
       const last = p.last[m.w] || 0; if (now - last < w.gap * 1000 * 0.7) return; p.last[m.w] = now;

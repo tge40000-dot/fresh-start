@@ -237,7 +237,7 @@ car.vx = 0; car.vz = 0; car.boost = 1; car.steer = 0;
 function driveCar(dt) {
   let { t, s, boost, hand } = driveInput();
   if (car.lock || car.photo) { t = 0; boost = false; car.vx = car.vz = 0; } // held on the grid during a race countdown, or for a photo
-  if (car.stall && t > 0) { t = 0; boost = false; } // the engine's wrecked (damage.js)
+  if ((car.stall || car.empty) && t > 0) { t = 0; boost = false; } // the engine's wrecked (damage.js) or out of fuel (bay.js)
   const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
   let fwd = car.vx * fx + car.vz * fz, side = car.vx * fz - car.vz * fx;
   const T = car.tune || { max: 1, accel: 1, grip: 1, brake: 1, nitro: 1 }; // the car's class and RB Customs upgrades (garage.js)
@@ -862,6 +862,7 @@ export function initEmpire(ctx) {
     if (car.onFoot && footTick) footTick(dt); else driveCar(dt);
     for (const c of traffic) moveRoadCar(c, dt, false);
     copsTick(dt); jobTick(dt); dropsTick(dt, t); lotTick(dt); skidsTick(dt); emit("frame", dt);
+    sky.position.set(C.camera.position.x, 0, C.camera.position.z); stars.position.copy(sky.position); // the sky goes where you go (stream.js: the whole Bay Area)
     for (const g of Object.values(lotMeshes)) for (const o of g.children) if (o.userData.spin) o.rotation.y += dt;
     acc += dt; if (acc >= 1) { tycoonTick(acc); trafficTick(); poolsTick(); acc = 0; S.lastTick = Date.now(); }
     gpsAcc += dt; if (gpsAcc >= 5) { gpsAcc = 0; gpsTick(); save(); }

@@ -24,6 +24,8 @@ import { initGarage } from './garage.js';
 import { initWardrobe } from './wardrobe.js';
 import { initStory } from './story.js';
 import { initEvents } from './events.js';
+import { initStream } from './stream.js';
+import { initBay } from './bay.js';
 
 // --- CORE ---
 const db = init();
@@ -481,6 +483,8 @@ async function startGame() {
     window.RBWardrobe = initWardrobe(window.RBEmpire, ectx, window.RBFoot); // clothes other players see too (👕)
     window.RBStory = initStory(window.RBEmpire, ectx, window.RBFoot, window.RBCombat); // Rise of RB, five chapters (📖)
     window.RBEvents = initEvents(window.RBEmpire, ectx, window.RBFoot, window.RBCombat); // cash crates, speed cameras, the armored truck
+    window.RBStream = initStream(window.RBEmpire, ectx); // the rest of the Bay Area, streamed in as you drive
+    window.RBBay = initBay(window.RBEmpire, ectx, window.RBFoot, window.RBStream); // real tolls, fuel and prices (🌉)
     window.RBSave = startSaving(player.id, () => ({ netWorth: Math.floor(player.netWorth), tokens: Math.floor(player.tokens) })); // the saved game, to RB
     setTimeout(() => window.RBEmpire.toast(player.signedIn ? '💾 Saved to your RB account: play on any device.' : '💾 Saved on this device. Sign in on the start screen to keep it on your RB account.'), 4500);
     const notice = (window.RB_WORLD_CFG || {}).notice; if (notice) setTimeout(() => window.RBEmpire.toast('📣 ' + notice), 2500);

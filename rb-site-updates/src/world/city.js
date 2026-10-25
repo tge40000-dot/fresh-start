@@ -15,6 +15,10 @@ export const ATTRIBUTION = D.attribution;
 export const NAME = D.name || "RB City", SHORT = D.short || "Downtown", PLAZA_NAME = D.plazaName || "RB Plaza";
 export const START = D.start || [0, 0, 0]; // [x, z, heading]: on the road by RB Plaza
 export const PLAZA = D.plaza || [0, 0];
+// the projection (stream.js builds the rest of the Bay Area in the same frame), and what stream.js answers for the
+// world outside the baked city: what's solid there, the street and the place
+export const FRAME = { origin: D.origin, kx: D.kx, kz: D.kz, rot: D.rot };
+export const ext = { blocked: null, street: null, area: null };
 
 // ---------------------------------------------------------------- the map, read once
 export const buildings = D.buildings.map((b) => {
@@ -47,8 +51,7 @@ export const lotGeo = Object.fromEntries(Object.entries(D.lots).map(([id, l]) =>
 // ---------------------------------------------------------------- lookups
 // A coarse grid of the drivable city's buildings, so collision only looks at the few nearby.
 const CELL = 24, grid = new Map();
-buildings.forEach((b, i) => {
-  if (!b.core) return;
+buildings.forEach((b, i) => { // the skyline's too: it's solid once you can drive out to it
   for (let gx = Math.floor(b.box[0] / CELL); gx <= Math.floor(b.box[2] / CELL); gx++) for (let gz = Math.floor(b.box[1] / CELL); gz <= Math.floor(b.box[3] / CELL); gz++) {
     const k = gx * 100003 + gz; if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i);
   }
@@ -61,8 +64,10 @@ const water = D.water.map((a) => { const pts = []; for (let i = 0; i < a.length;
 export function inWater(x, z) { for (const w of water) if (x >= w.box[0] && x <= w.box[2] && z >= w.box[1] && z <= w.box[3] && inside(w.pts, x, z)) return true; return false; }
 // Is this spot inside a building (or within r of a wall), in the water, or off the edge of the city?
 export function blocked(x, z, r = 1.1) {
-  if (Math.abs(x) > HALF[0] + 25 || Math.abs(z) > HALF[1] + 25) return true;
-  if (water.length && inWater(x, z)) return true;
+  const out = Math.abs(x) > HALF[0] + 25 || Math.abs(z) > HALF[1] + 25;
+  if (out && !ext.blocked) return true; // nothing beyond the city yet
+  if (out && ext.blocked(x, z, r)) return true;
+  if (water.length && !out && inWater(x, z)) return true;
   const list = grid.get(Math.floor(x / CELL) * 100003 + Math.floor(z / CELL));
   if (!list) return false;
   for (const i of list) { const b = buildings[i]; if (x < b.box[0] - r || x > b.box[2] + r || z < b.box[1] - r || z > b.box[3] + r) continue; if (inside(b.pts, x, z) || edgeDist(b.pts, x, z) < r) return true; }
@@ -74,8 +79,9 @@ export function nearestEdge(x, z) {
   for (const e of edges) { const d = segDist(x, z, nodes[e.a], nodes[e.b]); if (d < bd) { bd = d; best = e; } }
   return { e: best, d: bd };
 }
-export function streetName(x, z) { const { e, d } = nearestEdge(x, z); return e && d < e.w / 2 + 10 ? e.name : null; }
-export function areaName(x, z) { let best = null, bd = Infinity; for (const p of places) { const d = Math.hypot(p.x - x, p.z - z); if (d < bd) { bd = d; best = p; } } return best ? best.name : SHORT; }
+const outside = (x, z) => Math.abs(x) > HALF[0] + 25 || Math.abs(z) > HALF[1] + 25;
+export function streetName(x, z) { if (outside(x, z) && ext.street) return ext.street(x, z); const { e, d } = nearestEdge(x, z); return e && d < e.w / 2 + 10 ? e.name : null; }
+export function areaName(x, z) { if (outside(x, z) && ext.area) { const a = ext.area(x, z); if (a) return a; } let best = null, bd = Infinity; for (const p of places) { const d = Math.hypot(p.x - x, p.z - z); if (d < bd) { bd = d; best = p; } } return best ? best.name : SHORT; }
 export function nodeNear(x, z) { let b = 0, bd = Infinity; nodes.forEach((n, i) => { const d = Math.hypot(n[0] - x, n[1] - z); if (d < bd && anyLinks[i].length) { bd = d; b = i; } }); return b; }
 // A random spot on a drivable road (not a service lane), optionally at least `minFrom` metres from a point and
 // within `maxFrom` of `near`.

@@ -22,7 +22,7 @@
 // relentlessbillionaire.com/game/ keeps working); play-time points only start once RB Badge itself is switched on.
 const WORLD_PEER_SECONDS = 20;
 const WORLD_BEAT_CREDIT = 10;
-const WORLD_VERSION = "w16";
+const WORLD_VERSION = "w17";
 const WORLD_OWNER_DAYS = 14; // a lot whose owner hasn't played for this long is for sale again
 const WORLD_CAR_COLOR = /^#[0-9a-fA-F]{6}$/;
 
@@ -82,7 +82,7 @@ async function worldBeat(request, env, g, body) {
   const now = new Date(Date.now()).toISOString(), since = Math.max(0, worldNum(body.since)), ms = Date.now();
   const car = Array.isArray(body.car) ? body.car.slice(0, 4).map(Number) : [];
   const lvl = Math.max(0, Math.min(999, worldNum(body.level))); // 0: not sent, keep what's stored
-  const carOk = car.length === 4 && car.every(Number.isFinite) && Math.abs(car[0]) < 1500 && Math.abs(car[1]) < 1500;
+  const carOk = car.length === 4 && car.every(Number.isFinite) && Math.abs(car[0]) < 2e5 && Math.abs(car[1]) < 2e5; // the whole Bay Area, in metres from downtown Vallejo
   const [, peers, board, chat] = await env.DB.batch([
     env.DB.prepare("INSERT INTO world_players (id, name, clerk_user_id, net_worth, tokens, kills, deaths, health, lng, lat, seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, clerk_user_id = coalesce(excluded.clerk_user_id, world_players.clerk_user_id), net_worth = excluded.net_worth, tokens = excluded.tokens, kills = excluded.kills, deaths = excluded.deaths, health = excluded.health, lng = coalesce(excluded.lng, world_players.lng), lat = coalesce(excluded.lat, world_players.lat), seen_at = excluded.seen_at")
       .bind(pid, name, clerkId, worldNum(body.netWorth), worldNum(body.tokens), worldNum(body.kills, 1e9), worldNum(body.deaths, 1e9), Math.max(0, Math.min(1000, worldNum(body.health, 1e6))), lng, lat, now),
@@ -447,7 +447,7 @@ function worldCsp(env) {
   // The game builds its panels with inline handlers and styles, as it always has, so scripts allow 'unsafe-inline'.
   return ["default-src 'self'", `script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://relentlessbillionaire.com https://static.cloudflareinsights.com ${clerk} https://challenges.cloudflare.com`,
     "style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com", "font-src 'self' https://fonts.gstatic.com data:", "img-src 'self' data: blob: https:", "media-src 'self' https: blob:",
-    `connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://*.basemaps.cartocdn.com https://tiles.basemaps.cartocdn.com https://relentlessbillionaire.com https://cloudflareinsights.com wss://rb-world-live.tge40000.workers.dev ${clerk} https://clerk-telemetry.com`,
+    `connect-src 'self' https://tiles.openfreemap.org https://cdn.jsdelivr.net https://unpkg.com https://*.basemaps.cartocdn.com https://tiles.basemaps.cartocdn.com https://relentlessbillionaire.com https://cloudflareinsights.com wss://rb-world-live.tge40000.workers.dev ${clerk} https://clerk-telemetry.com`,
     "worker-src 'self' blob:", `frame-src https://challenges.cloudflare.com ${clerk}`, "object-src 'none'", "base-uri 'self'", "frame-ancestors 'self'"].join("; ");
 }
 
