@@ -40,4 +40,7 @@ INSERT OR IGNORE INTO badge_config (key, value, label, help, sort_order) VALUES 
 INSERT OR IGNORE INTO badge_config (key, value, label, help, sort_order) VALUES ('world_combat', 'on', 'RB World combat (18+)', 'on or off. While on, players who confirm they are 18 or older can turn on weapons, combat missions and fights with other players who turned it on too. Off: nobody can.', 52);
 INSERT OR IGNORE INTO badge_config (key, value, label, help, sort_order) VALUES ('world_notice', '', 'RB World notice', 'A short message players see when they start RB World and on the city ticker (up to 200 characters). Empty: no notice.', 51);
 CREATE TABLE IF NOT EXISTS world_bans (id TEXT PRIMARY KEY, name TEXT, reason TEXT, by TEXT, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS world_accounts (clerk_user_id TEXT PRIMARY KEY, player_id TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS world_guests (player_id TEXT PRIMARY KEY, key_hash TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS world_saves (player_id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS world_ad_stats (ad_id INTEGER NOT NULL, day TEXT NOT NULL, impressions INTEGER NOT NULL DEFAULT 0, viewable INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (ad_id, day));

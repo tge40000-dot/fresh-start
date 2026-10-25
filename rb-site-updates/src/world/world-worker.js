@@ -7,6 +7,13 @@
 //   POST /api/world/chat        a message (240 characters, rate limited)
 //   GET  /api/world/ads         the ticker: live RB ads for the game and upcoming RB Events
 //   POST /api/world/race        street races: host, solo, join, sync (position and checkpoints), leave, records
+//   POST /api/world/me          who this player is: the RB account's one player (signed in, on any device), or this
+//                               device's guest player; with their money, tokens and saved game
+//   POST /api/world/save        the saved game (empire, progress, customs, story, wardrobe, ...), so it follows the
+//                               player: to any device for an RB account, back after signing out for a guest
+// One player per RB account (world_accounts) and one per device for guests (world_guests: the device keeps a random
+// key, the server only its hash). Once a player is tied to either, every write for it (beat, chat, lots, rent, races,
+// save) needs that account's session or that device's key, so nobody else can play as them.
 // Play time: a signed-in member's beats add up the seconds between them (at most WORLD_BEAT_CREDIT each, so several
 // tabs or a stalled tab don't count extra); every world_block_minutes of play gives world_points_block points, up to
 // world_points_daily a day. Net worth and the rest of the game stay in the player's browser, as before; the
@@ -115,6 +122,69 @@ async function worldBeat(request, env, g, body) {
     lots: (ownLots.results || []).map(worldLotOut),
     rent,
   });
+}
+
+// ---------------------------------------------------------------- accounts and saved games
+const WORLD_SAVE_MAX = 200000;
+async function worldHash(key) { return [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key)))].map((b) => b.toString(16).padStart(2, "0")).join(""); }
+async function worldKeyHash(request) { const k = String(request.headers.get("X-RB-World-Key") || ""); return /^[a-f0-9]{64}$/.test(k) ? await worldHash(k) : null; }
+// May this request act for this player? { ok, banned, clerk } (clerk: the account's user when it's an account's player)
+async function worldWho(request, env, pid) {
+  const t = await env.DB.prepare("SELECT (SELECT 1 FROM world_bans WHERE id = ?1) AS banned, (SELECT clerk_user_id FROM world_accounts WHERE player_id = ?1) AS owner, (SELECT key_hash FROM world_guests WHERE player_id = ?1) AS gkey").bind(pid).first();
+  if (t?.owner) { const s = await verifyClerkSession(request, env); return { ok: s.ok && s.userId === t.owner, banned: !!t.banned, clerk: t.owner, account: true }; }
+  if (t?.gkey) return { ok: (await worldKeyHash(request)) === t.gkey, banned: !!t.banned, clerk: null };
+  return { ok: true, banned: !!t?.banned, clerk: null }; // a player from before accounts: open, as it always was
+}
+async function worldMe(request, env, body) {
+  if (!(await worldRateOk(env, "me:" + (await worldIpKey(request)), 20))) return rbcJson({ ok: false, error: "Too fast." }, 429);
+  const keyHash = await worldKeyHash(request);
+  if (!keyHash) return rbcJson({ ok: false, error: "Start the game again." }, 400);
+  const dev = String(body?.id || ""), now = new Date(Date.now()).toISOString();
+  const taken = async (id) => WORLD_ID.test(id) ? await env.DB.prepare("SELECT (SELECT 1 FROM world_accounts WHERE player_id = ?1) AS a, (SELECT key_hash FROM world_guests WHERE player_id = ?1) AS g").bind(id).first() : { a: 1 };
+  let clerkId = null;
+  if (/^Bearer\s+\S+/i.test(request.headers.get("Authorization") || "")) {
+    const s = await verifyClerkSession(request, env);
+    if (s.ok) clerkId = s.userId;
+    else if (s.status === 503) return rbcJson({ ok: false, error: "Sign-in is busy. Try again in a moment." }, 503);
+  }
+  let pid;
+  if (clerkId) {
+    // the account's player; the first time, its best player from before (when it was signed in), or this device's
+    // guest player (so what you built as a guest comes with you), or a new one
+    let acc = await env.DB.prepare("SELECT player_id FROM world_accounts WHERE clerk_user_id = ?").bind(clerkId).first();
+    if (!acc) {
+      const old = await env.DB.prepare("SELECT id FROM world_players WHERE clerk_user_id = ? AND id NOT IN (SELECT player_id FROM world_accounts) ORDER BY net_worth DESC LIMIT 1").bind(clerkId).first();
+      let pick = old?.id || null;
+      if (!pick) { const t = await taken(dev); if (!t?.a && (!t?.g || t.g === keyHash)) pick = dev; }
+      await env.DB.prepare("INSERT OR IGNORE INTO world_accounts (clerk_user_id, player_id, created_at, updated_at) VALUES (?, ?, ?, ?)").bind(clerkId, pick || crypto.randomUUID(), now, now).run();
+      acc = await env.DB.prepare("SELECT player_id FROM world_accounts WHERE clerk_user_id = ?").bind(clerkId).first();
+    }
+    pid = acc.player_id;
+  } else {
+    // a guest: this device's player, unless it's an account's or another device's; then a new one for this device
+    const t = await taken(dev);
+    pid = !t?.a && (!t?.g || t.g === keyHash) ? dev : crypto.randomUUID();
+    await env.DB.prepare("INSERT OR IGNORE INTO world_guests (player_id, key_hash, created_at) VALUES (?, ?, ?)").bind(pid, keyHash, now).run();
+    const g = await env.DB.prepare("SELECT key_hash FROM world_guests WHERE player_id = ?").bind(pid).first();
+    if (g?.key_hash !== keyHash) { pid = crypto.randomUUID(); await env.DB.prepare("INSERT INTO world_guests (player_id, key_hash, created_at) VALUES (?, ?, ?)").bind(pid, keyHash, now).run(); }
+  }
+  const [row, save] = await env.DB.batch([
+    env.DB.prepare("SELECT name, net_worth, tokens FROM world_players WHERE id = ?").bind(pid),
+    env.DB.prepare("SELECT data, updated_at FROM world_saves WHERE player_id = ?").bind(pid),
+  ]);
+  const r = row.results?.[0], sv = save.results?.[0];
+  return rbcJson({ ok: true, id: pid, signedIn: !!clerkId, name: r?.name || null, netWorth: r ? Number(r.net_worth) : null, tokens: r ? Number(r.tokens) : null,
+    save: sv ? { data: sv.data, at: Number(sv.updated_at) } : null });
+}
+async function worldSave(env, body) {
+  const pid = String(body?.id || ""), data = typeof body?.data === "string" ? body.data : "";
+  if (!WORLD_ID.test(pid) || !data) return rbcJson({ ok: false, error: "Nothing to save." }, 400);
+  if (data.length > WORLD_SAVE_MAX) return rbcJson({ ok: false, error: "The save is too big." }, 413);
+  try { const o = JSON.parse(data); if (!o || typeof o !== "object" || Array.isArray(o)) throw 0; } catch { return rbcJson({ ok: false, error: "That isn't a saved game." }, 400); }
+  if (!(await worldRateOk(env, "s:" + pid, 8))) return rbcJson({ ok: false, error: "Too fast." }, 429);
+  const at = Date.now();
+  await env.DB.prepare("INSERT INTO world_saves (player_id, data, updated_at) VALUES (?, ?, ?) ON CONFLICT(player_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at").bind(pid, data, at).run();
+  return rbcJson({ ok: true, at });
 }
 
 // ---------------------------------------------------------------- the empire: lots and rent (empire_defs.js, as RBE)
@@ -400,13 +470,18 @@ async function rbWorldRoute(request, env, url, path, method) {
   if (!g.worldOpen) return rbcJson({ ok: false, error: "RB World is coming soon." }, 403);
   if (path === "/api/world/ads" && method === "GET") return await worldAds(env, g);
   if (path === "/api/world/billboards" && method === "GET") return await worldBillboards(env);
-  if (["/api/world/beat", "/api/world/chat", "/api/world/lot", "/api/world/rent", "/api/world/race", "/api/world/ad-event"].includes(path) && method === "POST") {
+  if (["/api/world/beat", "/api/world/chat", "/api/world/lot", "/api/world/rent", "/api/world/race", "/api/world/ad-event", "/api/world/me", "/api/world/save"].includes(path) && method === "POST") {
     const origin = request.headers.get("Origin");
     if (origin && origin !== url.origin) return rbcJson({ ok: false, error: "Not allowed from another site." }, 403);
     if (!/^application\/json/i.test(request.headers.get("Content-Type") || "")) return rbcJson({ ok: false, error: "Send JSON." }, 415);
     const body = await request.json().catch(() => ({}));
-    if (path !== "/api/world/beat" && WORLD_ID.test(String(body?.id || "")) && (await env.DB.prepare("SELECT 1 FROM world_bans WHERE id = ?").bind(String(body.id)).first()))
-      return rbcJson({ ok: false, error: "This player can't do that in RB World." }, 403);
+    if (path === "/api/world/me") return await worldMe(request, env, body);
+    if (path !== "/api/world/ad-event" && WORLD_ID.test(String(body?.id || ""))) {
+      const who = await worldWho(request, env, String(body.id));
+      if (!who.ok) return rbcJson({ ok: false, error: who.account ? "This player is saved to an RB account. Sign in to play it." : "This player is saved on another device.", code: "account" }, 403);
+      if (path !== "/api/world/beat" && who.banned) return rbcJson({ ok: false, error: "This player can't do that in RB World." }, 403);
+    }
+    if (path === "/api/world/save") return await worldSave(env, body);
     if (path === "/api/world/ad-event") return await worldAdEvent(request, env, body);
     if (path === "/api/world/lot") return await worldLot(env, body);
     if (path === "/api/world/rent") return await worldRent(env, body);

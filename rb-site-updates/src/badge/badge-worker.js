@@ -6,7 +6,7 @@
 //   lifetime = everything earned (minus hand removals), which sets the level; balance = lifetime minus redemptions.
 // The door desk in RB Command (badgedesk.js) checks members in by scanning the QR on their pass, which carries a token
 // signed with the member's own pass_secret and good for RBB_TOKEN_MINUTES, so a screenshot stops working.
-const RBB_SCHEMA_VERSION = "rb-badge-9";
+const RBB_SCHEMA_VERSION = "rb-badge-10";
 const RBB_DEFAULTS = { enabled: "off", eligibility: "Open to anyone with an RB account and a verified email address.", redeem_how: "",
   points_welcome: "50", points_daily: "5", points_signup: "25", points_membership_request: "50", points_per_dollar_spent: "10", order_cap: "5000",
   points_per_dollar_given: "10", contribution_cap: "5000", points_member_month: "100", points_release: "100", points_event_listed: "50", points_collect: "50",

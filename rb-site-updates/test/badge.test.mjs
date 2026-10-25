@@ -67,8 +67,8 @@ const ctx = { waitUntil() {} };
 const SITE = "https://relentlessbillionaire.com";
 const sql = (q, ...a) => DB.raw.prepare(q).run(...a);
 const one = (q, ...a) => DB.raw.prepare(q).get(...a);
-async function go(path, { method = "GET", user, body, host = SITE } = {}) {
-  const h = { "User-Agent": "Mozilla/5.0" };
+async function go(path, { method = "GET", user, body, host = SITE, headers = {} } = {}) {
+  const h = { "User-Agent": "Mozilla/5.0", ...headers };
   if (user) h.Authorization = "Bearer " + (await token(user));
   if (body !== undefined) { h["Content-Type"] = "application/json"; h.Origin = SITE; }
   return worker.fetch(new Request(host + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) }), env, ctx);
@@ -281,6 +281,9 @@ USERS.u_bob = { email: "bob@example.com" };
   for (const [f, needs] of Object.entries({ "onfoot.js": ["export function initFoot", '"KeyF"', "takeTraffic"], "char.js": ["export function person", "export function pose"], "combat.js": ["export function initCombat", "rb_world_18", "I'M 18 OR OLDER"], "live.js": ["export function initLive", "wss://rb-world-live.tge40000.workers.dev"], "damage.js": ["export function initDamage", "car.stall"], "garage.js": ["export function initGarage", "rb_customs_v1", "car.tune"], "wardrobe.js": ["export function initWardrobe", "foot.setLook"], "story.js": ["export function initStory", "RISE OF RB", "rb_story_v1"], "events.js": ["export function initEvents", "Speed camera", "armored truck"] })) {
     const t = await (await go("/app/world/" + f)).text(); for (const n of needs) assert.ok(t.includes(n), f + ": " + n);
   }
+  assert.ok(mjs.includes("from './account.js'") && mjs.includes("applySave(who)") && mjs.includes("startSaving(player.id"), "the same player every visit, saved to RB");
+  const acj = await (await go("/app/world/account.js")).text(); assert.ok(acj.includes("export async function whoAmI") && acj.includes("/api/world/save") && acj.includes("rb_empire_v1"));
+  assert.ok((await (await go("/app/world/")).text()).includes('id="rb-acct"'), "the start screen says where the empire is saved");
   for (const n of ["initFoot(window.RBEmpire, ectx)", "initCombat(window.RBEmpire, ectx, window.RBFoot)", "initLive(window.RBEmpire, ectx, window.RBFoot, window.RBCombat)", "initDamage(window.RBEmpire, ectx)", "initGarage(window.RBEmpire, ectx)", "initWardrobe(window.RBEmpire, ectx, window.RBFoot)", "initStory(window.RBEmpire, ectx, window.RBFoot, window.RBCombat)", "initEvents(window.RBEmpire, ectx, window.RBFoot, window.RBCombat)"]) assert.ok(mjs.includes(n), n);
   assert.ok((await go("/app/world/")).headers.get("Content-Security-Policy").includes("wss://rb-world-live.tge40000.workers.dev"), "the live room is allowed");
   sql("UPDATE badge_config SET value='off' WHERE key='world_combat'");
@@ -302,6 +305,42 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.deepEqual(b.body.peers.map((x) => x.id), ["aaaaaaaa-1111"], "sees the other player"); assert.deepEqual(b.body.peers[0].pos, [-74, 40.7]);
   assert.deepEqual(b.body.board.map((x) => x.name), ["Rival", "bGuest/b"], "leaderboard by net worth");
   assert.equal((await beat(null, { id: "bad" })).status, 400);
+  // the same player every visit: a guest keeps this device's player (id + key); signed in, the RB account's one player
+  // on any device; nobody else can play as either
+  {
+    const K1 = "a".repeat(64), K2 = "b".repeat(64), K3 = "c".repeat(64);
+    const W = (path, { key, user, body }) => { NOW += 4000; return api(path, { method: "POST", user, body, headers: key ? { "X-RB-World-Key": key } : {} }); };
+    let r = await W("/api/world/me", { key: K1, body: { id: "dev11111-aaaa" } });
+    assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.id, "dev11111-aaaa"); assert.equal(r.body.signedIn, false); assert.equal(r.body.save, null);
+    assert.equal((await W("/api/world/me", { body: { id: "dev11111-aaaa" } })).status, 400, "needs the device key");
+    r = await W("/api/world/me", { key: K2, body: { id: "dev11111-aaaa" } });
+    assert.notEqual(r.body.id, "dev11111-aaaa", "another device can't take this device's player");
+    assert.equal((await W("/api/world/beat", { body: { id: "dev11111-aaaa", name: "Dev" } })).body.code, "account", "beats need the key");
+    assert.equal((await W("/api/world/beat", { key: K2, body: { id: "dev11111-aaaa", name: "Dev" } })).status, 403, "or the right key");
+    assert.equal((await W("/api/world/beat", { key: K1, body: { id: "dev11111-aaaa", name: "Dev", netWorth: 123456, tokens: 77 } })).status, 200);
+    assert.equal((await W("/api/world/chat", { key: K2, body: { id: "dev11111-aaaa", name: "Dev", text: "hi" } })).status, 403, "chat too");
+    const save = JSON.stringify({ v: 1, money: { netWorth: 123456, tokens: 77 }, keys: { rb_story_v1: '{"done":2}' } });
+    assert.equal((await W("/api/world/save", { key: K2, body: { id: "dev11111-aaaa", data: save } })).status, 403, "saves too");
+    assert.equal((await W("/api/world/save", { key: K1, body: { id: "dev11111-aaaa", data: "[1]" } })).status, 400);
+    assert.equal((await W("/api/world/save", { key: K1, body: { id: "dev11111-aaaa", data: JSON.stringify({ x: "y".repeat(200001) }) } })).status, 413);
+    r = await W("/api/world/save", { key: K1, body: { id: "dev11111-aaaa", data: save } }); assert.equal(r.status, 200); assert.ok(r.body.at > 0);
+    r = await W("/api/world/me", { key: K1, body: { id: "dev11111-aaaa" } });
+    assert.deepEqual([r.body.id, r.body.netWorth, r.body.tokens, r.body.name, r.body.save.data], ["dev11111-aaaa", 123456, 77, "Dev", save], "back to the same player and game");
+    // signing in: the guest player on this device becomes the account's, and the account finds it from any device
+    r = await W("/api/world/me", { key: K1, user: "u_world1", body: { id: "dev11111-aaaa" } });
+    assert.deepEqual([r.body.id, r.body.signedIn, r.body.save.data], ["dev11111-aaaa", true, save], "the guest's empire comes with you");
+    r = await W("/api/world/me", { key: K3, user: "u_world1", body: { id: "dev33333-cccc" } });
+    assert.deepEqual([r.body.id, r.body.netWorth], ["dev11111-aaaa", 123456], "same account, another device, same player");
+    assert.equal((await W("/api/world/beat", { key: K1, body: { id: "dev11111-aaaa", name: "Dev" } })).status, 403, "an account's player needs its sign-in");
+    assert.equal((await W("/api/world/beat", { key: K3, user: "u_bob", body: { id: "dev11111-aaaa", name: "Dev" } })).status, 403, "not someone else's");
+    assert.equal((await W("/api/world/beat", { key: K3, user: "u_world1", body: { id: "dev11111-aaaa", name: "Dev" } })).status, 200);
+    r = await W("/api/world/me", { key: K1, body: { id: "dev11111-aaaa" } });
+    assert.ok(r.body.id !== "dev11111-aaaa" && r.body.signedIn === false, "signed out on that device: a fresh guest, the account's player stays safe");
+    // an account that played signed in before accounts existed gets its best player from then
+    sql("INSERT INTO world_players (id, name, clerk_user_id, net_worth, tokens, seen_at) VALUES ('old-player-1', 'Old', 'u_world2', 900000, 5, '2026-10-01'), ('old-player-2', 'Old', 'u_world2', 1000, 5, '2026-10-02')");
+    r = await W("/api/world/me", { key: K3, user: "u_world2", body: { id: "dev33333-cccc" } });
+    assert.deepEqual([r.body.id, r.body.netWorth], ["old-player-1", 900000]);
+  }
   const chat = (id, text) => api("/api/world/chat", { method: "POST", body: { id, name: "Rival", text } });
   assert.equal((await chat("bbbbbbbb-2222", "  ")).status, 400);
   assert.equal((await chat("bbbbbbbb-2222", "gm <script>")).status, 200);
