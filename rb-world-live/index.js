@@ -8,6 +8,9 @@
 //     health; at zero they're down and the shooter gets the kill, which everyone sees in the kill feed. Health a player
 //     reports can only lower theirs (hurt by a crew in a mission), apart from the slow regain to half that the game
 //     allows, so a player can't shrug off hits from other players.
+// Who you are: a player tied to an RB account or to a device (world_accounts / world_guests, see world-worker.js) can
+// only join with a one-use ticket the game got for it a moment before (POST /api/world/ticket, which checks the
+// sign-in or the device key), so nobody can join as someone else. Players from before that stay open.
 // Players blocked in RB Command (world_bans) can drive, but others don't see them and they can't fight. With RB World
 // switched off (world_open) nobody can join; with combat off (world_combat) no shot lands.
 // Bindings: ROOMS (Durable Object namespace, class Room), DB (the shared D1 database). Nothing else.
@@ -37,6 +40,15 @@ export default {
     if (!ORIGINS.test(origin)) return new Response("Forbidden", { status: 403 });
     const id = url.searchParams.get("id") || "";
     if (!ID.test(id)) return new Response("Bad player id", { status: 400 });
+    // a protected player needs its ticket (used up here); if that can't be checked, it waits and tries again
+    let owned = false, ticketOk = false;
+    try {
+      const t = url.searchParams.get("t") || "";
+      const r = await env.DB.prepare("SELECT (SELECT 1 FROM world_accounts WHERE player_id = ?1) AS a, (SELECT 1 FROM world_guests WHERE player_id = ?1) AS g").bind(id).first();
+      owned = !!(r && (r.a || r.g));
+      if (owned && /^[a-f0-9]{64}$/.test(t)) ticketOk = !!(await env.DB.prepare("DELETE FROM world_tickets WHERE ticket = ? AND player_id = ? AND expires_at > ? RETURNING 1 AS ok").bind(t, id, Date.now()).first());
+    } catch (e) { owned = true; }
+    if (owned && !ticketOk) return new Response("This player needs its sign-in", { status: 401 });
     // RB World's switches and the block list, from RB Command
     let open = true, combat = true, banned = false;
     try {

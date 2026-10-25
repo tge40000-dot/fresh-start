@@ -5,9 +5,16 @@ import assert from "node:assert/strict";
 const W = await import(new URL("./index.js", import.meta.url));
 
 // --- the front door
-const cfg = { world_open: "on", world_combat: "on" }, bans = new Set();
+const cfg = { world_open: "on", world_combat: "on" }, bans = new Set(), owned = new Set(), tickets = new Map(); // ticket -> [player, expires]
+let dbDown = false;
+const first = async (sql, a) => {
+  if (dbDown) throw new Error("D1 down");
+  if (sql.includes("world_accounts")) return owned.has(a[0]) ? { a: 1, g: null } : { a: null, g: null };
+  if (sql.includes("DELETE FROM world_tickets")) { const t = tickets.get(a[0]); if (t && t[0] === a[1] && t[1] > a[2]) { tickets.delete(a[0]); return { ok: 1 }; } return null; }
+  return sql.includes("world_bans") && bans.has(a[0]) ? { b: 1 } : null;
+};
 const env = {
-  DB: { prepare: (sql) => ({ bind: (...a) => ({ first: async () => (sql.includes("world_bans") && bans.has(a[0]) ? { b: 1 } : null) }), all: async () => ({ results: Object.entries(cfg).map(([key, value]) => ({ key, value })) }) }) },
+  DB: { prepare: (sql) => ({ bind: (...a) => ({ first: () => first(sql, a) }), all: async () => ({ results: Object.entries(cfg).map(([key, value]) => ({ key, value })) }) }) },
   ROOMS: { idFromName: (n) => n, get: (n) => ({ fetch: async (req) => { const u = new URL(req.url); return new Response(JSON.stringify({ room: n, banned: u.searchParams.get("banned"), combat: u.searchParams.get("combat") })); } }) },
 };
 const ask = (path, h = {}) => W.default.fetch(new Request("https://live.example" + path, { headers: { Upgrade: "websocket", Origin: "https://relentlessbillionaire.com", ...h } }), env);
@@ -22,6 +29,17 @@ bans.add("bbbbbbbb-2222"); cfg.world_combat = "off";
 assert.deepEqual(await (await ask("/room/rb-city-1?id=bbbbbbbb-2222")).json(), { room: "rb-city-1", banned: "1", combat: "0" }, "the block list and the combat switch go to the room");
 cfg.world_open = "off"; assert.equal((await ask("/room/rb-city-1?id=aaaaaaaa-1111")).status, 403, "RB World switched off: nobody joins");
 cfg.world_open = "on"; cfg.world_combat = "on";
+// a player tied to an RB account or a device joins only with its one-use ticket
+owned.add("cccccccc-3333"); const T = "d".repeat(64);
+assert.equal((await ask("/room/rb-city-1?id=cccccccc-3333")).status, 401, "no ticket, no entry");
+tickets.set(T, ["aaaaaaaa-1111", Date.now() + 60000]);
+assert.equal((await ask("/room/rb-city-1?id=cccccccc-3333&t=" + T)).status, 401, "someone else's ticket");
+tickets.set(T, ["cccccccc-3333", Date.now() - 1]);
+assert.equal((await ask("/room/rb-city-1?id=cccccccc-3333&t=" + T)).status, 401, "an old ticket");
+tickets.set(T, ["cccccccc-3333", Date.now() + 60000]);
+assert.equal((await ask("/room/rb-city-1?id=cccccccc-3333&t=" + T)).status, 200, "its own ticket");
+assert.equal((await ask("/room/rb-city-1?id=cccccccc-3333&t=" + T)).status, 401, "used once only");
+dbDown = true; assert.equal((await ask("/room/rb-city-1?id=aaaaaaaa-1111")).status, 401, "can't check: wait and try again"); dbDown = false;
 
 // --- the room (sockets stood in for)
 class Sock { constructor() { this.out = []; this.att = null; this.closed = null; } send(s) { this.out.push(JSON.parse(s)); } serializeAttachment(a) { this.att = structuredClone(a); } deserializeAttachment() { return this.att; } close(c, r) { this.closed = [c, r]; } last(t) { return [...this.out].reverse().find((m) => m.t === t); } }
@@ -92,4 +110,4 @@ assert.deepEqual(A.last("bye"), { t: "bye", id: "cccccccc-3333" });
 // too many messages: the extra ones are dropped
 const before = B.out.length; for (let i = 0; i < 60; i++) await say(A, { t: "s", x: i, z: 0, h: 0, m: "c" });
 assert.ok(B.out.length - before <= 40, "40 a second at most");
-console.log("rb-world-live ok: front door (origin, ids, open, bans, combat switch), moves relayed and cleaned, blocked players unseen, shots checked (combat on both sides, range, fire rate, damage cap), health kept by the room (armour, regain to half, no self-healing), kills credited, respawn, leave, rate limit");
+console.log("rb-world-live ok: front door (origin, ids, open, bans, combat switch, one-use tickets for protected players), moves relayed and cleaned, blocked players unseen, shots checked (combat on both sides, range, fire rate, damage cap), health kept by the room (armour, regain to half, no self-healing), kills credited, respawn, leave, rate limit");

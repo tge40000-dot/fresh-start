@@ -9,6 +9,7 @@
 //     on you come back and you take the damage; the kill feed shows who took out whom.
 import { person, pose, gun, tag, fromLook } from "./char.js";
 import { model } from "./combat.js";
+import { api } from "./rb_world.js";
 
 export const LIVE_URL = "wss://rb-world-live.tge40000.workers.dev/room/rb-city-1";
 const SEND_MS = 125;
@@ -17,11 +18,17 @@ export function initLive(E, ctx, foot, combat) {
   const car = E.car, P = ctx.player, scene = ctx.scene;
   const peers = new Map(); // id -> { name, s, at, x, z, h, v, mesh, weapon }
   const out = { connected: false, peers, recent: [], fresh: (id) => { const p = peers.get(id); return !!(p && performance.now() - p.at < 3000); } };
-  let ws = null, tries = 0, lastSent = "", lastAt = 0, spawn = false, hits = [], shotFx = null, lastBy = null;
+  let ws = null, joining = false, tries = 0, lastSent = "", lastAt = 0, spawn = false, hits = [], shotFx = null, lastBy = null;
 
-  function connect() {
+  // a one-use ticket first (the site checks your sign-in or this device's key), so nobody else can join as you
+  async function connect() {
+    if (ws || joining || document.hidden) return;
+    joining = true;
+    let t = "";
+    try { t = (await api("/api/world/ticket", { id: P.id })).ticket || ""; } catch (e) { joining = false; return retry(); }
+    joining = false;
     if (ws || document.hidden) return;
-    const url = LIVE_URL + "?id=" + encodeURIComponent(P.id) + "&name=" + encodeURIComponent(P.name || "Player");
+    const url = LIVE_URL + "?id=" + encodeURIComponent(P.id) + "&name=" + encodeURIComponent(P.name || "Player") + "&t=" + t;
     try { ws = new WebSocket(url); } catch (e) { ws = null; return retry(); }
     ws.onopen = () => { tries = 0; out.connected = true; lastSent = ""; };
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } onMessage(m); };

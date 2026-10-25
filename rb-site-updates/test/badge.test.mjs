@@ -324,6 +324,11 @@ USERS.u_bob = { email: "bob@example.com" };
     assert.equal((await W("/api/world/save", { key: K1, body: { id: "dev11111-aaaa", data: "[1]" } })).status, 400);
     assert.equal((await W("/api/world/save", { key: K1, body: { id: "dev11111-aaaa", data: JSON.stringify({ x: "y".repeat(200001) }) } })).status, 413);
     r = await W("/api/world/save", { key: K1, body: { id: "dev11111-aaaa", data: save } }); assert.equal(r.status, 200); assert.ok(r.body.at > 0);
+    // a ticket for the live room: only for the player's own device, one row, 60 seconds
+    assert.equal((await W("/api/world/ticket", { key: K2, body: { id: "dev11111-aaaa" } })).status, 403, "no ticket for someone else's player");
+    r = await W("/api/world/ticket", { key: K1, body: { id: "dev11111-aaaa" } });
+    assert.ok(/^[a-f0-9]{64}$/.test(r.body.ticket)); const tk = one("SELECT player_id, expires_at FROM world_tickets WHERE ticket = ?", r.body.ticket);
+    assert.equal(tk.player_id, "dev11111-aaaa"); assert.equal(tk.expires_at - NOW, 60000);
     r = await W("/api/world/me", { key: K1, body: { id: "dev11111-aaaa" } });
     assert.deepEqual([r.body.id, r.body.netWorth, r.body.tokens, r.body.name, r.body.save.data], ["dev11111-aaaa", 123456, 77, "Dev", save], "back to the same player and game");
     // signing in: the guest player on this device becomes the account's, and the account finds it from any device

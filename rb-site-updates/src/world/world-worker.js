@@ -9,6 +9,7 @@
 //   POST /api/world/race        street races: host, solo, join, sync (position and checkpoints), leave, records
 //   POST /api/world/me          who this player is: the RB account's one player (signed in, on any device), or this
 //                               device's guest player; with their money, tokens and saved game
+//   POST /api/world/ticket      a one-use ticket (60 seconds) to join the live room (rb-world-live) as this player
 //   POST /api/world/save        the saved game (empire, progress, customs, story, wardrobe, ...), so it follows the
 //                               player: to any device for an RB account, back after signing out for a guest
 // One player per RB account (world_accounts) and one per device for guests (world_guests: the device keeps a random
@@ -175,6 +176,17 @@ async function worldMe(request, env, body) {
   const r = row.results?.[0], sv = save.results?.[0];
   return rbcJson({ ok: true, id: pid, signedIn: !!clerkId, name: r?.name || null, netWorth: r ? Number(r.net_worth) : null, tokens: r ? Number(r.tokens) : null,
     save: sv ? { data: sv.data, at: Number(sv.updated_at) } : null });
+}
+async function worldTicket(env, body) {
+  const pid = String(body?.id || "");
+  if (!WORLD_ID.test(pid)) return rbcJson({ ok: false, error: "Start the game again." }, 400);
+  if (!(await worldRateOk(env, "t:" + pid, 12))) return rbcJson({ ok: false, error: "Too fast." }, 429);
+  const ticket = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join(""), now = Date.now();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM world_tickets WHERE expires_at < ?").bind(now),
+    env.DB.prepare("INSERT INTO world_tickets (ticket, player_id, expires_at) VALUES (?, ?, ?)").bind(ticket, pid, now + 60000),
+  ]);
+  return rbcJson({ ok: true, ticket });
 }
 async function worldSave(env, body) {
   const pid = String(body?.id || ""), data = typeof body?.data === "string" ? body.data : "";
@@ -470,7 +482,7 @@ async function rbWorldRoute(request, env, url, path, method) {
   if (!g.worldOpen) return rbcJson({ ok: false, error: "RB World is coming soon." }, 403);
   if (path === "/api/world/ads" && method === "GET") return await worldAds(env, g);
   if (path === "/api/world/billboards" && method === "GET") return await worldBillboards(env);
-  if (["/api/world/beat", "/api/world/chat", "/api/world/lot", "/api/world/rent", "/api/world/race", "/api/world/ad-event", "/api/world/me", "/api/world/save"].includes(path) && method === "POST") {
+  if (["/api/world/beat", "/api/world/chat", "/api/world/lot", "/api/world/rent", "/api/world/race", "/api/world/ad-event", "/api/world/me", "/api/world/save", "/api/world/ticket"].includes(path) && method === "POST") {
     const origin = request.headers.get("Origin");
     if (origin && origin !== url.origin) return rbcJson({ ok: false, error: "Not allowed from another site." }, 403);
     if (!/^application\/json/i.test(request.headers.get("Content-Type") || "")) return rbcJson({ ok: false, error: "Send JSON." }, 415);
@@ -482,6 +494,7 @@ async function rbWorldRoute(request, env, url, path, method) {
       if (path !== "/api/world/beat" && who.banned) return rbcJson({ ok: false, error: "This player can't do that in RB World." }, 403);
     }
     if (path === "/api/world/save") return await worldSave(env, body);
+    if (path === "/api/world/ticket") return await worldTicket(env, body);
     if (path === "/api/world/ad-event") return await worldAdEvent(request, env, body);
     if (path === "/api/world/lot") return await worldLot(env, body);
     if (path === "/api/world/rent") return await worldRent(env, body);
