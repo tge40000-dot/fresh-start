@@ -5,6 +5,8 @@
 //                         for signed-in RB Badge members, play-time points out
 //   POST /api/world/chat  a chat message;  GET /api/world/ads  the ticker (live RB ads and upcoming RB events)
 // Signed in with an RB account (Clerk, loaded through window.RBLoadClerk), play time earns RB Badge points.
+// Who you are (account.js): this device keeps a player id and a random key (sent as X-RB-World-Key with every call),
+// so a guest is the same player every visit; signed in, the server hands back the RB account's own player.
 const BEAT_MS = 4000;
 const ADS_MS = 60000;
 
@@ -12,7 +14,20 @@ export function id() {
   return crypto.randomUUID ? crypto.randomUUID() : "p-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 }
 
-let clerk = null;
+const DEV_ID = "rb_world_id_v1", DEV_KEY = "rb_world_key_v1";
+const ls = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
+const hex = (n) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => b.toString(16).padStart(2, "0")).join("");
+export function device() {
+  let i = ls.get(DEV_ID), k = ls.get(DEV_KEY);
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(i || "")) { i = id(); ls.set(DEV_ID, i); }
+  if (!/^[a-f0-9]{64}$/.test(k || "")) { k = hex(32); ls.set(DEV_KEY, k); }
+  return { id: i, key: k };
+}
+export function setDeviceId(v) { ls.set(DEV_ID, v); }
+
+let clerk = null, clerkP = null;
+// Clerk once it's loaded (or null: not set up, failed, or slower than ms)
+export function clerkReady(ms = 6000) { return clerkP ? Promise.race([clerkP.catch(() => null), new Promise((r) => setTimeout(() => r(null), ms))]) : Promise.resolve(null); }
 function token() { return clerk && clerk.session ? clerk.session.getToken().catch(() => null) : Promise.resolve(null); }
 // The same request helper, for the empire (lots and rent), and a way for it to hear each beat.
 export function api(path, body) { return call(path, body); }
@@ -22,11 +37,11 @@ export function onBeat(cb) { beatHooks.push(cb); }
 const beatExtras = [];
 export function beatExtra(fn) { beatExtras.push(fn); }
 async function call(path, body) {
-  const t = await token(), headers = { "Content-Type": "application/json" };
+  const t = await token(), headers = { "Content-Type": "application/json", "X-RB-World-Key": device().key };
   if (t) headers.Authorization = "Bearer " + t;
   const res = await fetch(path, body ? { method: "POST", headers, body: JSON.stringify(body), credentials: "same-origin" } : { headers, credentials: "same-origin" });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.ok === false) throw new Error(data.error || "RB World is unavailable right now.");
+  if (!res.ok || data.ok === false) throw Object.assign(new Error(data.error || "RB World is unavailable right now."), { code: data.code || null, status: res.status });
   return data;
 }
 
@@ -95,7 +110,7 @@ export function init() {
   setInterval(beat, BEAT_MS);
   setTimeout(beat, 600);
   ads(); setInterval(ads, ADS_MS);
-  if (window.RBLoadClerk && window.RB_CLERK_KEY) window.RBLoadClerk(window.RB_CLERK_KEY).then((c) => { clerk = c; beat(); }).catch(() => {});
+  if (window.RBLoadClerk && window.RB_CLERK_KEY) { clerkP = window.RBLoadClerk(window.RB_CLERK_KEY).then((c) => { clerk = c; beat(); return c; }); clerkP.catch(() => {}); }
 
   const db = {
     joinRoom() {

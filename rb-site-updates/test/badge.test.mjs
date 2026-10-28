@@ -67,8 +67,8 @@ const ctx = { waitUntil() {} };
 const SITE = "https://relentlessbillionaire.com";
 const sql = (q, ...a) => DB.raw.prepare(q).run(...a);
 const one = (q, ...a) => DB.raw.prepare(q).get(...a);
-async function go(path, { method = "GET", user, body, host = SITE } = {}) {
-  const h = { "User-Agent": "Mozilla/5.0" };
+async function go(path, { method = "GET", user, body, host = SITE, headers = {} } = {}) {
+  const h = { "User-Agent": "Mozilla/5.0", ...headers };
   if (user) h.Authorization = "Bearer " + (await token(user));
   if (body !== undefined) { h["Content-Type"] = "application/json"; h.Origin = SITE; }
   return worker.fetch(new Request(host + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) }), env, ctx);
@@ -259,19 +259,37 @@ USERS.u_bob = { email: "bob@example.com" };
   const csp = w.headers.get("Content-Security-Policy");
   assert.ok(/connect-src 'self'[^;]*basemaps\.cartocdn\.com/.test(csp) && !/esm\.sh|instantdb|stripe/i.test(csp), "the game's hosts only: no InstantDB, no Stripe");
   assert.ok(!/instantdb|esm\.sh|js\.stripe\.com|\$9\.99/i.test(wh), "no InstantDB, Stripe or the unbacked $9.99 offer");
-  assert.ok(wh.includes('src="/app/world/main.js?v=w13"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
+  assert.ok(wh.includes('src="/app/world/main.js?v=w18"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
   assert.ok(wh.includes("OPEN THE RB APP") && wh.includes("SEE MEMBERSHIPS"));
   // the car radio and the notice come from RB Command > RB World; "Enter as Admin" opens RB World's controls there
-  assert.ok(wh.includes('window.RB_WORLD_CFG = {"radio":true,"notice":""}') && wh.includes("data-rb-radio-host") && wh.includes('id="radio-vol"'));
+  assert.ok(wh.includes('window.RB_WORLD_CFG = {"radio":true,"notice":"","combat":true}') && wh.includes("data-rb-radio-host") && wh.includes('id="radio-vol"'));
   assert.ok(wh.includes("https://team.relentlessbillionaire.com/world") && !wh.includes("location.href = '/admin'") && !wh.includes('getElementById("btn-radio"),R=window.RBRadio'));
   const rj = await (await go("/app/world/radio.js")).text();
   assert.ok(rj.includes("export function initRadio") && rj.includes("RBRadio") && rj.includes('"KeyM"'));
   // the phone: everything else on screen in one place (📱 or T), with a Classic layout in Settings
   const pj = await (await go("/app/world/phone.js")).text();
   assert.ok(pj.includes("export function initPhone") && pj.includes('"KeyT"') && pj.includes("rb-phone-ui") && pj.includes('"set-screen"'));
-  for (const app of ["jobs", "empire", "races", "goals", "chat", "radio", "leaders", "events", "settings", "help"]) assert.ok(pj.includes(`["${app}", `), "phone app " + app);
+  for (const app of ["jobs", "empire", "races", "goals", "chat", "radio", "leaders", "events", "nodes", "deals", "market", "bay", "story", "customs", "wardrobe", "settings", "help"]) assert.ok(pj.includes(`["${app}", `), "phone app " + app);
   assert.ok(wh.includes('id="set-screen"') && wh.includes("Classic: everything on screen"));
   const mjs = await (await go("/app/world/main.js")).text(); assert.ok(mjs.includes("from './phone.js'") && mjs.includes("initPhone(window.RBEmpire, ectx)"));
+  // the billboards and posters: sponsors' ads from RB Command, labelled, counted, with a link when you drive close
+  assert.ok(mjs.includes("from './ads.js'") && mjs.includes("initAds(window.RBEmpire, ectx)"));
+  const aj = await (await go("/app/world/ads.js")).text();
+  assert.ok(aj.includes("export function initAds") && aj.includes("/api/world/billboards") && aj.includes("/api/world/ad-event") && aj.includes("SPONSORED · ") && aj.includes('rel = "sponsored noopener"'));
+  const cityj = await (await go("/app/world/city.js")).text(); assert.ok(cityj.includes("adSpots") && cityj.includes("adPool"));
+  // on foot (F), 18+ combat, car damage and live play with other players
+  for (const [f, needs] of Object.entries({ "onfoot.js": ["export function initFoot", '"KeyF"', "takeTraffic"], "char.js": ["export function person", "export function pose"], "combat.js": ["export function initCombat", "rb_world_18", "I'M 18 OR OLDER"], "live.js": ["export function initLive", "wss://rb-world-live.tge40000.workers.dev"], "damage.js": ["export function initDamage", "car.stall"], "garage.js": ["export function initGarage", "rb_customs_v1", "car.tune"], "wardrobe.js": ["export function initWardrobe", "foot.setLook"], "story.js": ["export function initStory", "RISE OF RB", "rb_story_v1"], "events.js": ["export function initEvents", "Speed camera", "armored truck"], "stream.js": ["export function initStream", "tiles.openfreemap.org", "CITY.ext.blocked"], "stream_worker.js": ["from \"./mvt.js\"", "from \"./earcut.js\"", "brunnel"], "mvt.js": ["export function decode"], "earcut.js": ["ISC License", "export default function earcut"], "bay.js": ["export function initBay", "FasTrak", "AAA average"], "bay_data.js": ["Golden Gate Bridge", "fastrak: 10.25", "Zillow", "export const CITIES"], "nodes.js": ["export function initNodes", "/api/world/node", "MY REAL LOCATION"], "deals.js": ["export function initDeals", "/api/world/deal", "HOSTILE TAKEOVER"], "market.js": ["export function initMarket", "Tax audit", "Lifestyle"] })) {
+    const t = await (await go("/app/world/" + f)).text(); for (const n of needs) assert.ok(t.includes(n), f + ": " + n);
+  }
+  assert.ok(mjs.includes("from './account.js'") && mjs.includes("applySave(who)") && mjs.includes("startSaving(player.id"), "the same player every visit, saved to RB");
+  const acj = await (await go("/app/world/account.js")).text(); assert.ok(acj.includes("export async function whoAmI") && acj.includes("/api/world/save") && acj.includes("rb_empire_v1"));
+  assert.ok((await (await go("/app/world/")).text()).includes('id="rb-acct"'), "the start screen says where the empire is saved");
+  for (const n of ["initFoot(window.RBEmpire, ectx)", "initCombat(window.RBEmpire, ectx, window.RBFoot)", "initLive(window.RBEmpire, ectx, window.RBFoot, window.RBCombat)", "initDamage(window.RBEmpire, ectx)", "initGarage(window.RBEmpire, ectx)", "initWardrobe(window.RBEmpire, ectx, window.RBFoot)", "initStory(window.RBEmpire, ectx, window.RBFoot, window.RBCombat)", "initEvents(window.RBEmpire, ectx, window.RBFoot, window.RBCombat)", "initStream(window.RBEmpire, ectx)", "initBay(window.RBEmpire, ectx, window.RBFoot, window.RBStream)", "initNodes(window.RBEmpire, ectx)", "initDeals(window.RBEmpire, ectx)", "initMarket(window.RBEmpire, ectx)"]) assert.ok(mjs.includes(n), n);
+  assert.ok((await go("/app/world/")).headers.get("Content-Security-Policy").includes("https://tiles.openfreemap.org"), "the map tiles for the Bay Area are allowed");
+  assert.ok((await go("/app/world/")).headers.get("Content-Security-Policy").includes("wss://rb-world-live.tge40000.workers.dev"), "the live room is allowed");
+  sql("UPDATE badge_config SET value='off' WHERE key='world_combat'");
+  assert.ok((await (await go("/app/world/")).text()).includes('"combat":false'), "RB Command can switch combat off");
+  sql("UPDATE badge_config SET value='on' WHERE key='world_combat'");
   sql("UPDATE badge_config SET value='off' WHERE key='world_radio'"); sql("UPDATE badge_config SET value='Comedy night <Friday>' WHERE key='world_notice'");
   const wh2 = await (await go("/app/world/")).text();
   assert.ok(wh2.includes('"radio":false') && wh2.includes("Comedy night"), "radio off and the notice in the page");
@@ -288,6 +306,47 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.deepEqual(b.body.peers.map((x) => x.id), ["aaaaaaaa-1111"], "sees the other player"); assert.deepEqual(b.body.peers[0].pos, [-74, 40.7]);
   assert.deepEqual(b.body.board.map((x) => x.name), ["Rival", "bGuest/b"], "leaderboard by net worth");
   assert.equal((await beat(null, { id: "bad" })).status, 400);
+  // the same player every visit: a guest keeps this device's player (id + key); signed in, the RB account's one player
+  // on any device; nobody else can play as either
+  {
+    const K1 = "a".repeat(64), K2 = "b".repeat(64), K3 = "c".repeat(64);
+    const W = (path, { key, user, body }) => { NOW += 4000; return api(path, { method: "POST", user, body, headers: key ? { "X-RB-World-Key": key } : {} }); };
+    let r = await W("/api/world/me", { key: K1, body: { id: "dev11111-aaaa" } });
+    assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.id, "dev11111-aaaa"); assert.equal(r.body.signedIn, false); assert.equal(r.body.save, null);
+    assert.equal((await W("/api/world/me", { body: { id: "dev11111-aaaa" } })).status, 400, "needs the device key");
+    r = await W("/api/world/me", { key: K2, body: { id: "dev11111-aaaa" } });
+    assert.notEqual(r.body.id, "dev11111-aaaa", "another device can't take this device's player");
+    assert.equal((await W("/api/world/beat", { body: { id: "dev11111-aaaa", name: "Dev" } })).body.code, "account", "beats need the key");
+    assert.equal((await W("/api/world/beat", { key: K2, body: { id: "dev11111-aaaa", name: "Dev" } })).status, 403, "or the right key");
+    assert.equal((await W("/api/world/beat", { key: K1, body: { id: "dev11111-aaaa", name: "Dev", netWorth: 123456, tokens: 77 } })).status, 200);
+    assert.equal((await W("/api/world/chat", { key: K2, body: { id: "dev11111-aaaa", name: "Dev", text: "hi" } })).status, 403, "chat too");
+    const save = JSON.stringify({ v: 1, money: { netWorth: 123456, tokens: 77 }, keys: { rb_story_v1: '{"done":2}' } });
+    assert.equal((await W("/api/world/save", { key: K2, body: { id: "dev11111-aaaa", data: save } })).status, 403, "saves too");
+    assert.equal((await W("/api/world/save", { key: K1, body: { id: "dev11111-aaaa", data: "[1]" } })).status, 400);
+    assert.equal((await W("/api/world/save", { key: K1, body: { id: "dev11111-aaaa", data: JSON.stringify({ x: "y".repeat(200001) }) } })).status, 413);
+    r = await W("/api/world/save", { key: K1, body: { id: "dev11111-aaaa", data: save } }); assert.equal(r.status, 200); assert.ok(r.body.at > 0);
+    // a ticket for the live room: only for the player's own device, one row, 60 seconds
+    assert.equal((await W("/api/world/ticket", { key: K2, body: { id: "dev11111-aaaa" } })).status, 403, "no ticket for someone else's player");
+    r = await W("/api/world/ticket", { key: K1, body: { id: "dev11111-aaaa" } });
+    assert.ok(/^[a-f0-9]{64}$/.test(r.body.ticket)); const tk = one("SELECT player_id, expires_at FROM world_tickets WHERE ticket = ?", r.body.ticket);
+    assert.equal(tk.player_id, "dev11111-aaaa"); assert.equal(tk.expires_at - NOW, 60000);
+    r = await W("/api/world/me", { key: K1, body: { id: "dev11111-aaaa" } });
+    assert.deepEqual([r.body.id, r.body.netWorth, r.body.tokens, r.body.name, r.body.save.data], ["dev11111-aaaa", 123456, 77, "Dev", save], "back to the same player and game");
+    // signing in: the guest player on this device becomes the account's, and the account finds it from any device
+    r = await W("/api/world/me", { key: K1, user: "u_world1", body: { id: "dev11111-aaaa" } });
+    assert.deepEqual([r.body.id, r.body.signedIn, r.body.save.data], ["dev11111-aaaa", true, save], "the guest's empire comes with you");
+    r = await W("/api/world/me", { key: K3, user: "u_world1", body: { id: "dev33333-cccc" } });
+    assert.deepEqual([r.body.id, r.body.netWorth], ["dev11111-aaaa", 123456], "same account, another device, same player");
+    assert.equal((await W("/api/world/beat", { key: K1, body: { id: "dev11111-aaaa", name: "Dev" } })).status, 403, "an account's player needs its sign-in");
+    assert.equal((await W("/api/world/beat", { key: K3, user: "u_bob", body: { id: "dev11111-aaaa", name: "Dev" } })).status, 403, "not someone else's");
+    assert.equal((await W("/api/world/beat", { key: K3, user: "u_world1", body: { id: "dev11111-aaaa", name: "Dev" } })).status, 200);
+    r = await W("/api/world/me", { key: K1, body: { id: "dev11111-aaaa" } });
+    assert.ok(r.body.id !== "dev11111-aaaa" && r.body.signedIn === false, "signed out on that device: a fresh guest, the account's player stays safe");
+    // an account that played signed in before accounts existed gets its best player from then
+    sql("INSERT INTO world_players (id, name, clerk_user_id, net_worth, tokens, seen_at) VALUES ('old-player-1', 'Old', 'u_world2', 900000, 5, '2026-10-01'), ('old-player-2', 'Old', 'u_world2', 1000, 5, '2026-10-02')");
+    r = await W("/api/world/me", { key: K3, user: "u_world2", body: { id: "dev33333-cccc" } });
+    assert.deepEqual([r.body.id, r.body.netWorth], ["old-player-1", 900000]);
+  }
   const chat = (id, text) => api("/api/world/chat", { method: "POST", body: { id, name: "Rival", text } });
   assert.equal((await chat("bbbbbbbb-2222", "  ")).status, 400);
   assert.equal((await chat("bbbbbbbb-2222", "gm <script>")).status, 200);
@@ -306,6 +365,30 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.equal(ads[0].id, "notice"); assert.equal(ads[0].body, "Comedy night <Friday>", "the notice leads the ticker");
   sql("UPDATE badge_config SET value='' WHERE key='world_notice'");
   assert.ok(!(await api("/api/world/ads")).body.ads.some((x) => x.id === "notice"), "no notice, no ticker line");
+  // billboards: an ads table without the media columns yet answers with none, never an error
+  let bb = await api("/api/world/billboards"); assert.equal(bb.status, 200); assert.deepEqual(bb.body.ads, []);
+  for (const c of ["image_url TEXT", "video_url TEXT", "poster_url TEXT", "format TEXT DEFAULT 'image'", "click_url TEXT", "cta TEXT", "impressions INTEGER DEFAULT 0", "max_impressions INTEGER"]) sql("ALTER TABLE ads ADD COLUMN " + c);
+  sql("UPDATE ads SET image_url = 'https://media.example/acme.jpg', click_url = 'https://acme.example/' WHERE advertiser = 'Acme'");
+  sql("INSERT INTO ads (advertiser, headline, surface, format, video_url, image_url, click_url, cta, weight) VALUES ('Vid Co', 'Watch this', 'world', 'video', 'https://media.example/v.mp4', 'http://insecure.example/x.jpg', 'javascript:alert(1)', 'Watch', 5)");
+  sql("INSERT INTO ads (advertiser, headline, surface, image_url, status) VALUES ('Paused Co', 'p', 'all', 'https://media.example/p.jpg', 'paused'), ('Home Co', 'h', 'home', 'https://media.example/h.jpg', 'live'), ('Ended Co', 'e', 'world', 'https://media.example/e.jpg', 'live')");
+  sql("UPDATE ads SET ends_at = '2020-01-01' WHERE advertiser = 'Ended Co'");
+  sql("INSERT INTO ads (advertiser, headline, surface, image_url, impressions, max_impressions) VALUES ('Used Up', 'u', 'all', 'https://media.example/u.jpg', 1000, 1000)");
+  bb = await api("/api/world/billboards");
+  assert.deepEqual(bb.body.ads.map((a) => a.advertiser), ["Vid Co", "Acme"], "live, Everywhere/RB World/game, in their dates, package not used up; weight first");
+  const [vid, acme] = bb.body.ads;
+  assert.deepEqual([vid.format, vid.video_url, vid.image_url, vid.click], ["video", "https://media.example/v.mp4", null, null], "https only; no link to a bad URL");
+  assert.deepEqual([acme.format, acme.image_url, acme.click], ["image", "https://media.example/acme.jpg", `/go/ad/${acme.id}?s=world`]);
+  // counting views from the game: only live ads, only imp/view, a valid player id
+  const adEv = (body) => api("/api/world/ad-event", { method: "POST", body });
+  const pausedId = Number(one("SELECT id FROM ads WHERE advertiser = 'Paused Co'").id);
+  let ev = await adEv({ id: "aaaaaaaa-1111", events: [{ id: acme.id, kind: "imp" }, { id: acme.id, kind: "view" }, { id: acme.id, kind: "imp" }, { id: pausedId, kind: "imp" }, { id: vid.id, kind: "click" }, { id: "x", kind: "imp" }] });
+  assert.equal(ev.status, 200); assert.equal(ev.body.counted, 2, "one view and one viewable for Acme; the paused ad, the repeat, a click and a bad id don't count");
+  await adEv({ id: "aaaaaaaa-1111", events: [{ id: vid.id, kind: "imp" }] });
+  const st = DB.raw.prepare("SELECT ad_id, impressions, viewable FROM world_ad_stats ORDER BY ad_id").all();
+  assert.deepEqual(st.map((x) => [Number(x.ad_id), Number(x.impressions), Number(x.viewable)]), [[Number(acme.id), 1, 1], [Number(vid.id), 1, 0]]);
+  assert.equal((await adEv({ id: "bad", events: [{ id: acme.id, kind: "imp" }] })).status, 400);
+  assert.equal(Number(one("SELECT sum(impressions) AS n FROM ads WHERE advertiser = 'Acme'").n || 0), 0, "the website's own counts are left alone");
+  sql("DELETE FROM ads WHERE advertiser IN ('Vid Co', 'Paused Co', 'Home Co', 'Ended Co', 'Used Up')");
   // a player blocked in RB Command > RB World: no chat, no races, off the leaderboard and other players' maps; still drives
   sql("INSERT INTO world_bans (id, name, reason, by, created_at) VALUES ('bbbbbbbb-2222', 'Rival', 'spam', 'owner', '2026-10-23T00:00:00Z')");
   NOW += 61000;
@@ -374,6 +457,71 @@ USERS.u_bob = { email: "bob@example.com" };
   wb = await beatW(B);
   assert.deepEqual(wb.body.lots.map((x) => x.lot), [1], "A's lots no longer show");
   r = await lotApi(B, 0, "buy"); assert.equal(r.body.lot.owner_id, B, "and are for sale again"); assert.equal(r.body.lot.business, null);
+  // deals: an offer to buy someone's lot, a hostile takeover bid; the money moves through payouts on the next beat, once
+  const DEFS = await import(new URL("../src/world/empire_defs.js", import.meta.url));
+  const beatM = (id, netWorth) => { NOW += 4000; return api("/api/world/beat", { method: "POST", body: { id, name: id.slice(0, 4), netWorth } }); };
+  {
+    const C = "cccccccc-4444", Dd = "dddddddd-5555";
+    const deal = (id, op, extra = {}) => { NOW += 3100; return api("/api/world/deal", { method: "POST", body: { id, name: id.slice(0, 4), op, ...extra } }); };
+    await beatM(C, 500000); await beatM(Dd, 100000); await beatM(B, 100000);
+    assert.equal((await lotApi(C, 24, "buy")).status, 200); assert.equal((await lotApi(C, 25, "buy")).status, 200);
+    await lotApi(C, 24, "build", { business: "coffee" });
+    assert.equal((await deal(Dd, "offer", { lot: 24, amount: 500 })).status, 400, "at least $1,000");
+    assert.equal((await deal(Dd, "offer", { lot: 24, amount: 200000 })).status, 402, "not more than you have");
+    assert.equal((await deal(Dd, "offer", { lot: 30, amount: 5000 })).status, 409, "nobody owns it: just buy it");
+    let q = await deal(Dd, "offer", { lot: 24, amount: 50000 }); assert.equal(q.status, 200, JSON.stringify(q.body));
+    const offerId = q.body.deal.id;
+    assert.equal((await deal(Dd, "offer", { lot: 24, amount: 60000 })).status, 409, "one bid a lot");
+    const min25 = Math.ceil(DEFS.lotValue(25, null, 0) * DEFS.TAKEOVER_MIN);
+    assert.equal((await deal(B, "takeover", { lot: 25, amount: min25 - 1 })).status, 400, "takeover bids start at 1.5x the lot's worth");
+    q = await deal(B, "takeover", { lot: 25, amount: min25 }); assert.equal(q.status, 200); assert.equal(q.body.deal.auto, true, "an empty lot");
+    q = await deal(C, "list"); assert.deepEqual(q.body.deals.filter((x) => !x.mine && x.status === "open").map((x) => x.lot).sort(), [24, 25]);
+    assert.equal((await deal(Dd, "accept", { deal: offerId })).status, 403, "only the owner accepts");
+    q = await deal(C, "accept", { deal: offerId }); assert.equal(q.status, 200, JSON.stringify(q.body));
+    assert.equal(one("SELECT owner_id FROM world_lots WHERE lot = 24").owner_id, Dd, "the lot moves");
+    let pb = await beatM(Dd, 100000); assert.deepEqual(pb.body.settle.map((x) => x.cash), [-50000], "the buyer pays");
+    assert.deepEqual((await beatM(Dd, 50000)).body.settle, [], "once");
+    pb = await beatM(C, 500000); assert.ok(pb.body.settle.some((x) => x.cash === 50000), "the seller is paid");
+    assert.equal((await deal(C, "accept", { deal: offerId })).status, 404, "done is done");
+    // nobody answers the takeover: after a day it goes through, the lot being empty
+    NOW += 25 * 3600e3; await beatM(C, 500000); await beatM(B, 100000); await beatM(Dd, 50000);
+    q = await deal(B, "list"); assert.equal(q.body.deals.find((x) => x.lot === 25).status, "won");
+    assert.equal(one("SELECT owner_id FROM world_lots WHERE lot = 25").owner_id, B);
+    // a lot with a business can only be bought: the takeover lapses
+    q = await deal(B, "takeover", { lot: 24, amount: Math.ceil(DEFS.lotValue(24, "coffee", 1) * 1.5) }); assert.equal(q.status, 200, JSON.stringify(q.body)); assert.equal(q.body.deal.auto, false);
+    NOW += 25 * 3600e3; await beatM(Dd, 50000); await beatM(B, 100000);
+    q = await deal(B, "list"); assert.equal(q.body.deals.find((x) => x.lot === 24 && x.mine).status, "lapsed");
+    assert.equal(one("SELECT owner_id FROM world_lots WHERE lot = 24").owner_id, Dd, "still the owner's");
+  }
+  // Empire Nodes: real places, claimed in person; a speed check; shields; takeovers pay the old owner half; income
+  {
+    const N1 = "eeeeeeee-6666", N2 = "ffffffff-7777";
+    const node = (id, op, lat, lng, extra = {}, src = "car", wait = 2100) => { NOW += wait; return api("/api/world/node", { method: "POST", body: { id, name: id.slice(0, 4), op, lat, lng, src, ...extra } }); };
+    await beatM(N1, 100000); await beatM(N2, 100000);
+    const n0 = DEFS.nodesNear(37.80, -122.27, 0)[0];
+    let q = await node(N1, "near", n0.lat + 0.01, n0.lng);
+    assert.equal(q.status, 200); assert.equal(q.body.nodes.length, 25);
+    q = await node(N1, "claim", n0.lat + 0.01, n0.lng, { node: n0.id }); assert.equal(q.status, 403, "too far away");
+    q = await node(N1, "claim", n0.lat, n0.lng, { node: n0.id }); assert.equal(q.status, 409); assert.match(q.body.error, /too fast/, "a kilometre in two seconds");
+    q = await node(N1, "claim", n0.lat, n0.lng, { node: n0.id }); assert.equal(q.status, 200, JSON.stringify(q.body)); assert.equal(q.body.paid, DEFS.NODE_BASE);
+    q = await node(N1, "near", n0.lat, n0.lng); assert.equal(q.body.nodes.find((x) => x.id === n0.id).mine, true);
+    await node(N2, "near", n0.lat, n0.lng, {}, "car", 60000);
+    q = await node(N2, "claim", n0.lat, n0.lng, { node: n0.id }); assert.equal(q.status, 409); assert.match(q.body.error, /safe for/, "a new owner is shielded");
+    NOW += 7 * 3600e3;
+    q = await node(N2, "claim", n0.lat, n0.lng, { node: n0.id }); assert.equal(q.status, 200); assert.equal(q.body.paid, DEFS.NODE_BASE * DEFS.NODE_STEP, "a quarter more");
+    const s1 = (await beatM(N1, 100000)).body.settle; assert.equal(s1.length, 1); assert.ok(Math.abs(s1[0].cash - (DEFS.NODE_BASE * DEFS.NODE_STEP * 0.5 + DEFS.NODE_BASE * DEFS.NODE_INCOME * 7)) < 10, "half the price, and what it earned (7 hours and the test's few seconds)");
+    NOW += 2 * 3600e3;
+    q = await beatM(N2, 100000); assert.equal(q.body.nodeIncome, Math.floor(DEFS.NODE_BASE * DEFS.NODE_STEP * DEFS.NODE_INCOME * 2), "income, collected");
+    assert.equal((await beatM(N2, 100000)).body.nodeIncome, 0, "once");
+    assert.equal((await node(N1, "claim", n0.lat, n0.lng, { node: "n_bad" })).status, 400);
+    // walking (phone location, walking pace) towards the daily streak: tokens once the day's kilometre is reached
+    let lat = 37.70;
+    await node(N1, "near", lat, -122.40, {}, "gps", 60000);
+    for (let i = 0; i < 22; i++) { lat += 50 / 111000; q = await node(N1, "near", lat, -122.40, {}, "gps", 30000); }
+    assert.ok(q.body.walk.today >= 1000, JSON.stringify(q.body.walk));
+    const s2 = (await beatM(N1, 100000)).body.settle; assert.equal(s2.length, 1); assert.equal(s2[0].tokens, 10, "day one of the streak");
+    q = await node(N1, "near", lat + 0.5, -122.40, {}, "gps", 30000); assert.equal(q.body.moving, true, "driving with the phone isn't walking");
+  }
   const files = [];
   for (const f of ["/app/world/empire.js", "/app/world/empire_defs.js"]) { const r = await go(f); files.push([r.status, await r.text()]); }
   assert.ok(files.every(([st]) => st === 200));
@@ -386,7 +534,7 @@ USERS.u_bob = { email: "bob@example.com" };
   const race = (id, action, extra = {}) => { NOW += 50; return api("/api/world/race", { method: "POST", body: { id, name: "R" + id.slice(0, 3), action, ...extra } }); };
   const beatR = (id, extra = {}) => { NOW += 4000; return api("/api/world/beat", { method: "POST", body: { id, name: "R" + id.slice(0, 3), ...extra } }); };
   const A = "raceaaaa-0001", B = "racebbbb-0002", Cc = "racecccc-0003";
-  await beatR(A, { car: [10, -114, 0.5, 20], level: 7, color: "#2F55D4" }); await beatR(B, { car: [2999, 0, 0, 0], color: "red" });
+  await beatR(A, { car: [10, -114, 0.5, 20], level: 7, color: "#2F55D4" }); await beatR(B, { car: [250000, 0, 0, 0], color: "red" }); await beatR(B, { car: [30000, -2000, 0, 0] }); assert.deepEqual({ ...one("SELECT x, z FROM world_cars WHERE id = ?", B) }, { x: 30000, z: -2000 }, "anywhere in the Bay Area");
   let wb = await beatR(B, { car: [5, 5, 0, 0], level: 2 });
   const pa = wb.body.peers.find((p) => p.id === A);
   assert.deepEqual(pa.car, [10, -114, 0.5, 20], "others see where your car is"); assert.equal(pa.level, 7); assert.equal(pa.color, "#2F55D4");
@@ -483,4 +631,4 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.ok(closed.includes("coming soon") && !closed.includes("main.js"), "the world page says coming soon");
   sql("UPDATE badge_config SET value='on' WHERE key='world_open'");
 }
-console.log("badge ok: RB World races on the server clock (lobby, join window, checkpoint order, distance and speed checks, places, best times, solo, full, leave), cars, level and lots boards; RB World on RB's backend (page, no InstantDB or Stripe, players, leaderboard, chat with limits, ads ticker, play-time points with gaps and daily cap), RB app and manifest, Gold Rush scores checked against the round (early, too high, twice, late, round and daily caps, rounds a day), off by default, terms for review, pulled points counted once, levels, achievements, signed QR read back, redeem with stock/balance/level checks, sign-in rules");
+console.log("badge ok: RB World races on the server clock (lobby, join window, checkpoint order, distance and speed checks, places, best times, solo, full, leave), cars, level and lots boards; RB World on RB's backend (page, no InstantDB or Stripe, players, leaderboard, chat with limits, ads ticker, sponsor ads on the billboards and posters with counted views, play-time points with gaps and daily cap), RB app and manifest, Gold Rush scores checked against the round (early, too high, twice, late, round and daily caps, rounds a day), off by default, terms for review, pulled points counted once, levels, achievements, signed QR read back, redeem with stock/balance/level checks, sign-in rules");

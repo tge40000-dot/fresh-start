@@ -21,7 +21,7 @@ function css() {
 #rb-nitro{flex:1;height:6px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden}#rb-nitro i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#00BFFF,#66ccff)}
 body.rb-real #minimap{display:block!important;position:fixed!important;z-index:6970!important;border-radius:16px 16px 0 0!important;opacity:1!important;border:0!important}body:not(.rb-real) #minimap{display:none!important}
 #combat-hud,#events-bar{display:none!important}
-#btn-combat,#btn-vr{display:none!important}
+#btn-vr{display:none!important}
 #hud-stats .stat-card{padding:8px 12px!important}#hud-stats .stat-value{font-size:15px!important}
 .rb-pedals{position:fixed;right:14px;bottom:calc(282px + env(safe-area-inset-bottom));z-index:6900;display:grid;grid-template-columns:64px 64px;gap:10px;touch-action:none;user-select:none;-webkit-user-select:none}
 .rb-pedals button{height:64px;border-radius:18px;border:1px solid rgba(201,168,76,.5);background:rgba(0,0,0,.55);color:#F5E6A3;font:900 11px/1.1 Inter,sans-serif;letter-spacing:1px;touch-action:none}
@@ -48,6 +48,7 @@ function drawMap() {
   // the edge of the drivable city
   const [x0, z0] = P(-CITY.HALF[0], -CITY.HALF[1]); g.strokeStyle = "rgba(226,87,30,.6)"; g.lineWidth = 2; g.setLineDash([6, 6]); g.strokeRect(x0, z0, CITY.HALF[0] * 2 * MAP_K, CITY.HALF[1] * 2 * MAP_K); g.setLineDash([]);
 }
+let streamAt = -1, streamSegs = [];
 function radar() {
   const box = document.createElement("div"); box.id = "rb-radar"; box.title = "Radar (tap for the real-world map)";
   cv = document.createElement("canvas"); cv.width = 336; cv.height = 336; cx = cv.getContext("2d");
@@ -85,6 +86,12 @@ function drawRadar(t) {
   cx.translate(mid, mid); cx.rotate(th); const sc = k / MAP_K; cx.scale(sc, sc);
   cx.drawImage(mapCv, -(c.x + MAP_EXT) * MAP_K, -(c.z + MAP_EXT) * MAP_K);
   cx.restore();
+  // the rest of the Bay Area (stream.js): its roads round you, refreshed twice a second
+  if (window.RBStream) {
+    if (t - streamAt > 0.5) { streamAt = t; streamSegs = window.RBStream.roadsNear(c.x, c.z, (mid / k) * 1.5); }
+    cx.lineCap = "round";
+    for (let i = 0; i < streamSegs.length; i += 6) { const [ax, az] = at(streamSegs[i], streamSegs[i + 1]), [bx, bz] = at(streamSegs[i + 2], streamSegs[i + 3]); cx.strokeStyle = streamSegs[i + 5] & 1 ? "#7a8290" : streamSegs[i + 5] & 2 ? "#6a6f78" : "#4b4f57"; cx.lineWidth = Math.max(1.5, streamSegs[i + 4] * k); cx.beginPath(); cx.moveTo(ax, az); cx.lineTo(bx, bz); cx.stroke(); }
+  }
   // lots by owner: yours in the district colour, other players' grey, for sale outlined in the district colour
   for (const l of LOTS) {
     if (!l.building) continue;
@@ -98,8 +105,14 @@ function drawRadar(t) {
   for (const g of window.__rbGhosts || []) dot(g.x, g.z, 5, g.racer ? "#F5D547" : "#ffffff", "#000");
   const blink = Math.floor(t * 4) % 2;
   for (const cp of R.cops) dot(cp.x, cp.z, 6.5, blink ? "#ff2a2a" : "#2a6bff", "#fff");
+  // combat.js: crews, police on foot, dropped cash and other players on foot
+  for (const b of window.__rbBlips || []) dot(b.x, b.z, b.r || 4, b.c, "#000");
+  // events.js: cash crates, speed cameras and the armored truck
+  for (const b of window.__rbBlips2 || []) dot(b.x, b.z, b.r || 4, b.c, "#000");
+  // nodes.js: Empire Nodes, gold yours, grey others', white free
+  for (const b of window.__rbBlips3 || []) dot(b.x, b.z, b.r || 4, b.c, "#000");
   // the target: job or race checkpoint, on the rim with an arrow when it's out of range
-  const tgt = R.job ? R.job.stops[R.job.stage].at : window.__rbRaceTarget || null;
+  const tgt = R.job ? R.job.stops[R.job.stage].at : window.__rbRaceTarget || window.__rbMissionTarget || window.__rbStoryTarget || window.__rbEventTarget || null;
   if (tgt) {
     let [px, pz] = at(tgt[0], tgt[1]); const col = R.job && R.job.stage ? "#00E676" : "#F5D547";
     const dx = px - mid, dz = pz - mid, dd = Math.hypot(dx, dz), lim = mid - 14;
@@ -146,7 +159,11 @@ export function help() {
     <tr><td><kbd>Space</kbd></td><td>Handbrake: drift round corners</td></tr>
     <tr><td><kbd>G</kbd></td><td>Horn</td></tr>
     <tr><td><kbd>M</kbd> or 📻</td><td>Car radio: RB Radio live, the same song as everyone</td></tr>
-    <tr><td><kbd>T</kbd> or 📱</td><td>Your phone: jobs, empire, races, goals, messages, radio, leaders, events and settings</td></tr>
+    <tr><td><kbd>T</kbd> or 📱</td><td>Your phone: jobs, empire, races, goals, messages, radio, leaders, events, story, customs, wardrobe and settings</td></tr>
+    <tr><td><kbd>O</kbd> near an ad</td><td>Opens the sponsor's page (the card at the bottom shows whose ad it is)</td></tr>
+    <tr><td><kbd>F</kbd> or GET OUT</td><td>Get out and walk; next to a car, get in (yours, or take one from the traffic)</td></tr>
+    <tr><td>On foot</td><td><kbd>WASD</kbd> move, mouse looks (click to lock it, <kbd>Esc</kbd> to let go), <kbd>Shift</kbd> sprint, <kbd>Space</kbd> jump, <kbd>V</kbd> first or third person</td></tr>
+    <tr><td>Combat (18+, ⚔️)</td><td>Right mouse aims, left mouse fires, <kbd>R</kbd> reloads, <kbd>1</kbd>-<kbd>6</kbd> or the mouse wheel switch, hold <kbd>Tab</kbd> for the weapon wheel, <kbd>X</kbd> puts it away, <kbd>G</kbd> throws a grenade (3 a life); kills in a row earn armour, cash and health. Attachments (suppressor, extended magazine, red dot, scope), perks and hired security are in the ⚔️ panel</td></tr>
     <tr><td><kbd>P</kbd></td><td>Photo mode: the HUD hides, orbit the car, set the blur and a filter, save the picture</td></tr>
     <tr><td><kbd>Shift</kbd> or <kbd>N</kbd></td><td>Nitro (the blue gauge refills)</td></tr>
     <tr><td><kbd>E</kbd></td><td>The lot you're next to: buy, build, manage</td></tr>
@@ -155,6 +172,7 @@ export function help() {
     <tr><td><kbd>L</kbd></td><td>Live leaderboard (🏆 on phones)</td></tr>
     <tr><td><kbd>H</kbd> / <kbd>Esc</kbd></td><td>This help / close a panel</td></tr>
     <tr><td>Phone</td><td>Stick to steer, GAS / BRAKE / DRIFT / NITRO on the right</td></tr>
+    <tr><td>Phone, on foot</td><td>Stick to walk, drag the right side to look, SPRINT / JUMP; with combat on, AIM / FIRE / RELOAD / NEXT / GRENADE / VIEW</td></tr>
     <tr><td>Controller</td><td>Left stick steer, RT gas, LT brake, A nitro, B drift, Y lot, Back camera, Start help</td></tr>
   </table>
   <h3>MAKING MONEY</h3><table>
@@ -166,6 +184,14 @@ export function help() {
     <tr><td>🏁 Races</td><td>Host a race and everyone in the city gets an invite, or join one. Podium places win $25,000 / $15,000 / $8,000. Blue canisters fill your nitro; driving close behind another racer (slipstream) refills it and adds speed.</td></tr>
     <tr><td>🎨 Paint</td><td>In the race menu: colours for your car. Other players see it, with your name and level.</td></tr>
     <tr><td>📋 Goals</td><td>Daily rewards, three daily quests, achievements and your level.</td></tr>
+    <tr><td>🌉 Bay Area</td><td>The whole Bay Area, streamed in from OpenStreetMap as you drive out of downtown Vallejo. Bridge tolls are real 2026 rates, charged the way they really are (FasTrak, plate or invoice: pick in 🌉). Fuel runs down as you drive; fill up at a real petrol station at the area's AAA average price (<kbd>U</kbd>). Each town shows its real typical home value and rent (Zillow).</td></tr>
+    <tr><td>🏛️ Nodes</td><td>Empire Nodes: real places, the same for everyone. Walk there with your location on, or drive there, to claim one; it earns every hour, even while you're away. Others can take it over after a few hours (you get half). Walk 1 km a day with your location on for tokens.</td></tr>
+    <tr><td>🤝 Deals</td><td>Stop by another player's lot to make an offer or a hostile takeover bid. An empty lot nobody defends goes to the bidder after a day.</td></tr>
+    <tr><td>📈 Market</td><td>Every half hour something happens in the city that changes some businesses' customers. Living large costs more the richer you get, and expanding fast draws heat (and tax audits).</td></tr>
+    <tr><td>📖 Story</td><td>Rise of RB: five chapters in the phone, each with its own reward.</td></tr>
+    <tr><td>🔧 Customs</td><td>Upgrade your own car: engine, brakes, tyres, nitro and armour. Every car drives like what it is: sports cars are quick, vans are slow.</td></tr>
+    <tr><td>👕 Wardrobe</td><td>Your clothes, hair and skin tone. Other players see your look.</td></tr>
+    <tr><td>📦📸🚚 On the street</td><td>Cash crates land near you now and then (green on the radar). Speed cameras (yellow) pay for 120 km/h and up. With combat on, ram the armored truck (orange), deal with the guards and take the cash.</td></tr>
   </table>
   <div class="rb-muted" style="margin-top:12px">Everything here is game money. Signed in with your RB account, your play time can also earn RB Badge points.</div>
   <button class="btn-ghost" data-e="close">CLOSE</button></div>`, { close: E.hidePanel });

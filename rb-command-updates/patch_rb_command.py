@@ -51,9 +51,22 @@ edit("index.js",
      '  if (path === "/api/affiliate/create") { needsTable(user, "ads", "edit"); return json(await affiliate.create(env, user, body)); }\n')
 
 # ---- tables.js: the ads table gets "Shows on"
+# RB World joined the places an ad can show: an older "Shows on" line becomes the current one first.
+_t = folder / "tables.js"
+_old_surface = '      surface: f.pick("Shows on", ["all", "home", "radio", "tv"], { required: true, labels: { all: "Everywhere ads show", home: "Main site only", radio: "RB Radio only", tv: "RB TV only" }, help: "The main site (homepage, artist pages, agency page) shows ads set to Everywhere or Main site. RB Radio and RB TV pages don\'t show ads yet." }),\n'
+_ts = _t.read_text(encoding="utf-8")
+if _old_surface in _ts:
+    _t.write_text(_ts.replace(_old_surface, '      surface: f.pick("Shows on", ["all", "home", "radio", "tv", "world"], { required: true, labels: { all: "Everywhere ads show", home: "Main site only", radio: "RB Radio only", tv: "RB TV only", world: "RB World only (billboards and posters)" }, help: "Everywhere: the main site (homepage, artist pages, agency page), the ad slots on RB Radio and RB TV, and the billboards and street posters in RB World. Each of the others shows the ad in that one place only. RB World needs an image or a video." }),\n'), encoding="utf-8")
+    print("tables.js: Shows on now includes RB World")
+_u = folder / "ui.js"
+_us = _u.read_text(encoding="utf-8")
+_old_af = r'''<option value="tv">RB TV only</option></select><div class="help">RB Radio and RB TV pages don\'t show ads yet.</div>'''
+if _old_af in _us:
+    _u.write_text(_us.replace(_old_af, r'''<option value="tv">RB TV only</option><option value="world">RB World only (billboards and posters)</option></select><div class="help">Everywhere includes the ad slots on RB Radio and RB TV and the billboards in RB World.</div>'''), encoding="utf-8")
+    print("ui.js: the ad maker's Shows on includes RB World")
 edit("tables.js",
      '      weight: f.int("Weight", { min: 1, max: 100, help: "Higher shows more often when several ads share a placement." }),\n',
-     '      surface: f.pick("Shows on", ["all", "home", "radio", "tv"], { required: true, labels: { all: "Everywhere ads show", home: "Main site only", radio: "RB Radio only", tv: "RB TV only" }, help: "The main site (homepage, artist pages, agency page) shows ads set to Everywhere or Main site. RB Radio and RB TV pages don\'t show ads yet." }),\n'
+     '      surface: f.pick("Shows on", ["all", "home", "radio", "tv", "world"], { required: true, labels: { all: "Everywhere ads show", home: "Main site only", radio: "RB Radio only", tv: "RB TV only", world: "RB World only (billboards and posters)" }, help: "Everywhere: the main site (homepage, artist pages, agency page), the ad slots on RB Radio and RB TV, and the billboards and street posters in RB World. Each of the others shows the ad in that one place only. RB World needs an image or a video." }),\n'
      '      weight: f.int("Weight", { min: 1, max: 100, help: "Higher shows more often when several ads share a placement." }),\n')
 edit("tables.js",
      '      if (mode === "create" && v.freq_cap == null) v.freq_cap = 3;\n',
@@ -101,7 +114,7 @@ VIEW = r"""
       '</div><input type="file" id="af-file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" hidden></section>' +
       '<section><h2>4. Where it shows</h2><div class="panel form">' +
         '<div class="field"><label class="lbl" for="af-place">Placement</label><select id="af-place"><option value="sidebar">Discovery rails</option><option value="spotlight">Homepage spotlight</option><option value="both">Rails and live ticker</option></select></div>' +
-        '<div class="field"><label class="lbl" for="af-surf">Shows on</label><select id="af-surf"><option value="all">Everywhere ads show</option><option value="home">Main site only</option><option value="radio">RB Radio only</option><option value="tv">RB TV only</option></select><div class="help">RB Radio and RB TV pages don\'t show ads yet.</div></div>' +
+        '<div class="field"><label class="lbl" for="af-surf">Shows on</label><select id="af-surf"><option value="all">Everywhere ads show</option><option value="home">Main site only</option><option value="radio">RB Radio only</option><option value="tv">RB TV only</option><option value="world">RB World only (billboards and posters)</option></select><div class="help">Everywhere includes the ad slots on RB Radio and RB TV and the billboards in RB World.</div></div>' +
         '<div class="formbar"><button class="btn primary" type="button" id="af-pub">Publish ad</button><button class="btn" type="button" id="af-pause">Save it paused</button><span class="muted">Shows up to 3 times a day per visitor. Edit, pause or delete it any time under Ads.</span></div>' +
       '</div></section></div>';
     var val = function(id){ return $(id).value.trim(); };

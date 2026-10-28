@@ -27,10 +27,11 @@ async function rows(env, sql, ...a) { try { return (await env.DB.prepare(sql).bi
 async function one(env, sql, ...a) { try { return await env.DB.prepare(sql).bind(...a).first(); } catch { return null; } }
 async function ensure(env) {
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS world_bans (id TEXT PRIMARY KEY, name TEXT, reason TEXT, by TEXT, created_at TEXT NOT NULL)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS world_ad_stats (ad_id INTEGER NOT NULL, day TEXT NOT NULL, impressions INTEGER NOT NULL DEFAULT 0, viewable INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (ad_id, day))").run();
 }
 async function config(env) {
   const out = {};
-  for (const r of await rows(env, "SELECT key, value FROM badge_config WHERE key IN ('enabled', 'world_open', 'world_radio', 'world_notice', 'world_points_block', 'world_block_minutes', 'world_points_daily')")) out[r.key] = r.value;
+  for (const r of await rows(env, "SELECT key, value FROM badge_config WHERE key IN ('enabled', 'world_open', 'world_radio', 'world_combat', 'world_notice', 'world_points_block', 'world_block_minutes', 'world_points_daily')")) out[r.key] = r.value;
   return out;
 }
 
@@ -50,7 +51,7 @@ export async function summary(env, fetcher = fetch) {
   await ensure(env);
   const now = Date.now(), iso = (ms) => new Date(now - ms).toISOString(), today = new Date(now).toISOString().slice(0, 10);
   const c = await config(env);
-  const [counts, top, chat, bans, lots, races, bests, play, radio] = await Promise.all([
+  const [counts, top, chat, bans, lots, races, bests, play, radio, boards, adViews] = await Promise.all([
     one(env, "SELECT count(*) AS total, sum(seen_at >= ?) AS online, sum(seen_at >= ?) AS day, sum(seen_at >= ?) AS week FROM world_players", iso(120e3), iso(864e5), iso(7 * 864e5)),
     rows(env, "SELECT p.id, p.name, p.net_worth, p.tokens, p.kills, p.deaths, p.seen_at, p.clerk_user_id IS NOT NULL AS account, b.id IS NOT NULL AS blocked FROM world_players p LEFT JOIN world_bans b ON b.id = p.id WHERE p.seen_at >= ? ORDER BY p.net_worth DESC LIMIT 15", iso(30 * 864e5)),
     rows(env, "SELECT c.n, c.player_id, c.name, c.text, c.created_at, b.id IS NOT NULL AS blocked FROM world_chat c LEFT JOIN world_bans b ON b.id = c.player_id ORDER BY c.n DESC LIMIT 40"),
@@ -60,10 +61,13 @@ export async function summary(env, fetcher = fetch) {
     rows(env, "SELECT track, name, min(ms) AS ms, at FROM world_race_best GROUP BY track ORDER BY track"),
     one(env, "SELECT count(*) AS members, coalesce(sum(seconds), 0) AS seconds, coalesce(sum(awarded), 0) AS awarded FROM world_play WHERE day = ?", today),
     radioNow(fetcher),
+    // the sponsors on the billboards and posters right now: the same rule as the game (/api/world/billboards)
+    rows(env, "SELECT id, advertiser, headline, surface, format, image_url, video_url, ends_at FROM ads WHERE status = 'live' AND surface IN ('all', 'world', 'game') AND (starts_at IS NULL OR starts_at = '' OR datetime(starts_at) <= datetime('now')) AND (ends_at IS NULL OR ends_at = '' OR datetime(ends_at) >= datetime('now')) ORDER BY coalesce(weight, 1) DESC, id DESC LIMIT 8"),
+    rows(env, "SELECT s.ad_id, a.advertiser, a.headline, a.status, sum(s.impressions) AS views, sum(s.viewable) AS viewable FROM world_ad_stats s LEFT JOIN ads a ON a.id = s.ad_id WHERE s.day >= ? GROUP BY s.ad_id ORDER BY views DESC LIMIT 20", iso(30 * 864e5).slice(0, 10)),
   ]);
   return {
     ok: true, generated_at: new Date(now).toISOString(),
-    settings: { open: onOff(c.world_open), radio: onOff(c.world_radio), notice: c.world_notice || "", badge_on: String(c.enabled || "").trim().toLowerCase() === "on",
+    settings: { open: onOff(c.world_open), radio: onOff(c.world_radio), combat: onOff(c.world_combat), notice: c.world_notice || "", badge_on: String(c.enabled || "").trim().toLowerCase() === "on",
       points: { block: n(c.world_points_block ?? 5), minutes: n(c.world_block_minutes ?? 10), daily: n(c.world_points_daily ?? 30) } },
     players: { total: n(counts?.total), online: n(counts?.online), day: n(counts?.day), week: n(counts?.week),
       top: top.map((p) => ({ id: p.id, name: p.name, net_worth: n(p.net_worth), tokens: n(p.tokens), kills: n(p.kills), deaths: n(p.deaths), seen_at: p.seen_at, account: !!n(p.account), blocked: !!n(p.blocked) })) },
@@ -72,6 +76,8 @@ export async function summary(env, fetcher = fetch) {
     bans, lots: { owned: lots.length, total: LOTS, list: lots },
     races: races.map((r) => ({ ...r, racers: n(r.racers), finished: n(r.finished) })), bests: bests.map((b) => ({ ...b, ms: n(b.ms) })),
     radio,
+    billboards: { live: boards.map((a) => ({ id: n(a.id), advertiser: a.advertiser, headline: a.headline, surface: a.surface, video: a.format === "video" && !!a.video_url, image: !!a.image_url, ends_at: a.ends_at || null })),
+      stats: adViews.map((a) => ({ id: n(a.ad_id), advertiser: a.advertiser || "Ad #" + a.ad_id, headline: a.headline || "", status: a.status || "deleted", views: n(a.views), viewable: n(a.viewable) })) },
   };
 }
 
@@ -81,6 +87,7 @@ export async function saveSettings(env, who, body) {
   const c = await config(env);
   if (body.open !== undefined && onOff(c.world_open) !== !!body.open) put("world_open", body.open ? "on" : "off", "RB World");
   if (body.radio !== undefined && onOff(c.world_radio) !== !!body.radio) put("world_radio", body.radio ? "on" : "off", "car radio");
+  if (body.combat !== undefined && onOff(c.world_combat) !== !!body.combat) put("world_combat", body.combat ? "on" : "off", "combat (18+)");
   if (body.notice !== undefined) { const t = clean(body.notice, 200); if (t !== (c.world_notice || "")) put("world_notice", t, "notice"); }
   for (const [key, [lo, hi]] of Object.entries(POINTS)) {
     const field = { world_points_block: "block", world_block_minutes: "minutes", world_points_daily: "daily" }[key];
@@ -93,6 +100,7 @@ export async function saveSettings(env, who, body) {
   // rows that a database from before these settings doesn't have yet
   await env.DB.batch([
     env.DB.prepare("INSERT OR IGNORE INTO badge_config (key, value) VALUES ('world_radio', 'on')"),
+    env.DB.prepare("INSERT OR IGNORE INTO badge_config (key, value) VALUES ('world_combat', 'on')"),
     env.DB.prepare("INSERT OR IGNORE INTO badge_config (key, value) VALUES ('world_notice', '')"),
     ...set]);
   await log(env, who, "world.settings", "RB World", changes.join(", "));
@@ -192,6 +200,7 @@ export function page(nonce, canEdit) {
   <section class="card"><h2>Switches</h2>
     <label class="sw"><input type="checkbox" id="s-open"><span>RB World open<small>Off: players see "coming soon" and nothing can be played.</small></span></label>
     <label class="sw"><input type="checkbox" id="s-radio"><span>Car radio<small>RB Radio live in every car: the same song as everyone, and live shows when RB goes on air.</small></span></label>
+    <label class="sw"><input type="checkbox" id="s-combat"><span>Combat (18+)<small>Players who confirm they're 18 or older can turn on weapons, combat missions and fights with each other. Off: nobody can, and combat missions stop.</small></span></label>
     <div class="mt"><label for="s-notice" class="muted">Notice for players (when they start, and on the city ticker; up to 200 characters)</label><textarea id="s-notice" maxlength="200" placeholder="For example: Comedy night Friday at 8, see /events"></textarea></div>
     <div class="mt muted">RB Badge points for play time <span id="badge-state"></span></div>
     <div class="row mt"><label class="muted">Points <input class="num" type="number" id="p-block" min="0" max="100"></label><label class="muted">every <input class="num" type="number" id="p-min" min="1" max="1440"> min</label><label class="muted">up to <input class="num" type="number" id="p-day" min="0" max="1000"> a day</label></div>
@@ -215,6 +224,10 @@ export function page(nonce, canEdit) {
   <section class="card"><h2>Owned lots</h2><div class="scroll"><table><thead><tr><th>Lot</th><th>Owner</th><th>Business</th><th></th></tr></thead><tbody id="lots"></tbody></table></div></section>
   <section class="card"><h2>Races</h2><div class="scroll"><table><thead><tr><th>Track</th><th>Host</th><th>Racers</th><th>When</th></tr></thead><tbody id="races"></tbody></table></div>
     <h2 class="mt">Best times</h2><div class="scroll"><table><tbody id="bests"></tbody></table></div></section>
+  <section class="card wide"><h2>Billboards and posters</h2><p class="muted">Live ads from Money &gt; Ads set to Everywhere or RB World only take turns with RB's own on the 11 screens round RB Plaza and the street posters, with a Sponsored label. Up to 8 at a time; a new or paused ad shows in the game within five minutes.</p>
+    <div class="scroll"><table><thead><tr><th>On now</th><th>Shows on</th><th>Art</th><th>Ends</th></tr></thead><tbody id="boards"></tbody></table></div>
+    <h2 class="mt">In-game views (last 30 days)</h2><div class="scroll"><table><thead><tr><th>Ad</th><th>Views</th><th>Seen 1 s or more</th></tr></thead><tbody id="adviews"></tbody></table></div>
+    <p class="muted">Counted when an ad is on a player's screen and close enough to read, at most once per ad every 30 minutes for a player; kept apart from the website's numbers. Clicks from the game count with the ad's other clicks under Ads (tagged utm_content=world for the advertiser).</p></section>
   <section class="card wide"><h2>Blocked players</h2><div class="scroll"><table><thead><tr><th>Player</th><th>Why</th><th>By</th><th>When</th><th></th></tr></thead><tbody id="bans"></tbody></table></div></section>
 </div>
 </main>
@@ -233,10 +246,10 @@ function empty(tb, cols, t){ var tr = el("tr"), td = el("td", "muted", t); td.co
 function block(id, name){ var why = prompt("Block " + name + " in RB World? They can still drive, but not chat, race or show on the leaderboard.\\n\\nWhy (optional):", ""); if (why === null) return Promise.reject(new Error("Not blocked.")); return api("/api/world-admin/block", { id: id, name: name, reason: why, delete_chat: confirm("Also delete their chat messages?") }).then(function(){ say("Blocked " + name + "."); }); }
 function render(d){
   D = d; var s = d.settings;
-  $("s-open").checked = s.open; $("s-radio").checked = s.radio; $("s-notice").value = s.notice;
+  $("s-open").checked = s.open; $("s-radio").checked = s.radio; $("s-combat").checked = s.combat; $("s-notice").value = s.notice;
   $("p-block").value = s.points.block; $("p-min").value = s.points.minutes; $("p-day").value = s.points.daily;
   $("badge-state").textContent = s.badge_on ? "(RB Badge is on, so these count)" : "(RB Badge is off, so these don't count yet)";
-  ["s-open","s-radio","s-notice","p-block","p-min","p-day","save"].forEach(function(id){ $(id).disabled = !EDIT; });
+  ["s-open","s-radio","s-combat","s-notice","p-block","p-min","p-day","save"].forEach(function(id){ $(id).disabled = !EDIT; });
   var r = d.radio, oa = $("onair"); oa.classList.toggle("live", !!(r && r.live));
   $("r-title").textContent = !r ? "RB Radio can't be reached right now" : r.live ? "LIVE: " + r.title : (r.title || "Getting the next song ready");
   $("r-artist").textContent = r ? (r.artist || "") : "";
@@ -258,12 +271,18 @@ function render(d){
   d.races.forEach(function(r){ var tr = el("tr"); cell(tr, r.track); cell(tr, r.solo ? "Solo" : (r.host_name || "")); cell(tr, r.finished + " of " + r.racers + " finished"); cell(tr, ago(new Date(Number(r.start_at)).toISOString())); rt.appendChild(tr); });
   var bt = $("bests"); bt.textContent = ""; if (!d.bests.length) empty(bt, 3, "No best times yet.");
   d.bests.forEach(function(b){ var tr = el("tr"); cell(tr, b.track); cell(tr, b.name); cell(tr, (b.ms / 1000).toFixed(2) + " s"); bt.appendChild(tr); });
+  var bb = $("boards"); bb.textContent = ""; if (!d.billboards.live.length) empty(bb, 4, "No sponsor ads on the billboards: RB's own show. Add one under Money > Ads and set Shows on to Everywhere or RB World only.");
+  d.billboards.live.forEach(function(a){ var tr = el("tr"), nm = el("span", null, a.advertiser || ("Ad #" + a.id)); if (a.headline) nm.appendChild(el("span", "muted", "  " + a.headline));
+    cell(tr, nm); cell(tr, a.surface === "world" ? "RB World only" : "Everywhere"); cell(tr, a.video ? "Video" : a.image ? "Image" : "Words only"); cell(tr, a.ends_at ? String(a.ends_at).slice(0, 10) : "No end date"); bb.appendChild(tr); });
+  var av = $("adviews"); av.textContent = ""; if (!d.billboards.stats.length) empty(av, 3, "No in-game views yet.");
+  d.billboards.stats.forEach(function(a){ var tr = el("tr"), nm = el("span", null, a.advertiser); if (a.status !== "live") nm.appendChild(el("span", "tag", a.status));
+    cell(tr, nm); cell(tr, fmt(a.views)); cell(tr, fmt(a.viewable)); av.appendChild(tr); });
   var bn = $("bans"); bn.textContent = ""; if (!d.bans.length) empty(bn, 5, "Nobody is blocked.");
   d.bans.forEach(function(b){ var tr = el("tr"); cell(tr, b.name || b.id); cell(tr, b.reason || ""); cell(tr, b.by || ""); cell(tr, ago(b.created_at)); cell(tr, btn("Unblock", "", function(){ return api("/api/world-admin/unblock", { id: b.id }).then(function(){ say("Unblocked."); }); })); bn.appendChild(tr); });
 }
 function load(){ return api("/api/world-admin").then(render).catch(function(e){ say(e.message, true); }); }
 $("save").addEventListener("click", function(){ var b = this; b.disabled = true;
-  api("/api/world-admin/settings", { open: $("s-open").checked, radio: $("s-radio").checked, notice: $("s-notice").value, points: { block: Number($("p-block").value), minutes: Number($("p-min").value), daily: Number($("p-day").value) } })
+  api("/api/world-admin/settings", { open: $("s-open").checked, radio: $("s-radio").checked, combat: $("s-combat").checked, notice: $("s-notice").value, points: { block: Number($("p-block").value), minutes: Number($("p-min").value), daily: Number($("p-day").value) } })
     .then(function(r){ say(r.changed.length ? "Saved: " + r.changed.join(", ") + "." : "Nothing changed."); return load(); }, function(e){ say(e.message, true); }).then(function(){ b.disabled = !EDIT; }); });
 load(); setInterval(function(){ if (!document.hidden) load(); }, 30000);
 })();

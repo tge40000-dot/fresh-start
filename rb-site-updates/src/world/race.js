@@ -387,7 +387,8 @@ body:has(#ov-empire[style*="flex"]) #rb-leave,body:has(#ov-empire[style*="flex"]
   const b = document.createElement("button"); b.className = "ctrl-btn"; b.id = "btn-board"; b.textContent = "🏆"; b.title = "Live leaderboard"; b.setAttribute("aria-label", "Live leaderboard"); b.onclick = openBoard;
   ctr.insertBefore(b, ctr.children[3] || null);
   applyPaint();
-  beatExtra(() => ({ car: [E.car.x, E.car.z, E.car.heading, E.car.speed], level: level(), color: paintHex() }));
+  // on foot, others see your car parked where you left it (and you, through live.js)
+  beatExtra(() => ({ car: window.RBFoot ? window.RBFoot.vehicle() : [E.car.x, E.car.z, E.car.heading, E.car.speed], level: level(), color: paintHex() }));
   onBeat((d) => {
     if (d.now) clock(d.now);
     B.data.worth = d.board || []; B.data.level = d.boards?.level || []; B.data.lots = d.boards?.lots || []; B.races = d.races || [];
@@ -395,6 +396,7 @@ body:has(#ov-empire[style*="flex"]) #rb-leave,body:has(#ov-empire[style*="flex"]
     const inRace = new Set(R.entries.map((e) => e.id));
     for (const p of d.peers || []) {
       if (inRace.has(p.id)) { ghost(p.id, p.name, p.level || 1, p.color); continue; } // its position comes from the race
+      if (window.RBLive && window.RBLive.fresh(p.id)) continue; // live.js has newer news of this one
       if (p.car) seeGhost(p.id, p.name, p.level || 1, p.color, p.car, false); else dropGhost(p.id);
     }
     for (const id of [...ghosts.keys()]) if (!B.online.has(id) && !inRace.has(id)) dropGhost(id);
@@ -406,5 +408,5 @@ body:has(#ov-empire[style*="flex"]) #rb-leave,body:has(#ov-empire[style*="flex"]
   on("race-key", openHub);
   window.addEventListener("keydown", (e) => { if (e.code === "KeyL" && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName || "")) openBoard(); });
   renderBoard();
-  return { openHub, openBoard, start, join, state: R, board: B, ghosts };
+  return { openHub, openBoard, start, join, state: R, board: B, ghosts, see: seeGhost, ghost };
 }

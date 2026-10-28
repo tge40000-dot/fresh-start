@@ -12,7 +12,7 @@ import { Sky } from "three/addons/objects/Sky.js";
 import { buildCar, headlights as carLights } from "./cars.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import * as CITY from "./city.js";
-import { LOTS, DISTRICTS, BUSINESSES, MAX_LEVEL, MAX_LOTS_PER_PLAYER, RENT_COOLDOWN_S, businessByKey, lotById, rentFor, upgradeCost } from "./empire_defs.js";
+import { LOTS, DISTRICTS, BUSINESSES, MAX_LEVEL, MAX_LOTS_PER_PLAYER, RENT_COOLDOWN_S, businessByKey, lotById, rentFor, upgradeCost, marketAt } from "./empire_defs.js";
 import { api, onBeat } from "./rb_world.js";
 
 const SAVE = "rb_empire_v1";
@@ -44,8 +44,9 @@ const car = { x: CITY.START[0], z: CITY.START[1], heading: CITY.START[2], speed:
 // each lot is a real building: where its door is on the street, and the building itself
 for (const l of LOTS) { const g = CITY.lotGeo[l.id]; if (g) Object.assign(l, { x: g.door[0], z: g.door[1], face: g.face, building: g.building }); }
 const keys = {};
-const joy = { x: 0, y: 0, on: false };
+export const joy = { x: 0, y: 0, on: false };
 let lotMeshes = {}, traffic = [], cops = [], drops = [], gpsDrops = [], gpsMarkers = [], job = null, beacon = null;
+let footTick = null; // onfoot.js: while you're out of the car it moves you, the camera and the sun
 let wanted = 0, bustT = 0, escapeT = 0, freeCam = false, lastRent = {}, nearLot = null, stopT = 0, toastBox = null, ui = {};
 const pools = []; // real light from the street lamps nearest you, at night
 let dayLight = null, sun = null, windowMat = null, sky = null, stars = null, lampMat = null, world = null, moon = null, headlight = null, pmrem = null, envAt = -1;
@@ -236,19 +237,21 @@ car.vx = 0; car.vz = 0; car.boost = 1; car.steer = 0;
 function driveCar(dt) {
   let { t, s, boost, hand } = driveInput();
   if (car.lock || car.photo) { t = 0; boost = false; car.vx = car.vz = 0; } // held on the grid during a race countdown, or for a photo
+  if ((car.stall || car.empty) && t > 0) { t = 0; boost = false; } // the engine's wrecked (damage.js) or out of fuel (bay.js)
   const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
   let fwd = car.vx * fx + car.vz * fz, side = car.vx * fz - car.vz * fx;
+  const T = car.tune || { max: 1, accel: 1, grip: 1, brake: 1, nitro: 1 }; // the car's class and RB Customs upgrades (garage.js)
   const boosting = boost && car.boost > 0.02 && t > 0;
-  car.boost = Math.max(0, Math.min(1, car.boost + (boosting ? -0.35 : 0.09) * dt));
-  const max = (boosting ? 44 : 30) + (car.draft || 0), accel = boosting ? 34 : 19; // draft: a slipstream bonus in races
+  car.boost = Math.max(0, Math.min(1, car.boost + (boosting ? -0.35 / T.nitro : 0.09 * T.nitro) * dt));
+  const max = ((boosting ? 44 : 30) + (car.draft || 0)) * T.max, accel = (boosting ? 34 : 19) * T.accel; // draft: a slipstream bonus in races
   if (t > 0) fwd += accel * dt * (fwd < max ? 1 : 0);
-  else if (t < 0) fwd -= (fwd > 0 ? 42 : 14) * dt;
+  else if (t < 0) fwd -= (fwd > 0 ? 42 * T.brake : 14) * dt;
   else fwd *= Math.pow(0.45, dt);
   fwd = Math.max(-12, Math.min(max, fwd));
   // steering: easier at low speed, a little less sharp flat out; the handbrake tightens it and lets the back go
   car.steer += (s - car.steer) * Math.min(1, dt * 8);
-  const grip = hand ? 1.4 : 9, turn = car.steer * dt * (hand ? 3.2 : 2.3) * Math.min(1, Math.abs(fwd) / 7) * (1 - Math.min(0.35, Math.abs(fwd) / 120)) * Math.sign(fwd || 1);
-  car.heading += turn;
+  const grip = (hand ? 1.4 : 9) * T.grip, turn = car.steer * dt * (hand ? 3.2 : 2.3) * Math.min(1, Math.abs(fwd) / 7) * (1 - Math.min(0.35, Math.abs(fwd) / 120)) * Math.sign(fwd || 1);
+  car.heading += turn + (car.spin || 0) * dt; car.spin = (car.spin || 0) * Math.pow(0.04, dt); // spin from a hit (damage.js)
   side *= Math.pow(0.5, dt * grip);
   if (hand) fwd *= Math.pow(0.7, dt);
   const nfx = Math.sin(car.heading), nfz = Math.cos(car.heading);
@@ -290,8 +293,19 @@ function driveCar(dt) {
     cam.lookAt(car.x + nfx * ahead, mode === "hood" ? 1.4 : 1.5, car.z + nfz * ahead);
   } else { ctl.enabled = true; ctl.target.set(car.x, 2, car.z); }
   // the sun's shadows are drawn round wherever the car is
-  sun.target.position.set(car.x, 0, car.z); sun.position.set(car.x + sunV.x * 420, sunV.y * 420, car.z + sunV.z * 420);
+  sunAt(car.x, car.z);
 }
+function sunAt(x, z) { sun.target.position.set(x, 0, z); sun.position.set(x + sunV.x * 420, sunV.y * 420, z + sunV.z * 420); }
+// Drive another car (one taken from the traffic, or your own again): the headlights move over to it.
+function useCarMesh(m) {
+  const old = car.mesh; if (m === old) return old;
+  for (const o of [headlight, headlight.target, beams]) { if (o.parent) o.parent.remove(o); m.add(o); }
+  m.traverse((o) => { if (o.isMesh && !o.userData.noAO) o.castShadow = true; });
+  car.mesh = m; car.vx = car.vz = 0; car.speed = 0; car.steer = 0;
+  return old;
+}
+// A car leaves the traffic (you took it): another one takes its place somewhere out of sight.
+function takeTraffic(c) { const i = traffic.indexOf(c); if (i < 0) return null; traffic[i] = spawnRoadCar(pick(COLOURS), false, true); return c; }
 let sunV = new THREE.Vector3(0.3, 0.8, 0.2);
 // tyre marks that fade
 const skids = [];
@@ -547,9 +561,10 @@ function figures(l) {
   const staff = 1 + st.staff.map((cid) => S.cards.find((c) => c.id === cid)).filter(Boolean).reduce((a, c) => a + (c.role === b.role ? RARITY.find((x) => x.key === c.rarity).bonus : 0.03), 0);
   const wages = st.staff.map((cid) => S.cards.find((c) => c.id === cid)).filter(Boolean).reduce((a, c) => a + RARITY.find((x) => x.key === c.rarity).wage, 0);
   const mkt = st.mkt > Date.now() ? 1.3 : 1;
-  const customers = b.cap * (1 + 0.5 * (lvl - 1)) * demand * day * set * staff * mkt * st.rep;
+  const ev = marketAt(Date.now()), market = ev.biz.includes(b.key) ? ev.k : 1; // the market this half hour (market.js)
+  const customers = b.cap * (1 + 0.5 * (lvl - 1)) * demand * day * set * staff * mkt * st.rep * market;
   const revenue = customers * price, cost = b.upkeep * (1 + 0.4 * (lvl - 1)) + wages;
-  return { b, lvl, price, r, demand, customers, revenue, cost, profit: revenue - cost, set, staff, mkt, wages };
+  return { b, lvl, price, r, demand, customers, revenue, cost, profit: revenue - cost, set, staff, mkt, wages, market, event: market !== 1 ? ev.text : null };
 }
 function tycoonTick(dt) {
   S.clock = (S.clock + dt * GAME_MIN_PER_SEC) % (24 * 60);
@@ -663,7 +678,7 @@ function lotTick(dt) {
   ui.ctx.style.display = "flex";
   if (ui.ctx.dataset.k !== text) { ui.ctx.dataset.k = text; ui.ctx.innerHTML = `<span>${text}</span><button class="rb-btn" id="rb-ctx-go">${btn}</button>`; document.getElementById("rb-ctx-go").onclick = () => openLot(l); }
   // stopping on someone else's lot costs rent (Monopoly)
-  if (s && s.owner_id !== C.player.id && Math.abs(car.speed) < 2) { stopT += dt; if (stopT > 1.2) { payRent(l); stopT = -999; } }
+  if (s && s.owner_id !== C.player.id && !car.onFoot && Math.abs(car.speed) < 2) { stopT += dt; if (stopT > 1.2) { payRent(l); stopT = -999; } }
 }
 
 // ---------------------------------------------------------------- panels
@@ -689,7 +704,11 @@ function openLot(l) {
     });
   }
   if (s.owner_id !== C.player.id) {
-    return panel(`${head}<div class="subtitle">${b ? `${b.icon} ${esc(s.name || b.name)} ${"★".repeat(s.level || 1)}` : "An empty lot"}, owned by <b>${esc(s.owner_name)}</b>. Stopping here costs ${money(rentFor(l.id, s.level, s.business))} rent.</div><button class="btn-ghost" data-e="close">CLOSE</button>`, { close: hidePanel });
+    // deals.js: buy it from them, or a hostile takeover bid
+    const D = window.RBDeals;
+    return panel(`${head}<div class="subtitle">${b ? `${b.icon} ${esc(s.name || b.name)} ${"★".repeat(s.level || 1)}` : "An empty lot"}, owned by <b>${esc(s.owner_name)}</b>. Stopping here costs ${money(rentFor(l.id, s.level, s.business))} rent.</div>
+      ${D ? `<button class="btn-gold" data-e="offer">🤝 MAKE AN OFFER</button><button class="btn-ghost" data-e="takeover">⚔️ HOSTILE TAKEOVER BID</button>` : ""}<button class="btn-ghost" data-e="close">CLOSE</button>`,
+      { close: hidePanel, offer: () => D.offer(l, s, "offer"), takeover: () => D.offer(l, s, "takeover") });
   }
   if (!b) {
     const tier = d.tier, acts = { close: hidePanel, sell: () => sellLot(l) };
@@ -793,7 +812,7 @@ function buildUi() {
   const knob = j.firstChild, move = (e) => { const r = j.getBoundingClientRect(), t = e.touches ? e.touches[0] : e; let x = (t.clientX - r.left - 60) / 50, y = (t.clientY - r.top - 60) / 50; const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; } joy.x = x; joy.y = y; joy.on = true; knob.style.transform = `translate(${x * 35}px,${y * 35}px)`; e.preventDefault(); };
   const end = () => { joy.on = false; joy.x = joy.y = 0; knob.style.transform = ""; };
   j.addEventListener("touchstart", move, { passive: false }); j.addEventListener("touchmove", move, { passive: false }); j.addEventListener("touchend", end); j.addEventListener("touchcancel", end);
-  window.addEventListener("keydown", (e) => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) return; keys[e.code] = true; if (e.code === "KeyE" && nearLot) openLot(nearLot); if (e.code === "KeyC") cycleCam(); if (e.code === "KeyH" && C.help) C.help(); if (e.code === "KeyR") emit("race-key"); if (e.code === "Escape") hidePanel(); if (/Arrow|Space/.test(e.code)) e.preventDefault(); });
+  window.addEventListener("keydown", (e) => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) return; keys[e.code] = true; if (e.code === "KeyE" && nearLot) openLot(nearLot); if (e.code === "KeyC") cycleCam(); if (e.code === "KeyH" && C.help) C.help(); if (e.code === "KeyR" && !car.onFoot) emit("race-key"); if (e.code === "Escape") hidePanel(); if (/Arrow|Space/.test(e.code)) e.preventDefault(); });
   window.addEventListener("keyup", (e) => { keys[e.code] = false; });
   // the existing buttons get the new systems; two new ones for the empire and the talent book
   const ctr = document.getElementById("controls");
@@ -825,7 +844,7 @@ export function initEmpire(ctx) {
   buildUi();
   buildCity();
   for (const l of LOTS) renderLot(l);
-  car.mesh = makeCar(0xC9A84C, false, true);
+  car.mesh = makeCar(0xC9A84C, false, true); car.mesh.userData.personal = true; // your own car (RB Customs upgrades it)
   car.mesh.traverse((o) => { if (o.isMesh && !o.userData.noAO) o.castShadow = true; }); // not the underglow or the flames
   // headlights for the night
   headlight = new THREE.SpotLight(0xfff1d6, 0, 90, 0.55, 0.5, 1.3); headlight.position.set(0, 1.1, 2.0); headlight.target.position.set(0, 0, 18); car.mesh.add(headlight); car.mesh.add(headlight.target);
@@ -845,9 +864,10 @@ export function initEmpire(ctx) {
   C.onFrame((dt, t) => {
     dt = Math.min(dt, 0.1);
     clockT += dt; world.tick(clockT);
-    driveCar(dt);
+    if (car.onFoot && footTick) footTick(dt); else driveCar(dt);
     for (const c of traffic) moveRoadCar(c, dt, false);
     copsTick(dt); jobTick(dt); dropsTick(dt, t); lotTick(dt); skidsTick(dt); emit("frame", dt);
+    sky.position.set(C.camera.position.x, 0, C.camera.position.z); stars.position.copy(sky.position); // the sky goes where you go (stream.js: the whole Bay Area)
     for (const g of Object.values(lotMeshes)) for (const o of g.children) if (o.userData.spin) o.rotation.y += dt;
     acc += dt; if (acc >= 1) { tycoonTick(acc); trafficTick(); poolsTick(); acc = 0; S.lastTick = Date.now(); }
     gpsAcc += dt; if (gpsAcc >= 5) { gpsAcc = 0; gpsTick(); save(); }
@@ -855,6 +875,7 @@ export function initEmpire(ctx) {
   window.addEventListener("beforeunload", () => { S.lastTick = Date.now(); save(); });
   return { openLot, openEmpire, openJobs, setWanted, state: S, lots, car, toast, panel, hidePanel, emit, money,
     phase: () => world.signal(clockT), signalAt: (n) => SIGNAL[n], wanted: () => wanted,
-    radar: () => ({ car, cops, traffic, drops, job, lots, wanted, mine: (l) => mine(l), lotOwner }), camName: () => CAMS[camMode], save, city: CITY, camera: C.camera,
-    giveCard: (key) => giveCard("reward", RARITY.find((r) => r.key === key)) };
+    radar: () => ({ car, cops, traffic, drops, job, lots, wanted, mine: (l) => mine(l), lotOwner }), camName: () => CAMS[camMode], save, city: CITY, world: () => world, camera: C.camera,
+    giveCard: (key) => giveCard("reward", RARITY.find((r) => r.key === key)),
+    setFoot: (fn) => { footTick = fn; }, night: () => nightK, nearMine: () => !!(nearLot && mine(nearLot)), sunAt, useCarMesh, takeTraffic, traffic: () => traffic, cops: () => cops, busted, cycleCam };
 }

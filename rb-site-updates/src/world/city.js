@@ -15,6 +15,10 @@ export const ATTRIBUTION = D.attribution;
 export const NAME = D.name || "RB City", SHORT = D.short || "Downtown", PLAZA_NAME = D.plazaName || "RB Plaza";
 export const START = D.start || [0, 0, 0]; // [x, z, heading]: on the road by RB Plaza
 export const PLAZA = D.plaza || [0, 0];
+// the projection (stream.js builds the rest of the Bay Area in the same frame), and what stream.js answers for the
+// world outside the baked city: what's solid there, the street and the place
+export const FRAME = { origin: D.origin, kx: D.kx, kz: D.kz, rot: D.rot };
+export const ext = { blocked: null, street: null, area: null };
 
 // ---------------------------------------------------------------- the map, read once
 export const buildings = D.buildings.map((b) => {
@@ -47,8 +51,7 @@ export const lotGeo = Object.fromEntries(Object.entries(D.lots).map(([id, l]) =>
 // ---------------------------------------------------------------- lookups
 // A coarse grid of the drivable city's buildings, so collision only looks at the few nearby.
 const CELL = 24, grid = new Map();
-buildings.forEach((b, i) => {
-  if (!b.core) return;
+buildings.forEach((b, i) => { // the skyline's too: it's solid once you can drive out to it
   for (let gx = Math.floor(b.box[0] / CELL); gx <= Math.floor(b.box[2] / CELL); gx++) for (let gz = Math.floor(b.box[1] / CELL); gz <= Math.floor(b.box[3] / CELL); gz++) {
     const k = gx * 100003 + gz; if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i);
   }
@@ -61,8 +64,10 @@ const water = D.water.map((a) => { const pts = []; for (let i = 0; i < a.length;
 export function inWater(x, z) { for (const w of water) if (x >= w.box[0] && x <= w.box[2] && z >= w.box[1] && z <= w.box[3] && inside(w.pts, x, z)) return true; return false; }
 // Is this spot inside a building (or within r of a wall), in the water, or off the edge of the city?
 export function blocked(x, z, r = 1.1) {
-  if (Math.abs(x) > HALF[0] + 25 || Math.abs(z) > HALF[1] + 25) return true;
-  if (water.length && inWater(x, z)) return true;
+  const out = Math.abs(x) > HALF[0] + 25 || Math.abs(z) > HALF[1] + 25;
+  if (out && !ext.blocked) return true; // nothing beyond the city yet
+  if (out && ext.blocked(x, z, r)) return true;
+  if (water.length && !out && inWater(x, z)) return true;
   const list = grid.get(Math.floor(x / CELL) * 100003 + Math.floor(z / CELL));
   if (!list) return false;
   for (const i of list) { const b = buildings[i]; if (x < b.box[0] - r || x > b.box[2] + r || z < b.box[1] - r || z > b.box[3] + r) continue; if (inside(b.pts, x, z) || edgeDist(b.pts, x, z) < r) return true; }
@@ -74,8 +79,9 @@ export function nearestEdge(x, z) {
   for (const e of edges) { const d = segDist(x, z, nodes[e.a], nodes[e.b]); if (d < bd) { bd = d; best = e; } }
   return { e: best, d: bd };
 }
-export function streetName(x, z) { const { e, d } = nearestEdge(x, z); return e && d < e.w / 2 + 10 ? e.name : null; }
-export function areaName(x, z) { let best = null, bd = Infinity; for (const p of places) { const d = Math.hypot(p.x - x, p.z - z); if (d < bd) { bd = d; best = p; } } return best ? best.name : SHORT; }
+const outside = (x, z) => Math.abs(x) > HALF[0] + 25 || Math.abs(z) > HALF[1] + 25;
+export function streetName(x, z) { if (outside(x, z) && ext.street) return ext.street(x, z); const { e, d } = nearestEdge(x, z); return e && d < e.w / 2 + 10 ? e.name : null; }
+export function areaName(x, z) { if (outside(x, z) && ext.area) { const a = ext.area(x, z); if (a) return a; } let best = null, bd = Infinity; for (const p of places) { const d = Math.hypot(p.x - x, p.z - z); if (d < bd) { bd = d; best = p; } } return best ? best.name : SHORT; }
 export function nodeNear(x, z) { let b = 0, bd = Infinity; nodes.forEach((n, i) => { const d = Math.hypot(n[0] - x, n[1] - z); if (d < bd && anyLinks[i].length) { bd = d; b = i; } }); return b; }
 // A random spot on a drivable road (not a service lane), optionally at least `minFrom` metres from a point and
 // within `maxFrom` of `near`.
@@ -580,23 +586,71 @@ export function timesSquare(scene, out) {
     ["RB WORLD", "BUILD YOUR EMPIRE", "#F5E6A3", "#1a1200"], ["RB TV", "WATCH NOW", "#ffffff", "#2a0050"], ["RB BADGE", "EARN · LEVEL UP", "#00E676", "#001a0c"],
     ["RB EVENTS", "SEE YOU THERE", "#ffb000", "#1a0800"], ["CREATE", "OWN · ELEVATE", "#C9A84C", "#0a0a0a"],
   ];
+  // RB's own screen art, drawn at 8:3 like the sponsors' (ads.js), with the words inside the 2:1 middle that every
+  // screen shows whatever its shape
   const textures = ADS.map(([a, b, fg, bg], k) => {
-    const c = canvas(512, 256, (g, W, H) => {
+    const c = canvas(1024, 384, (g, W, H) => {
       const grd = g.createLinearGradient(0, 0, W, H); grd.addColorStop(0, bg); grd.addColorStop(1, "#000"); g.fillStyle = grd; g.fillRect(0, 0, W, H);
-      g.strokeStyle = fg; g.lineWidth = 6; g.strokeRect(8, 8, W - 16, H - 16);
-      g.fillStyle = fg; g.textAlign = "center"; g.font = "900 78px Inter, Arial, sans-serif"; g.fillText(a, W / 2, 120);
-      g.fillStyle = "#fff"; g.font = "700 34px Inter, Arial, sans-serif"; g.fillText(b, W / 2, 190);
+      const sw = H * 0.9 * 2, sx = (W - sw) / 2;
+      g.strokeStyle = fg; g.lineWidth = 8; g.strokeRect(sx + 6, H * 0.05 + 6, sw - 12, H * 0.9 - 12);
+      g.fillStyle = fg; g.textAlign = "center"; g.font = "900 104px Inter, Arial, sans-serif"; g.fillText(a, W / 2, H * 0.5);
+      g.fillStyle = "#fff"; g.font = "700 44px Inter, Arial, sans-serif"; g.fillText(b, W / 2, H * 0.74);
     });
-    return tex(c, false);
+    const t = tex(c, false); t.anisotropy = 16; t.userData.avg = new THREE.Color(fg).multiplyScalar(0.6); return t;
   });
+  const ART = 8 / 3; // the art's shape; each screen shows the middle of it that matches its own shape
+  // Sponsors' ads from RB Command (ads.js fills out.adPool) take turns with RB's own on every screen; with none live,
+  // the screens show RB's own as before.
+  out.adPool = out.adPool || { wide: [], tall: [] };
+  const turn = (i, t, house, sponsors) => {
+    if (!sponsors.length) return { tex: house[(i + Math.floor(t / 7)) % house.length], ad: null };
+    const n = (i + Math.floor(t / 9)) % (sponsors.length * 2); // sponsor, RB, sponsor, RB...
+    return n % 2 === 0 ? sponsors[(n / 2) % sponsors.length] : { tex: house[((n - 1) / 2 + i) % house.length], ad: null };
+  };
+  out.adSpots = [];
   D.boards.forEach(([x, z, ang, w, h, y], i) => {
-    const mat = new THREE.MeshBasicMaterial({ map: textures[i % textures.length], color: new THREE.Color(1.6, 1.6, 1.6) }); // LED screens are bright
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    const mat = new THREE.MeshBasicMaterial({ map: textures[i % textures.length], color: new THREE.Color(1.6, 1.6, 1.6), fog: false }); // LED screens: bright, and clear through the haze
+    const geo = new THREE.PlaneGeometry(w, h), uv = geo.attributes.uv, ku = Math.min(1, w / h / ART), kv = Math.min(1, ART / (w / h));
+    for (let j = 0; j < uv.count; j++) uv.setXY(j, 0.5 + (uv.getX(j) - 0.5) * ku, 0.5 + (uv.getY(j) - 0.5) * kv); // no stretching
+    const m = new THREE.Mesh(geo, mat); m.userData.noAO = true;
     m.position.set(dm(x), y + h / 2, dm(z)); m.rotation.y = ang; scene.add(m);
     const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, h + 0.6, 0.3), new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6 }));
     frame.position.copy(m.position); frame.rotation.y = ang; frame.translateZ(-0.2); scene.add(frame);
-    let k = i % textures.length;
-    out.boards.push({ tick: (t) => { const n = (i + Math.floor(t / 7)) % textures.length; if (n !== k) { k = n; mat.map = textures[n]; } } });
+    const spot = { kind: "board", mesh: m, x: m.position.x, y: m.position.y, z: m.position.z, ang, w, h, twoSided: false, ad: null, range: 160 };
+    out.adSpots.push(spot);
+    out.boards.push({ tick: (t) => { const c = turn(i, t, textures, out.adPool.wide); spot.ad = c.ad; if (mat.map !== c.tex) mat.map = c.tex; } });
+  });
+  // Street posters: lit two-sided panels on the sidewalks of the main streets round RB Plaza, facing the traffic.
+  const houseTall = ADS.map(([a, b, fg, bg]) => tex(canvas(512, 768, (g, W, H) => {
+    const grd = g.createLinearGradient(0, 0, 0, H); grd.addColorStop(0, bg); grd.addColorStop(1, "#000"); g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    g.strokeStyle = fg; g.lineWidth = 8; g.strokeRect(14, 14, W - 28, H - 28);
+    g.fillStyle = fg; g.textAlign = "center"; g.font = "900 74px Inter, Arial, sans-serif"; a.split(" ").forEach((wd, k, all) => g.fillText(wd, W / 2, H / 2 - (all.length - 1) * 44 + k * 88 - 40));
+    g.fillStyle = "#fff"; g.font = "700 30px Inter, Arial, sans-serif"; g.fillText(b, W / 2, H - 120);
+  }), false));
+  const post = new THREE.MeshStandardMaterial({ color: 0x1b1b1f, metalness: 0.7, roughness: 0.35 });
+  const placed = [], P0 = PLAZA, wanted = 16;
+  const cand = edges.filter((e) => e.cls !== "service" && e.cls !== "motorway" && e.len > 30)
+    .map((e) => { const A = nodes[e.a], B = nodes[e.b]; return { e, A, B, d: Math.hypot((A[0] + B[0]) / 2 - P0[0], (A[1] + B[1]) / 2 - P0[1]) }; })
+    .filter((c) => c.d < 520).sort((p, q) => p.d - q.d);
+  for (const { e, A, B } of cand) {
+    if (placed.length >= wanted) break;
+    const dx = B[0] - A[0], dz = B[1] - A[1], L = Math.hypot(dx, dz), nx = -dz / L, nz = dx / L, side = placed.length % 2 ? 1 : -1, off = e.w / 2 + 2.4;
+    const px = (A[0] + B[0]) / 2 + nx * off * side, pz = (A[1] + B[1]) / 2 + nz * off * side;
+    if (blocked(px, pz, 1.4) || placed.some((q) => Math.hypot(q[0] - px, q[1] - pz) < 55)) continue;
+    placed.push([px, pz, Math.atan2(dx, dz)]);
+  }
+  placed.forEach(([px, pz, along], i) => {
+    const W = 1.9, H = 2.85, Y = 0.55;
+    const mat = new THREE.MeshBasicMaterial({ map: houseTall[i % houseTall.length], color: new THREE.Color(1.3, 1.3, 1.3), side: THREE.DoubleSide, fog: false });
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat); face.userData.noAO = true;
+    face.position.set(px, Y + H / 2, pz); face.rotation.y = along; scene.add(face); // faces up and down the street
+    const box = new THREE.Mesh(new THREE.BoxGeometry(W + 0.24, H + 0.24, 0.16), post); box.position.copy(face.position); box.rotation.y = along; box.scale.z = 0.9; scene.add(box);
+    face.position.x += Math.sin(along) * 0.09; face.position.z += Math.cos(along) * 0.09;
+    const back = face.clone(); back.position.set(px - Math.sin(along) * 0.09, Y + H / 2, pz - Math.cos(along) * 0.09); back.rotation.y = along + Math.PI; scene.add(back);
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.16, Y, 0.16), post); leg.position.set(px, Y / 2, pz); scene.add(leg);
+    const spot = { kind: "poster", mesh: face, x: px, y: Y + H / 2, z: pz, ang: along, w: W, h: H, twoSided: true, ad: null, range: 70 };
+    out.adSpots.push(spot);
+    out.boards.push({ tick: (t) => { const c = turn(i + 3, t, houseTall, out.adPool.tall); spot.ad = c.ad; if (mat.map !== c.tex) { mat.map = c.tex; back.material = mat; } } });
   });
   // RB HQ: One Times Square, with a gold crown and the big RB screen
   if (D.hq >= 0) {

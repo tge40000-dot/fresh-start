@@ -29,6 +29,8 @@ py "$ROOT/rb-site-updates/patch_rewards.py" "$W/artist-router"
 py "$ROOT/rb-site-updates/patch_badge.py" "$W/artist-router"
 # relentlessbillionaire.com/game/ sends players to RB World (/app/world/); the old game's files are still served
 py "$ROOT/rb-tools/patch_game_redirect.py" "$W/rb-game"
+# the extra /game/api added by an outside tool on 26 Oct 2026: its ideas are in RB World now; health kept, the rest closed
+py "$ROOT/rb-tools/patch_rb_game_api.py" "$W/rb-game"
 py "$ROOT/rb-site-updates/patch_embed_create.py" "$W/rb-mastering-studio"
 # RB Studio (rb-daw) is built from workers/rb-daw/src (its source since 18 Oct 2026; the old rb-daw patches are all in it).
 # --check builds it and compares with live: exit 1 just means src/ has changes that are not deployed yet.
@@ -99,6 +101,8 @@ for t in affiliate showplanner analytics rehost scheduled signal; do node --no-w
 node "$T/create-upload.test.mjs" "$W/rb-command"
 node --no-warnings "$T/rewards-admin.test.mjs" "$W/rb-command"
 node --no-warnings "$ROOT/rb-surface/test/test.mjs" "$W/artist-router/artist-router-v14.js" --expect-surface
+# RB World live rooms (rb-world-live: its own Worker, a Durable Object per room)
+node --no-warnings "$ROOT/rb-world-live/test.mjs"
 node --no-warnings "$ROOT/rb-surface/test/fresh.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$ROOT/rb-site-updates/test/post-link.test.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$ROOT/rb-site-updates/test/create.test.mjs" "$W/artist-router/artist-router-v14.js"
@@ -152,6 +156,7 @@ else
 fi
 py "$ROOT/rb-tools/cfworker.py" push rb-tv "$W/rb-tv"
 py "$ROOT/rb-tools/cfworker.py" push rb-command "$W/rb-command"
+py "$ROOT/rb-tools/cflive.py" "$ROOT/rb-world-live/index.js"
 py "$ROOT/rb-tools/cfworker.py" push rb-email "$W/rb-email"
 # The old Pages copy: one deployment that redirects every path to the main site (earlier deployments stay, for rollback)
 (cd /tmp && CLOUDFLARE_ACCOUNT_ID=$ACCOUNT npx --yes wrangler@3.114.0 pages deploy "$ROOT/rb-site-updates/pages-redirect" --project-name relentless-billionaire --branch allme --commit-dirty=true)

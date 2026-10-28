@@ -4,7 +4,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { initFx } from './fx.js';
 import { WET } from './city.js';
 // RB World runs on RB's own backend (rb_world.js), with the same calls the game used on InstantDB.
-import { init, id } from './rb_world.js';
+import { init, id, device } from './rb_world.js';
+import { whoAmI, applySave, startSaving, signIn, signOut } from './account.js';
 // The city you drive, buy, build and collect in (property, businesses, jobs, drops).
 import { initEmpire } from './empire.js';
 import { initHud } from './hud.js';
@@ -14,9 +15,25 @@ import { initPeds } from './peds.js';
 import { initAudio as initSound } from './audio.js';
 import { initRadio } from './radio.js';
 import { initPhone } from './phone.js';
+import { initAds } from './ads.js';
+import { initFoot } from './onfoot.js';
+import { initCombat } from './combat.js';
+import { initLive } from './live.js';
+import { initDamage } from './damage.js';
+import { initGarage } from './garage.js';
+import { initWardrobe } from './wardrobe.js';
+import { initStory } from './story.js';
+import { initEvents } from './events.js';
+import { initStream } from './stream.js';
+import { initBay } from './bay.js';
+import { initNodes } from './nodes.js';
+import { initDeals } from './deals.js';
+import { initMarket } from './market.js';
 
 // --- CORE ---
 const db = init();
+// Who's playing (account.js): the RB account's player when signed in, else this device's guest player
+const whoP = whoAmI().catch(() => null);
 const BILLION = 1000000000;
 const CAPTURE_RANGE = 0.002;
 const SPAWN_RADIUS = 0.01;
@@ -79,6 +96,22 @@ async function boot() {
     }
     document.getElementById('loading-screen').style.display = 'none';
     document.getElementById('start-screen').style.display = 'flex';
+    try { const n = localStorage.getItem('rb_world_name'); if (n) document.getElementById('input-name').value = n; } catch (e) {}
+    showAccount(await whoP);
+}
+// The start screen says where the empire is saved, with sign in / sign out
+function showAccount(w) {
+    const el = document.getElementById('rb-acct'); if (!el) return;
+    const inp = document.getElementById('input-name');
+    if (w && w.name && !inp.value) inp.value = w.name;
+    if (inp.value) document.getElementById('btn-start').innerText = 'CONTINUE';
+    if (!w) { el.innerHTML = '<b>RB can\'t be reached right now</b><span>You can still play. Your game is kept on this device.</span>'; return; }
+    const worth = w.netWorth != null ? `<span>Welcome back${w.name ? ', ' + esc(w.name) : ''}: $${fmt(w.netWorth)} net worth.</span>` : '';
+    el.innerHTML = w.signedIn
+        ? `<b>✓ Signed in${w.email ? ' as ' + esc(w.email) : ''}</b>${worth}<span>Your empire is saved to your RB account and comes with you on any device.</span><button type="button" class="acct-link" data-a="out">Not you? Sign out</button>`
+        : `<b>Playing as a guest</b>${worth}<span>Your empire is saved on this device.${w.clerk ? ' Sign in with your RB account to keep it safe and play it on any device.' : ''}</span>${w.clerk ? '<button type="button" class="acct-in" data-a="in">SIGN IN · KEEP MY EMPIRE</button>' : ''}`;
+    const b = el.querySelector('[data-a]');
+    if (b) b.onclick = () => { b.disabled = true; (b.dataset.a === 'in' ? signIn() : signOut()).finally(() => { b.disabled = false; }); };
 }
 
 // ============================================
@@ -387,6 +420,17 @@ async function startGame() {
     player.name = name || `Hustler_${Math.floor(Math.random() * 1000)}`;
 
     if (document.getElementById('chk-admin').checked) { window.location.href = 'https://team.relentlessbillionaire.com/world'; return; }
+    // the same player as last time: the account's or this device's, with their saved game, money and tokens
+    const btn = document.getElementById('btn-start'); if (btn.disabled) return;
+    btn.disabled = true; btn.innerText = 'LOADING YOUR EMPIRE…';
+    const who = await Promise.race([whoP, sleep(8000).then(() => null)]);
+    if (who) {
+        player.id = who.id;
+        const m = applySave(who);
+        if (m) { if (Number.isFinite(+m.netWorth)) player.netWorth = +m.netWorth; if (Number.isFinite(+m.tokens)) player.tokens = +m.tokens; }
+    } else player.id = device().id;
+    player.signedIn = !!(who && who.signedIn);
+    try { localStorage.setItem('rb_world_name', player.name); } catch (e) {}
 
     document.getElementById('start-screen').style.display = 'none';
     document.getElementById('game-container').style.display = 'block';
@@ -407,7 +451,7 @@ async function startGame() {
     db.subscribeQuery({ ads: {} }, r => { if (r.data) { allAds = r.data.ads || []; } });
 
     setInterval(() => {
-        try { room.publishPresence({ id: player.id, name: player.name, pos: player.pos, netWorth: player.netWorth, health: player.health }); } catch(e){}
+        try { room.publishPresence({ id: player.id, name: player.name, pos: player.pos, netWorth: player.netWorth, health: player.health, kills: player.kills, deaths: player.deaths }); } catch(e){}
     }, 1000);
 
     safeTransact(db.tx.users[player.id].update({ name: player.name, netWorth: player.netWorth, tokens: player.tokens, lastActive: Date.now() }));
@@ -425,7 +469,7 @@ async function startGame() {
         sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); },
         help: () => hud && hud.help(),
     });
-    const ectx = { scene, player, play, fx, music: (on) => { if (!sfx.bgm) return; if (on && player.settings.audio) sfx.bgm.play().catch(() => {}); else sfx.bgm.pause(); }, gps: () => gpsFix, minimap: () => minimap, onFrame: (f) => frameHooks.push(f), sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); } };
+    const ectx = { scene, player, play, fx, renderer, music: (on) => { if (!sfx.bgm) return; if (on && player.settings.audio) sfx.bgm.play().catch(() => {}); else sfx.bgm.pause(); }, gps: () => gpsFix, minimap: () => minimap, onFrame: (f) => frameHooks.push(f), sync: () => { safeTransact(db.tx.users[player.id].update({ netWorth: player.netWorth, tokens: player.tokens })); updateHUD(); } };
     const hud = initHud(window.RBEmpire, ectx);
     window.RBProgress = initProgress(window.RBEmpire, ectx);
     window.RBRace = initRace(window.RBEmpire, ectx, window.RBProgress);
@@ -433,8 +477,28 @@ async function startGame() {
     window.RBAudio = initSound(window.RBEmpire, ectx); // engine, tyres, city, rain, sirens and the horn (G)
     window.RBCarRadio = initRadio(window.RBEmpire, ectx); // RB Radio live in the car (📻 or M)
     window.RBPhone = initPhone(window.RBEmpire, ectx); // everything else on screen, in one phone (📱 or T)
+    window.RBAds = initAds(window.RBEmpire, ectx); // sponsors' ads from RB Command on the billboards and posters
+    window.RBFoot = initFoot(window.RBEmpire, ectx); // get out and walk (F), take cars from the traffic
+    window.RBCombat = initCombat(window.RBEmpire, ectx, window.RBFoot); // 18+ opt-in: weapons, crews, missions, fights with other players
+    window.RBDamage = initDamage(window.RBEmpire, ectx); // car damage, smoke and bumping into other cars
+    window.RBLive = initLive(window.RBEmpire, ectx, window.RBFoot, window.RBCombat); // other players in real time (rb-world-live)
+    window.RBGarage = initGarage(window.RBEmpire, ectx); // RB Customs: car classes and upgrades for your own car (🔧)
+    window.RBWardrobe = initWardrobe(window.RBEmpire, ectx, window.RBFoot); // clothes other players see too (👕)
+    window.RBStory = initStory(window.RBEmpire, ectx, window.RBFoot, window.RBCombat); // Rise of RB, five chapters (📖)
+    window.RBEvents = initEvents(window.RBEmpire, ectx, window.RBFoot, window.RBCombat); // cash crates, speed cameras, the armored truck
+    window.RBStream = initStream(window.RBEmpire, ectx); // the rest of the Bay Area, streamed in as you drive
+    window.RBBay = initBay(window.RBEmpire, ectx, window.RBFoot, window.RBStream); // real tolls, fuel and prices (🌉)
+    window.RBNodes = initNodes(window.RBEmpire, ectx); // Empire Nodes: real places to claim, walking or driving (🏛️)
+    window.RBDeals = initDeals(window.RBEmpire, ectx); // offers and hostile takeovers on lots, and money owed to you (🤝)
+    window.RBMarket = initMarket(window.RBEmpire, ectx); // market events, lifestyle costs and heat (📈)
+    window.RBSave = startSaving(player.id, () => ({ netWorth: Math.floor(player.netWorth), tokens: Math.floor(player.tokens) })); // the saved game, to RB
+    setTimeout(() => window.RBEmpire.toast(player.signedIn ? '💾 Saved to your RB account: play on any device.' : '💾 Saved on this device. Sign in on the start screen to keep it on your RB account.'), 4500);
     const notice = (window.RB_WORLD_CFG || {}).notice; if (notice) setTimeout(() => window.RBEmpire.toast('📣 ' + notice), 2500);
     fx.build(); window.RBFx = fx;
+    // sharper textures at a glance (roads and walls seen at a slant): as much anisotropic filtering as the device has,
+    // above Low graphics; again later for things made after the start (cars, people, ads)
+    const sharpen = () => { if (fx.tier && fx.tier() === "low") return; const max = Math.min(16, renderer.capabilities.getMaxAnisotropy()); scene.traverse((o) => { const m = o.material; if (!m) return; for (const mm of Array.isArray(m) ? m : [m]) for (const k of ["map", "normalMap", "roughnessMap", "emissiveMap"]) { const t = mm[k]; if (t && t.anisotropy < max) { t.anisotropy = max; t.needsUpdate = true; } } }); };
+    setTimeout(sharpen, 4000); setTimeout(sharpen, 20000); setInterval(sharpen, 120000);
     bindGraphics();
     fetchCalendarEvents();
 }

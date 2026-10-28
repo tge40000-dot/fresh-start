@@ -16,7 +16,7 @@ import sys
 d = pathlib.Path(sys.argv[1])
 if json.loads((d / "manifest.json").read_text())["script"] != "rb-game":
     raise SystemExit("patch_game_redirect.py is for rb-game")
-p = d / "worker.js"
+p = d / json.loads((d / "manifest.json").read_text()).get("entry", "worker.js")
 s = p.read_text(encoding="utf-8")
 ANCHOR = "  async fetch(request, env) {\n    const res = await env.GAME.fetch(request);\n"
 ADD = ("  async fetch(request, env) {\n"
@@ -27,7 +27,7 @@ ADD = ("  async fetch(request, env) {\n"
        "        return new Response(null, { status: 302, headers: { Location: \"https://relentlessbillionaire.com/app/world/\" + u.search, \"Cache-Control\": \"no-store\" } });\n"
        "      } }\n"
        "    const res = await env.GAME.fetch(request);\n")
-if ADD in s:
+if ADD in s or '/^\\/game\\/?(index\\.html)?$/.test(u.pathname)' in s and "app/world/" in s:
     print("rb-game: redirect already in place")
 else:
     if s.count(ANCHOR) != 1:
