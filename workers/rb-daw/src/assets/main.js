@@ -1,3 +1,7 @@
+/* One RB sound at a time (28 Oct 2026): when the studio starts playing or recording, it tells RB Radio and the other
+   RB tabs and frames on this site to step aside (BroadcastChannel "rb-sound", the channel /radio/embed.js listens on). */
+var rbSoundChan = (() => { try { return new BroadcastChannel("rb-sound"); } catch { return null; } })();
+function rbClaimSound() { try { rbSoundChan && rbSoundChan.postMessage({ t: "claim", from: "rb-daw" }); } catch {} }
 var j = (t = "") => t + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4),
   O = (t, e, n) => Math.min(n, Math.max(e, t));
 var At = (t) => JSON.parse(JSON.stringify(t));
@@ -1769,6 +1773,7 @@ var _t = class {
         this.stop(!0),
         this.mix.sync(this.p),
         (this.playing = !0),
+        rbClaimSound(),
         (this.sources = []),
         (this.voices = []),
         (this.clickUntil = n.clickUntil ?? null),

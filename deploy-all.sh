@@ -19,6 +19,8 @@ CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" p
 py "$ROOT/rb-tools/palettes.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_artist_router.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_home_status.py" "$W/artist-router"
 # RB Create at /create; /record and /studio may be framed by their own site; the free AI voice it uses
 py "$ROOT/rb-site-updates/patch_artist_router_create.py" "$W/artist-router"
+# gold skeletons (with the words kept for screen readers) for the shop, store, roster and scoreboard loading states
+py "$ROOT/rb-site-updates/patch_loading_states.py" "$W/artist-router"
 # next steps after a beat purchase (record, master, release); /advertise media kit; the RB list with interests
 py "$ROOT/rb-site-updates/patch_next_steps.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_advertise.py" "$W/artist-router"
 # /memberships: free houses, three ways in, what each plan includes; business plans on their own page
@@ -40,6 +42,8 @@ py "$ROOT/rb-site-updates/patch_ai_speech.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_ai_image.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_ai_limit.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_radio.py" "$W/rb-radio"; py "$ROOT/rb-site-updates/patch_radio_flow.py" "$W/rb-radio"
+# one RB sound at a time: the radio steps aside for a video, a beat or the studio in any RB tab on the site
+py "$ROOT/rb-site-updates/patch_radio_onesound.py" "$W/rb-radio"
 # every palette restyles all of RB Radio (page, bar, RB Flow, hub pages)
 for s in rb-radio rb-radio-hub rb-public-content rb-command artist-router; do py "$ROOT/rb-site-updates/patch_radio_colours.py" "$W/$s"; done
 # AI Forge beats reach the player and RB Radio
@@ -59,9 +63,14 @@ py "$ROOT/rb-site-updates/patch_next_steps.py" "$W/rb-mastering-studio"
 py "$ROOT/rb-site-updates/patch_studio_checkout.py" "$W/rb-mastering-studio"
 # custom palettes from the builder: every copy of theme.js learns them (consumers are deployed before rb-command)
 for s in rb-public-content artist-router rb-radio rb-command; do py "$ROOT/rb-tools/patch_theme_custom.py" "$W/$s"; done
+# Dark Luxury lock: the palette and the --lux-* tokens in every copy of theme.js; the hub follows it when it is chosen
+py "$ROOT/rb-tools/patch_luxe_tokens.py" "$W/rb-public-content" "$W/artist-router" "$W/rb-radio" "$W/rb-command"
+py "$ROOT/rb-site-updates/patch_hub_tokens.py" "$W/artist-router"
 # rb-command: every patch, in order; each skips what's already there and drops copies an older script added twice
 py "$ROOT/rb-tools/palettes.py" "$W/rb-command"
 for p in patch_rb_command patch_show_planner patch_planner_links patch_analytics patch_rehost patch_nav patch_scheduled patch_signal patch_lux_ui patch_palette_builder patch_video patch_create_upload patch_rewards_admin patch_media_kit patch_cover; do py "$ROOT/rb-command-updates/$p.py" "$W/rb-command"; done
+# the builder shows the --lux-* tokens; gold skeletons
+py "$ROOT/rb-command-updates/patch_luxe_builder.py" "$W/rb-command"
 # /release: no "flat" wording, only claims the license terms back up
 py "$ROOT/rb-site-updates/patch_release_copy.py" "$W/rb-release"
 # one bold RB icon on every site (the files are served by artist-router at /brand/* and rb-favicon at /favicon.ico)
@@ -121,9 +130,12 @@ node --no-warnings "$ROOT/rb-site-updates/test/list-signup.test.mjs" "$W/rb-radi
 node --no-warnings "$ROOT/rb-site-updates/test/ai-limit.test.mjs" "$W/relentless-billionaire-api/script.js"
 node --no-warnings "$ROOT/rb-site-updates/test/radio-tv.test.mjs" "$W/rb-radio" "$W/rb-tv"
 node "$ROOT/rb-site-updates/test/flow.test.mjs" "$W/rb-radio"
+node "$ROOT/rb-site-updates/test/onesound.test.mjs" "$W/rb-radio"
 node "$ROOT/rb-site-updates/test/studio.test.mjs" "$W/rb-mastering-studio"
 node --no-warnings "$ROOT/rb-site-updates/test/studio-checkout.test.mjs" "$W/rb-mastering-studio"
 node "$ROOT/rb-tools/test/custom-palettes.mjs" "$W/rb-command" "$W/rb-public-content" "$W/rb-radio" "$W/artist-router"
+node "$ROOT/rb-tools/test/luxe-tokens.mjs" "$W/rb-command" "$W/rb-public-content" "$W/rb-radio" "$W/artist-router"
+node --no-warnings "$ROOT/rb-site-updates/test/luxe-motion.test.mjs" "$W/rb-public-content" "$W/artist-router"
 node "$ROOT/rb-email/test/test.mjs"
 node --no-warnings "$ROOT/rb-site-updates/test/memberships.test.mjs" "$W/rb-memberships/index.js"
 node --no-warnings "$ROOT/rb-site-updates/test/advertise.test.mjs" "$W/artist-router/artist-router-v14.js" "$W/rb-command"

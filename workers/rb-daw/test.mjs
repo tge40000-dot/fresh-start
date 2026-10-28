@@ -16,7 +16,7 @@ for (const name of ["main.js", "daw.css", "rec-worklet.js", "fx-worklet.js", "ic
 const main = m.ASSETS["main.js"].body, css = m.ASSETS["daw.css"].body;
 assert.ok(!main.includes("__BUILD__"));
 assert.equal(main.split(`.js?v=${m.BUILD}`).length - 1, 2, "both worklet URLs carry the build hash");
-for (const want of ["function rbApply(", "function rbSplit()", "function rbLuxe()", "function rbSet(", 'R("transport"), R("lanes")'])
+for (const want of ["function rbApply(", "function rbSplit()", "function rbLuxe()", "function rbSet(", 'R("transport"), R("lanes")', "function rbClaimSound()", "(this.playing = !0),\n        rbClaimSound(),"])
   assert.equal(main.split(want).length - 1, 1, "once in main.js: " + want);
 for (const want of ["/* RB plugins", "/* RB studio fixes begin */", "/* RB studio luxe begin */"]) assert.ok(css.includes(want), want);
 for (const ph of ["{{BASE}}", "{{CANONICAL}}", "{{BUILD}}", "{{THEME_LINK}}", "Bodoni+Moda"]) assert.ok(m.SHELL.includes(ph), ph);

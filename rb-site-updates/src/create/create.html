@@ -11,7 +11,10 @@
 <style nonce="__NONCE__">
 @font-face{font-family:"RB Cinzel";src:url(https://fonts.gstatic.com/s/cinzel/v26/8vIJ7ww63mVu7gt79mT7.woff2) format("woff2");font-weight:400 900;font-display:swap}
 @font-face{font-family:"RB Cormorant";src:url(https://fonts.gstatic.com/s/cormorantgaramond/v21/co3bmX5slCNuHLi8bLeY9MK7whWMhyjYqXtK.woff2) format("woff2");font-weight:300 700;font-display:swap}
-:root{--bg:#07060A;--panel:#110F0C;--panel2:#18150F;--line:#2B261C;--line2:#3D3527;--gold:#C9A227;--gold2:#E9CF83;--gold3:#8F6A22;--text:#EFE8D8;--muted:#A79E89;--crimson:#D2394B;--ok:#7CC48A;
+/* Dark Luxury lock (28 Oct 2026): the locked --lux-* tokens. This page's CSP takes only its own nonced styles, so it
+   carries them itself rather than reading theme.css; its working names below point at them. */
+:root{--lux-bg:#05040A;--lux-bg-elevated:#0C0A10;--lux-gold:#D4AF37;--lux-gold-highlight:#F5E6C8;--lux-gold-deep:#8B6914;--lux-crimson:#C41E3A;--lux-text:#F5F0E6;--lux-text-muted:#A89F8C;--lux-line:#2A261C;
+  --bg:var(--lux-bg);--panel:var(--lux-bg-elevated);--panel2:#18150F;--line:var(--lux-line);--line2:#3D3527;--gold:var(--lux-gold);--gold2:var(--lux-gold-highlight);--gold3:var(--lux-gold-deep);--text:var(--lux-text);--muted:var(--lux-text-muted);--crimson:var(--lux-crimson);--ok:#7CC48A;
   --caps:"RB Cinzel",Cinzel,"Times New Roman",serif;--serif:"RB Cormorant","Cormorant Garamond",Georgia,serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color-scheme:dark}
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -100,6 +103,21 @@ dialog::backdrop{background:rgba(0,0,0,.6);-webkit-backdrop-filter:blur(4px);bac
 @media (min-width:981px){.stick{position:sticky;top:0;z-index:2}}
 @media (max-width:980px){.work{grid-template-columns:1fr}.steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:640px){.app{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}.rail{order:2;flex-direction:row;justify-content:space-around;border-right:0;border-top:1px solid var(--line);padding:4px;overflow-x:auto}.rail .logo{display:none}.rail{justify-content:flex-start;gap:0;padding:4px 2px}.rail a.t{width:auto;flex:1 0 50px;min-width:50px;padding:6px 0;font-size:9px;letter-spacing:0}.rail a.t svg{width:20px;height:20px}.top{padding:10px 14px;gap:8px}.top .k{display:none}.top h1{font-size:1.35rem}#popout{padding:6px 10px;font-size:12px}.view{padding:14px}}
+/* motion (28 Oct 2026): each view rises in as it opens, a gold sweep on gold buttons, gold skeletons while loading.
+   All of it stops under prefers-reduced-motion (the rule above). */
+@keyframes rb-rise{from{opacity:0;translate:0 14px}}
+@keyframes rb-sweep{from{translate:-130% 0;opacity:1}to{translate:130% 0;opacity:1}}
+@keyframes rb-skel{from{background-position:110% 0}to{background-position:-10% 0}}
+.view:not(.full)>*{animation:rb-rise .5s cubic-bezier(.2,.7,.2,1) backwards}
+.view:not(.full)>:nth-child(2){animation-delay:.06s}.view:not(.full)>:nth-child(3){animation-delay:.12s}.view:not(.full)>:nth-child(n+4){animation-delay:.18s}
+.grid>.tool{animation:rb-rise .55s cubic-bezier(.2,.7,.2,1) backwards}
+.grid>.tool:nth-child(2){animation-delay:.05s}.grid>.tool:nth-child(3){animation-delay:.1s}.grid>.tool:nth-child(4){animation-delay:.15s}.grid>.tool:nth-child(5){animation-delay:.2s}.grid>.tool:nth-child(n+6){animation-delay:.25s}
+.btn.gold{position:relative;overflow:hidden;isolation:isolate;transition:translate .28s cubic-bezier(.2,.7,.2,1),filter .28s,border-color .15s,box-shadow .15s}
+.btn.gold::after{content:"";position:absolute;inset:-1px;pointer-events:none;border-radius:inherit;background:linear-gradient(105deg,transparent 30%,rgba(245,230,200,.55) 48%,rgba(255,255,255,.35) 50%,transparent 70%);translate:-130% 0;opacity:0}
+.btn.gold:focus-visible::after{animation:rb-sweep .85s cubic-bezier(.2,.7,.2,1)}
+@media (hover:hover){.btn.gold:hover:not(:disabled){translate:0 -1px;filter:brightness(1.05) drop-shadow(0 8px 18px rgba(212,175,55,.3))}.btn.gold:hover:not(:disabled)::after{animation:rb-sweep .85s cubic-bezier(.2,.7,.2,1)}}
+.rb-skel{display:block;min-height:.9em;border-radius:8px;border:1px solid var(--lux-line);background:var(--lux-bg-elevated) linear-gradient(100deg,transparent 0 35%,rgba(212,175,55,.14) 46%,rgba(245,230,200,.2) 50%,rgba(212,175,55,.14) 54%,transparent 65% 100%) no-repeat 110% 0/260% 100%;animation:rb-skel 1.8s cubic-bezier(.45,0,.25,1) infinite}
+.rb-skel+.rb-skel{margin-top:.55em}.rb-skel.w60{width:60%}.rb-skel.w40{width:40%}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 .mt8{margin-top:8px!important}.mt10{margin-top:10px!important}.mt12{margin-top:12px!important}.mt14{margin-top:14px!important}.mt22{margin-top:22px!important}.mb14{margin-bottom:14px!important}.mb16{margin-bottom:16px!important}.f1{flex:1!important}.bar{padding:10px 16px!important;border-bottom:1px solid var(--line)!important}.colst{flex-direction:column!important;align-items:stretch!important}.colfull{display:flex!important;flex-direction:column!important;height:100%!important}.goldb{border-color:#C9A227!important}
 </style>
@@ -290,10 +308,11 @@ function viewHome(){
     tool("#film", '<path d="M3 5h18v14H3zM7 5v14M17 5v14M3 9h4M3 15h4M17 9h4M17 15h4"/>', "Cartoon & film", "Upload your characters, write the lines, and get talking scenes with camera moves, captions and music.") +
     tool("#library", '<path d="M4 4h4v16H4zM10 4h4v16h-4zM16 5l3.5-1 3 15-3.5 1z"/>', "Library", "Everything you upload, record, generate or export, kept in this browser.") +
     tool("#forge", '<path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/>', "AI Forge", "RB's AI music, vocals, video and cover art. Operator key needed.") +
-    '</div><h2 class="mt22">Your projects</h2><div class="card"><ul class="list" id="projects"><li class="muted">Loading…</li></ul></div>' +
+    '</div><h2 class="mt22">Your projects</h2><div class="card"><ul class="list" id="projects" aria-busy="true"><li aria-label="Loading your projects"><div class="grow"><span class="rb-skel w60"></span><span class="rb-skel w40"></span></div></li></ul></div>' +
     '<p class="mt14 note">Your projects and files stay in this browser until you export or post them. Tools marked <span class="ai">AI</span> use Cloudflare\'s AI models.</p>';
   Projects.all().then(function(list){
     var ul = $("#projects"); if (!ul) return;
+    ul.removeAttribute("aria-busy");
     ul.innerHTML = list.length ? list.map(function(p){ return '<li><div class="grow"><b>' + esc(p.name) + '</b><span class="muted small">' + (p.kind === "film" ? "Cartoon & film" : "Voice & visualizer") + " · edited " + new Date(p.updated).toLocaleString() + '</span></div><a class="btn sm" href="#' + p.kind + "?p=" + p.id + '">Open</a><button class="btn sm" type="button" data-del="' + p.id + '">Delete</button></li>'; }).join("") : '<li class="muted">No projects yet. Start one with Voice or Film.</li>';
     ul.onclick = function(e){ var id = e.target.dataset.del; if (id && confirm("Delete this project? Its files stay in your library.")) Projects.del(id).then(viewHome); };
   });

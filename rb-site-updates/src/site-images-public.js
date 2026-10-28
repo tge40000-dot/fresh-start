@@ -5,7 +5,8 @@
  *     The chosen picture itself (same origin, so pages can use it under their CSP). Nothing chosen: the RB icon for
  *     icon and apple, the page's own share picture (fallback) or the RB icon for share, and 204 for the others.
  *   GET /api/content/site-images.css?site=<id>
- *     The background and header-logo rules for one site; empty when nothing is chosen, so pages look as before.
+ *     The site tabs, the RB luxe layer (motion and loading states, see LUXE_CSS) and the background and header-logo
+ *     rules for one site; background and logo are empty when nothing is chosen, so pages look as before.
  * Settings and pictures are read from waitlist-db (site_settings.site_images, site_assets) and kept 60 s at the edge.
  */
 import { SLOT_IDS, IMAGE_SITES, IMAGE_SITE_IDS, parseImages, pick } from "./site_images_def.js";
@@ -75,6 +76,85 @@ const TABS_CSS = 'nav.rbtabs.rbtabs[hidden]{display:flex!important}' +
   'nav.rbtabs.rbtabs a:hover,nav.rbtabs.rbtabs a:focus-visible{color:#f2d98a!important}' +
   'nav.rbtabs.rbtabs a[aria-current]{color:#f0c75a!important;border-bottom-color:#e2b649!important}\n';
 
+// ---------------------------------------------------------------- RB luxe layer (motion and loading states, 28 Oct 2026)
+// Every user site already loads this stylesheet, so this is where the shared motion lives: no script, no new request,
+// nothing for a page's CSP to block. Colours are the --lux-* tokens from theme.css (rb-tools/luxe_tokens.js), with the
+// locked Dark Luxury values as fallbacks, so a site with no theme chosen still gets the house gold.
+//   .rb-skel     a refined gold skeleton for loading states (a slow sheen; still with reduced motion)
+//   .rb-shimmer  a gold light sweep across a button on hover/focus
+//   per site     scroll reveals (CSS scroll-driven animations, only where the browser has them) and the gold lift and
+//                sweep on that site's primary buttons. Reveals use fill "backwards" only: once in view the element is
+//                exactly as the site styles it, and a browser without scroll timelines simply shows everything.
+// Everything that moves sits inside prefers-reduced-motion: no-preference. RB Radio and its hub get only the shared
+// classes (never touched while a show may be live), tools get no scroll reveals (a control panel shouldn't fade in).
+const LUX = (name, fallback) => `var(--lux-${name},${fallback})`;
+const GOLD = LUX("gold", "#D4AF37"), HI = LUX("gold-highlight", "#F5E6C8");
+const LUXE_CSS = "/* RB luxe layer */\n" +
+  `.rb-skel{display:block;min-height:.9em;border-radius:8px;border:1px solid ${LUX("line", "#2A261C")};background-color:${LUX("bg-elevated", "#0C0A10")};` +
+  `background-image:linear-gradient(100deg,transparent 0 35%,color-mix(in srgb,${GOLD} 14%,transparent) 46%,color-mix(in srgb,${HI} 20%,transparent) 50%,color-mix(in srgb,${GOLD} 14%,transparent) 54%,transparent 65% 100%);` +
+  "background-size:260% 100%;background-repeat:no-repeat;background-position:110% 0;color:transparent!important;user-select:none}\n" +
+  ".rb-skel+.rb-skel{margin-top:.55em}.rb-skel.w60{width:60%}.rb-skel.w40{width:40%}.rb-skel.tall{min-height:2.6em}.rb-skel.round{border-radius:999px}\n" +
+  // words kept for screen readers next to a skeleton (and shown as before if this sheet can't load)
+  ".rb-sr{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip-path:inset(50%)!important;white-space:nowrap!important;margin:-1px!important;padding:0!important;border:0!important}\n" +
+  ".shop-empty[aria-busy=true]{width:100%;max-width:560px;margin-inline:auto}.shop-empty[aria-busy=true]>.rb-skel{margin-inline:auto}.rbs-empty[aria-busy=true]>.rb-skel.tall{min-height:2.4em}\n" +
+  ".rb-shimmer{position:relative;overflow:hidden;isolation:isolate}\n" +
+  ".rb-shimmer::after{content:\"\";position:absolute;inset:-1px;pointer-events:none;border-radius:inherit;" +
+  `background-image:linear-gradient(105deg,transparent 30%,color-mix(in srgb,${HI} 55%,transparent) 48%,color-mix(in srgb,#FFFFFF 35%,transparent) 50%,transparent 70%);translate:-130% 0;opacity:0}\n` +
+  "@keyframes rb-skel{from{background-position:110% 0}to{background-position:-10% 0}}\n" +
+  "@keyframes rb-rise{from{opacity:0;translate:0 22px}}\n" +
+  "@keyframes rb-sweep{from{translate:-130% 0;opacity:1}to{translate:130% 0;opacity:1}}\n" +
+  "@media (prefers-reduced-motion:no-preference){" +
+  ".rb-skel{animation:rb-skel 1.8s cubic-bezier(.45,0,.25,1) infinite}" +
+  ".rb-shimmer:hover::after,.rb-shimmer:focus-visible::after{animation:rb-sweep .85s cubic-bezier(.2,.7,.2,1)}" +
+  "}\n";
+
+/** Per site: what rises in on scroll, the primary buttons that get the gold lift and sweep, and cards that lift on hover. */
+const LUXE_SITES = {
+  home: { reveal: ".rb-home .rb-sec,.rb-home .rb-stats", cta: ".rb-home .rb-btn" },
+  tv: { reveal: "main .shelf", cta: ".btn.gold" },
+  // /events already fades its sections in (.fade-in, its own script), so it gets the card lift instead of reveals
+  events: { reveal: "", cta: ".btn-gold", lift: ".venue-card" },
+  memberships: { reveal: ".cards>.card,.set-head,.cmp-wrap", cta: ".btn:not(.ghost)" },
+  mastering: { reveal: "", cta: "button.go" },
+  studio: { reveal: "", cta: "header.top .btn.gold" },
+};
+export const LUXE_SITE_IDS = Object.keys(LUXE_SITES);
+
+/** The luxe layer for one site id ("" for the sites that only get the shared classes). */
+export function luxeCss(site) {
+  const s = Object.hasOwn(LUXE_SITES, site) ? LUXE_SITES[site] : null;
+  let css = LUXE_CSS;
+  if (!s) return css;
+  if (s.cta) {
+    const c = s.cta.split(",").map((x) => x.trim());
+    const all = (suffix) => c.map((x) => x + suffix).join(",");
+    css += `${all("")}{position:relative;overflow:hidden;isolation:isolate}` +
+      `${all("::after")}{content:"";position:absolute;inset:-1px;pointer-events:none;border-radius:inherit;` +
+      `background-image:linear-gradient(105deg,transparent 30%,color-mix(in srgb,${HI} 55%,transparent) 48%,color-mix(in srgb,#FFFFFF 35%,transparent) 50%,transparent 70%);translate:-130% 0;opacity:0}\n` +
+      "@media (prefers-reduced-motion:no-preference){" +
+      `${all("")}{transition:translate .28s cubic-bezier(.2,.7,.2,1),transform .28s,filter .28s ease,background-color .2s,color .2s,border-color .2s,box-shadow .2s,opacity .2s}` +
+      `${all(":focus-visible::after")}{animation:rb-sweep .85s cubic-bezier(.2,.7,.2,1)}` +
+      // hover only where there is a real pointer, so a tapped button on a phone doesn't stay lifted
+      "@media (hover:hover){" +
+      `${all(":hover:not(:disabled)")}{translate:0 -1px;filter:brightness(1.06) drop-shadow(0 8px 18px color-mix(in srgb,${GOLD} 32%,transparent))}` +
+      `${all(":active:not(:disabled)")}{translate:0 0}` +
+      `${all(":hover:not(:disabled)::after")}{animation:rb-sweep .85s cubic-bezier(.2,.7,.2,1)}` +
+      "}}\n";
+  }
+  if (s.lift) {
+    css += "@media (prefers-reduced-motion:no-preference){" +
+      `${s.lift}{transition:translate .35s cubic-bezier(.2,.7,.2,1),transform .3s,filter .35s ease,border-color .3s,box-shadow .25s,opacity .25s}` +
+      `@media (hover:hover){${s.lift.split(",").map((x) => x.trim() + ":hover").join(",")}{translate:0 -3px;filter:drop-shadow(0 14px 26px color-mix(in srgb,${GOLD} 18%,transparent))}}` +
+      "}\n";
+  }
+  if (s.reveal) {
+    css += "@supports (animation-timeline:view()){@media (prefers-reduced-motion:no-preference){" +
+      `${s.reveal}{animation:rb-rise linear backwards;animation-duration:auto;animation-timeline:view();animation-range:entry 0% entry 70%}` +
+      "}}\n";
+  }
+  return css;
+}
+
 export async function siteImagesCss(request, env, ctx, url) {
   const site = String(url.searchParams.get("site") || "");
   const headers = { "Content-Type": "text/css; charset=utf-8", "Cache-Control": "public, max-age=60", "X-Content-Type-Options": "nosniff", "Access-Control-Allow-Origin": "*" };
@@ -82,7 +162,7 @@ export async function siteImagesCss(request, env, ctx, url) {
   if (!def) return new Response("/* unknown site */\n", { status: 400, headers });
   const st = env.DB ? await state(env, ctx, url.origin) : { setting: parseImages(null), assets: {} };
   const u = (slot, a) => `${SITE}/api/content/site-image?site=${site}&slot=${slot}&v=${a.id}`;
-  let css = `/* RB site images: ${site} */\n` + TABS_CSS;
+  let css = `/* RB site images: ${site} */\n` + TABS_CSS + luxeCss(site);
   const bg = chosen(st, "background", site);
   if (bg) css += `html body{background:linear-gradient(rgba(8,6,10,.74),rgba(8,6,10,.86)),url("${u("background", bg)}") center/cover no-repeat fixed!important;background-color:#0b0a09!important}\n`;
   const logo = chosen(st, "logo", site);
