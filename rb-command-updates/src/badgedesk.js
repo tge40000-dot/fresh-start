@@ -55,6 +55,30 @@ async function load(env) {
     checkin: n("checkin_points", 100), checkinMax: n("checkin_max", 1000), adjustMax: n("adjust_max", 10000) };
 }
 
+// Membership classes, the same list as the RB Badge page (rb-site-updates/src/badge/badge-worker.js RBB_CLASSES): the
+// /memberships tiers a member asked for with their verified email, and RB Studio while it's paid up. Passport is free
+// (asking is joining), Just Starting is a waitlist, Coach and the business plans are applications.
+const CLASSES = [
+  { key: "passport", name: "Passport", icon: "🛂", color: "#3FB8AF" }, { key: "just-starting", name: "Just Starting", icon: "🌱", color: "#5FBF5F" },
+  { key: "coach", name: "Put Me In Coach", icon: "🎯", color: "#E0893A" }, { key: "business-starter", name: "Business Starter", icon: "💼", color: "#9AA7B4" },
+  { key: "business-pro", name: "Business Pro", icon: "📈", color: "#4A90D9" }, { key: "business-elite", name: "Business Elite", icon: "👑", color: "#C9A227" },
+  { key: "studio", name: "RB Studio", icon: "🎚️", color: "#9B6CF0" },
+];
+const CLASS_STATE = { "membership:free:passport": "member", "membership:waitlist:just-starting": "waitlist", "membership:apply:coach": "applied",
+  "membership:apply:business-starter": "applied", "membership:apply:business-pro": "applied", "membership:apply:business-elite": "applied" };
+async function classes(env, memberId) {
+  const read = async (fn) => { try { return await fn(); } catch { return null; } };
+  const m = await read(() => env.DB.prepare("SELECT email_norm, clerk_user_id FROM badge_members WHERE id = ?").bind(memberId).first());
+  if (!m) return [];
+  const got = {};
+  if (m.email_norm) {
+    const inq = await read(() => env.DB.prepare("SELECT DISTINCT options FROM shop_inquiries WHERE lower(trim(email)) = ? AND options LIKE 'membership:%'").bind(m.email_norm).all());
+    for (const r of inq?.results || []) { const o = String(r.options || "").toLowerCase(); if (CLASS_STATE[o]) got[o.split(":")[2]] = CLASS_STATE[o]; }
+  }
+  if (await read(() => env.DB.prepare("SELECT 1 AS ok FROM studio_memberships WHERE clerk_user_id = ? AND status = 'active' AND (current_period_end IS NULL OR datetime(current_period_end) > datetime('now')) LIMIT 1").bind(m.clerk_user_id).first())) got.studio = "member";
+  return CLASSES.filter((c) => got[c.key]).map((c) => ({ ...c, state: got[c.key] }));
+}
+
 async function standing(env, g, memberId) {
   const [tot, counts, grants, recent] = await env.DB.batch([
     env.DB.prepare("SELECT coalesce(sum(points), 0) AS balance, coalesce(sum(CASE WHEN source NOT IN ('redeem', 'refund') THEN points ELSE 0 END), 0) AS lifetime FROM badge_points WHERE member_id = ?").bind(memberId),
@@ -67,7 +91,7 @@ async function standing(env, g, memberId) {
   const granted = new Set((grants.results || []).map((r) => r.achievement_key));
   let level = null;
   for (const l of g.levels) if (lifetime >= l.min) level = l;
-  return { lifetime, balance: Math.max(0, Number(t.balance) || 0), checkins: by.checkin || 0, level, granted: [...granted],
+  return { lifetime, balance: Math.max(0, Number(t.balance) || 0), checkins: by.checkin || 0, level, granted: [...granted], classes: await classes(env, memberId),
     earned: g.achievements.filter((x) => (x.rule === "manual" ? granted.has(x.key) : x.rule === "lifetime" ? lifetime >= x.threshold : (by[RULE_SOURCE[x.rule]] || 0) >= x.threshold)).map((x) => x.key),
     recent: (recent.results || []).map((r) => ({ label: SOURCES[r.source] || r.source, ref: r.source_ref, points: Number(r.points), note: r.note || "", actor: r.actor || "", at: r.created_at })) };
 }
@@ -325,6 +349,7 @@ export function page(nonce, canEdit, door = false) {
       <span class="lvl" id="m-lvl"></span>
       <div class="name" id="m-name"></div><div class="muted" id="m-email"></div>
       <div class="perks" id="m-perks" hidden></div>
+      <div class="chips mt" id="m-cls" hidden aria-label="Memberships"></div>
       <div class="nums"><div><b id="m-bal"></b><span>to spend</span></div><div><b id="m-life"></b><span>lifetime</span></div><div><b id="m-chk"></b><span>check-ins</span></div></div>
       <div class="row"><button class="btn primary" id="checkin" type="button">Check in</button><span class="msg" id="c-msg" role="status" aria-live="polite"></span></div>
       <div id="red-in" hidden>
@@ -393,6 +418,9 @@ function show(d){
   $("m-name").textContent = M.name || "(no name on the account)";
   $("m-email").textContent = M.email + " · " + M.code;
   $("m-perks").hidden = !(M.level && M.level.perks); if (M.level) $("m-perks").textContent = M.level.perks;
+  var cls = $("m-cls"); cls.textContent = "";
+  (M.classes || []).forEach(function(c){ var x = el("span", "chip cls", c.icon + " " + c.name + (c.state === "member" ? "" : c.state === "waitlist" ? " · waitlist" : " · applied")); x.style.borderColor = c.color; x.style.color = "var(--text)"; cls.appendChild(x); });
+  cls.hidden = !cls.children.length;
   $("m-bal").textContent = fmt(M.balance); $("m-life").textContent = fmt(M.lifetime); $("m-chk").textContent = fmt(M.checkins);
   var ach = $("m-ach"); ach.textContent = "";
   (S.achievements || []).forEach(function(a){ ach.appendChild(el("span", "chip" + (M.earned.indexOf(a.key) >= 0 ? " got" : ""), a.name)); });

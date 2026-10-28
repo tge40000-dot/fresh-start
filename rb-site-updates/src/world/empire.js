@@ -391,7 +391,7 @@ function setWanted(n) {
 function copsTick(dt) {
   if (!wanted) return;
   let near = Infinity;
-  for (const c of cops) { c.speed = 17 + wanted * 2.5; moveRoadCar(c, dt, true); near = Math.min(near, Math.hypot(c.x - car.x, c.z - car.z)); }
+  for (const c of cops) { if (c.wrecked) { c.speed = 0; continue; } c.speed = 17 + wanted * 2.5; moveRoadCar(c, dt, true); near = Math.min(near, Math.hypot(c.x - car.x, c.z - car.z)); } // a shot-up cop car (damage.js) is out of the chase
   if (near < 3.6) { bustT += dt; if (bustT > 1.2) return busted(); } else bustT = Math.max(0, bustT - dt);
   if (near > 32) escapeT += dt; else escapeT = Math.max(0, escapeT - dt * 0.5);
   const e = document.getElementById("rb-escape"); if (e) e.textContent = Math.round(Math.min(100, (escapeT / 18) * 100)) + "%";

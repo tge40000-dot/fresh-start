@@ -90,6 +90,8 @@ body[data-status=off] nav.tabs,body[data-status=off] .live-only{display:none}
 body[data-status=live] .soon{display:none}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.mchips{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:8px}
+.mchips span{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;border:1px solid var(--c);color:var(--text);font:600 11px/1 var(--caps);letter-spacing:.06em;background:color-mix(in srgb,var(--c) 14%,transparent)}
 </style>
 </head>
 <body data-status="__STATUS__" data-rbtabs="off">
@@ -125,6 +127,7 @@ body[data-status=live] .soon{display:none}
       <div class="bar" aria-hidden="true"><i id="barfill"></i></div>
       <div class="m" id="next"></div>
       <div class="perks" id="perks" hidden></div>
+      <div class="mchips" id="mchips" hidden aria-label="Your memberships"></div>
     </div>
     <button class="btn wide" type="button" data-go="play">Play RB Gold Rush to earn points</button>
   </section>
@@ -236,6 +239,12 @@ body[data-status=live] .soon{display:none}
     } else { $("barfill").style.width = "100%"; $("next").textContent = s.level ? "Top level reached." : ""; }
     $("perks").hidden = !(s.level && s.level.perks);
     if (s.level && s.level.perks) $("perks").textContent = s.level.name + ": " + s.level.perks;
+    // membership class badges held (badge-worker.js rbbClasses), in each class's colour
+    var chips = $("mchips"); chips.textContent = "";
+    (me.classes || []).filter(function (c) { return c.state; }).forEach(function (c) {
+      var ch = el("span", null, c.icon + " " + c.name + (c.state === "member" ? "" : " · " + (c.state === "waitlist" ? "waitlist" : "applied"))); ch.style.setProperty("--c", c.color); chips.appendChild(ch);
+    });
+    chips.hidden = !chips.children.length;
     showQr(me.pass);
   }
   function showQr(p) {

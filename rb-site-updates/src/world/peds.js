@@ -1,4 +1,5 @@
-// RB World pedestrians: people walking the sidewalks round you, like GTA's.
+// RB World pedestrians: people walking the sidewalks round you, like GTA's. With combat on (18+), shots and blasts hurt
+// them too (hurt below): they run, and enough hits put them down for good.
 //   They walk along the sidewalk beside every road, turn at the corners, and now and then cross at the crosswalk,
 //   waiting for the cars' red light where there are traffic lights (traffic stops for anyone on the road).
 //   Drive at them and they jump out of the way; hit one and they're knocked down, get back up, and the cops take an
@@ -71,7 +72,7 @@ function spawn(p, near) {
     const t = Math.random(), [a, b] = p.path, x = a[0] + (b[0] - a[0]) * t, z = a[1] + (b[1] - a[1]) * t;
     const d = Math.hypot(x - car.x, z - car.z);
     if (d > NEAR || (near && d < 45) || CITY.blocked(x, z, 0.3)) continue;
-    Object.assign(p, { x, z, path: [b], crossing: null, after: null, state: "walk", t0: 0, h: Math.atan2(b[0] - a[0], b[1] - a[1]), speed: rnd(1.1, 1.6), phase: Math.random() * 6, scale: rnd(0.9, 1.08) });
+    Object.assign(p, { x, z, path: [b], crossing: null, after: null, state: "walk", t0: 0, hp: 100, h: Math.atan2(b[0] - a[0], b[1] - a[1]), speed: rnd(1.1, 1.6), phase: Math.random() * 6, scale: rnd(0.9, 1.08) });
     return true;
   }
   return false;
@@ -84,6 +85,7 @@ function tick(dt, t) {
     const dc = Math.hypot(p.x - car.x, p.z - car.z);
     if (dc > NEAR + 40) { spawn(p, true); continue; }
     if (p.state === "down") { p.t0 -= dt; if (p.t0 <= 0) p.state = "walk"; continue; }
+    if (p.state === "dead") { p.t0 -= dt; if (p.t0 <= 0) spawn(p, true); continue; } // lies there a while, then someone new walks the city
     // a car coming at you: jump out of the way (sideways from the car's path)
     if (carSp > 6 && dc < 9 && p.state !== "dodge") {
       const fx = Math.sin(car.heading), fz = Math.cos(car.heading), rx = p.x - car.x, rz = p.z - car.z, ahead = rx * fx + rz * fz, lat = rx * fz - rz * fx;
@@ -165,7 +167,7 @@ function draw() {
   const base = new THREE.Matrix4();
   peds.forEach((p, i) => {
     if (!p.path && p.x == null) { base.makeScale(0, 0, 0); for (const m of Object.values(M)) m.setMatrixAt(i, base); shadows.setMatrixAt(i, base); return; }
-    const s = p.scale, down = p.state === "down";
+    const s = p.scale, down = p.state === "down" || p.state === "dead";
     o3.position.set(p.x, 0.025, p.z); o3.rotation.set(0, 0, 0); o3.scale.set(s * (down ? 1.6 : 1), 1, s * (down ? 1.6 : 1)); o3.updateMatrix(); shadows.setMatrixAt(i, o3.matrix);
     o3.position.set(p.x, 0, p.z); o3.rotation.set(0, down ? p.downH : p.h, 0); o3.scale.set(s, s, s); o3.updateMatrix(); base.copy(o3.matrix);
     if (down) base.multiply(part.compose(v.set(0, 0.2, 0), q.setFromAxisAngle(xAxis, -Math.PI / 2), one)); // flat on the ground
@@ -186,6 +188,16 @@ export function initPeds(empire, ctx) {
   build(ctx.scene);
   on("frame", (dt) => tick(Math.min(dt, 0.1), 0));
   // gunfire nearby (combat.js): everyone within r runs away from it for a few seconds
-  function scare(x, z, r) { for (const p of peds) { if (!p.path || p.state === "down") continue; const dx = p.x - x, dz = p.z - z, d = Math.hypot(dx, dz); if (d < r && d > 0.1) { p.state = "dodge"; p.t0 = rnd(2.5, 4); p.dx = dx / d; p.dz = dz / d; } } }
-  return { peds, scare };
+  function scare(x, z, r) { for (const p of peds) { if (!p.path || p.state === "down" || p.state === "dead") continue; const dx = p.x - x, dz = p.z - z, d = Math.hypot(dx, dz); if (d < r && d > 0.1) { p.state = "dodge"; p.t0 = rnd(2.5, 4); p.dx = dx / d; p.dz = dz / d; } } }
+  // shot or caught in a blast (combat.js, 18+ combat on): hurt, they run from where it came from; at 0 they go down
+  // for good (and someone else takes their place a little later, out of sight). Returns true when it killed them.
+  function hurt(p, n, from) {
+    if (!p.path || p.state === "dead") return false;
+    p.hp = (p.hp == null ? 100 : p.hp) - n;
+    if (p.hp <= 0) { p.state = "dead"; p.t0 = 40; p.downH = from ? Math.atan2(p.x - from[0], p.z - from[1]) : p.h; return true; }
+    const dx = p.x - (from ? from[0] : p.x + 1), dz = p.z - (from ? from[1] : p.z), d = Math.hypot(dx, dz) || 1;
+    p.state = "dodge"; p.t0 = rnd(4, 6); p.dx = dx / d; p.dz = dz / d;
+    return false;
+  }
+  return { peds, scare, hurt };
 }

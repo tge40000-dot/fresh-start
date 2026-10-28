@@ -7,8 +7,9 @@
 //     switches, holding Tab opens the weapon wheel, X puts the weapon away. A marker round the crosshair shows where
 //     a hit came from.
 //   Shots are hitscan from the crosshair (the RPG fires a rocket): buildings, the ground and cars stop them; head
-//     shots do 2.5x. People on the street never get hurt: they run from gunfire. Shooting in the open city brings the
-//     cops (two stars); inside a mission's area it doesn't.
+//     shots do 2.5x. People on the street run from gunfire; shots and blasts hurt them (peds.js) and damage cars
+//     (damage.js), and hitting someone or a police car brings at least three stars. Shooting in the open city brings
+//     the cops (two stars); inside a mission's area it doesn't.
 //   Missions (game money and tokens): Turf war (clear a crew), Stash raid (clear it, take the case to the drop) and
 //     Hold the block (three waves). Crews take cover, lean out to fire, reload behind walls and rush you now and then;
 //     fallen crew drop cash. With 3+ wanted stars, police get out of their cars armed (shooting them adds stars).
@@ -167,7 +168,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
   function openPanel() {
     if (!allowed()) { E.panel(`<h2>COMBAT</h2><p class="rb-muted">Combat is switched off in RB World right now.</p><button class="btn-ghost" data-e="x">CLOSE</button>`, { x: E.hidePanel }); return; }
     if (store.get(AGE_KEY) !== "yes") {
-      E.panel(`<h2>COMBAT · 18+</h2><div class="rb-age"><b>This mode contains realistic gun violence.</b><br>It's for players aged 18 or older. Turn it on to carry the weapons you buy in the Armory, take combat missions and fight other players who've turned it on too. People on the street are never hurt, and you can turn it off at any time.</div>
+      E.panel(`<h2>COMBAT · 18+</h2><div class="rb-age"><b>This mode contains realistic gun violence.</b><br>It's for players aged 18 or older. Turn it on to carry the weapons you buy in the Armory, take combat missions and fight other players who've turned it on too. Shots and blasts hurt people on the street and damage cars, and the police come for it. You can turn it off at any time.</div>
         <button class="btn-gold" data-e="yes">I'M 18 OR OLDER · TURN IT ON</button><button class="btn-ghost" data-e="no">NOT NOW</button>`,
         { yes: () => { store.set(AGE_KEY, "yes"); setOn(true); openPanel(); }, no: E.hidePanel });
       return;
@@ -325,11 +326,12 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
   }
   // how far the shot goes before a building, the ground or a car stops it
   function worldHit(o, d, from, maxT) {
+    const cars = [...E.traffic(), ...E.cops()]; if (foot.parked) cars.push(foot.parked); // your own parked car takes bullets too
     for (let t = from; t < maxT; t += 0.6) {
       const x = o.x + d.x * t, y = o.y + d.y * t, z = o.z + d.z * t;
       if (y <= 0) return [t, "ground"];
       if (y < 14 && CITY.blocked(x, z, 0)) return [t, "wall"];
-      if (y < 1.5) for (const c of E.traffic()) if (Math.abs(c.x - x) < 1.1 && Math.abs(c.z - z) < 1.1) return [t, "car"];
+      if (y < 1.5) for (const c of cars) if (Math.abs(c.x - x) < 1.1 && Math.abs(c.z - z) < 1.1) return [t, "car", c];
     }
     return [maxT, null];
   }
@@ -359,15 +361,20 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
   }
   function bullet(o, d, from, w, id, muzzle) {
     const base = w.dmg * (has(id, "sup") ? 0.9 : 1);
-    let [best, what] = worldHit(o, d, from, w.range), target = null, head = false;
+    let [best, what, hitCar] = worldHit(o, d, from, w.range), target = null, head = false, ped = null;
     for (const e of out.enemies) { if (e.dead) continue; const h = hitPerson(o, d, e.x, e.z, 0, best); if (h && h[0] > from) { best = h[0]; head = h[1]; target = e; what = "enemy"; } }
     for (const [rid, r] of out.remote) { if (!r.combat || !r.alive) continue; const h = hitPerson(o, d, r.x, r.z, r.y || 0, best); if (h && h[0] > from) { best = h[0]; head = h[1]; target = rid; what = "player"; } }
+    // people on the street (peds.js): standing or walking ones; whoever is nearest along the shot takes it
+    const PD = window.RBPeds;
+    if (PD && PD.hurt) for (const p of PD.peds) { if (!p.path || p.state === "dead" || p.state === "down") continue; const h = hitPerson(o, d, p.x, p.z, 0, best); if (h && h[0] > from) { best = h[0]; head = h[1]; ped = p; target = null; what = "ped"; } }
     const end = o.clone().addScaledVector(d, best);
     tracer(muzzle, end);
     if (what === "enemy" || what === "player") out.stats.hits++;
     if (what === "enemy") { damageEnemy(target, base * (head ? 2.5 : 1), head); marker(target.hp <= 0); }
     else if (what === "player") { if (out.onRemoteHit) out.onRemoteHit(target, Math.round(base * (head ? 2.5 : 1)), head, id); marker(false); }
-    else if (what) puff(end, what === "car" ? 0xffcc66 : 0xbbb2a0);
+    else if (what === "ped") { const killed = PD.hurt(ped, base * (head ? 2.5 : 1), [car.x, car.z]); puff(end, 0x5a0f0f, 0.6); marker(killed); civilianHit(killed); }
+    else if (what === "car") { puff(end, 0xffcc66); if (window.RBDamage && window.RBDamage.shootCar) window.RBDamage.shootCar(hitCar, base * 0.25); if (hitCar && hitCar.cop) civilianHit(false, true); }
+    else if (what) puff(end, 0xbbb2a0);
     return end;
   }
   // ---------------------------------------------------------------- the RPG
@@ -384,6 +391,8 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
       let boom = next.y <= 0 || (next.y < 14 && CITY.blocked(next.x, next.z, 0)) || r.t > 4.5;
       for (const e of out.enemies) if (!e.dead && Math.hypot(e.x - next.x, e.z - next.z) < 0.8 && next.y < 2) boom = true;
       for (const [, rp] of out.remote) if (rp.combat && rp.alive && Math.hypot(rp.x - next.x, rp.z - next.z) < 0.8 && next.y < 2) boom = true;
+      if (next.y < 1.6) for (const c of [...E.traffic(), ...E.cops()]) if (Math.hypot(c.x - next.x, c.z - next.z) < 1.6) boom = true;
+      if (next.y < 2 && window.RBPeds) for (const pp of window.RBPeds.peds) if (pp.path && pp.state !== "dead" && Math.hypot(pp.x - next.x, pp.z - next.z) < 0.7) boom = true;
       if (boom) { explode(next); scene.remove(r.g); rockets.splice(i, 1); } else { p.copy(next); puff(p.clone(), 0x999999, 0.25, 0.6); }
     }
   }
@@ -395,7 +404,24 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     for (const e of out.enemies) { const d = Math.hypot(e.x - at.x, e.z - at.z); if (!e.dead && d < w.blast) damageEnemy(e, w.dmg * (1 - d / w.blast), false); }
     for (const [rid, rp] of out.remote) { const d = Math.hypot(rp.x - at.x, rp.z - at.z); if (rp.combat && rp.alive && d < w.blast && out.onRemoteHit) out.onRemoteHit(rid, Math.round(w.dmg * (1 - d / w.blast)), false, kind); }
     const me = Math.hypot(car.x - at.x, car.z - at.z); if (me < w.blast) hurt(Math.round(120 * (1 - me / w.blast)), what);
+    // people on the street and every car in reach
+    let people = 0, killed = false;
+    if (window.RBPeds && window.RBPeds.hurt) for (const p of window.RBPeds.peds) { if (!p.path || p.state === "dead") continue; const d = Math.hypot(p.x - at.x, p.z - at.z); if (d < w.blast) { people++; if (window.RBPeds.hurt(p, w.dmg * (1 - d / w.blast), [at.x, at.z])) killed = true; } }
+    if (window.RBDamage && window.RBDamage.blast) window.RBDamage.blast(at, w.blast, w.dmg);
+    if (people && kind !== "car") civilianHit(killed);
     gunfire(at.x, at.z, 90);
+  }
+  // a car shot up past its dead engine blows up (damage.js decides when): a smaller blast than the RPG
+  const CAR_BLAST = { dmg: 150, blast: 6.5 };
+  out.carBoom = (at) => explode(new THREE.Vector3(at[0], 0.8, at[1]), CAR_BLAST, "car", "a car blowing up");
+  // shooting someone on the street (or a police car) is seen: at least three stars, whatever gun you use
+  let lastSeen = 0;
+  function civilianHit(killed, copCar) {
+    out.stats.civilians = (out.stats.civilians || 0) + (killed ? 1 : 0);
+    if (killed) E.emit("ped-killed");
+    if (E.wanted() < 3) { E.setWanted(3); if (performance.now() - lastSeen > 4000) E.toast(copCar ? "🚨 You shot at a police car. Every cop in the city is coming." : killed ? "🚨 Someone's down. The police are coming for you." : "🚨 You shot someone. The police are coming for you.", true); }
+    else if (killed && E.wanted() < 5 && Math.random() < 0.35) E.setWanted(E.wanted() + 1);
+    lastSeen = performance.now();
   }
 
   // ---------------------------------------------------------------- effects: tracers, muzzle flash, impacts
@@ -541,6 +567,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     const aimAt = new THREE.Vector3(car.x + (hit ? 0 : rnd(-1.6, 1.6)), (foot.on ? 1.2 : 1) + (hit ? 0 : rnd(-0.4, 0.9)), car.z + (hit ? 0 : rnd(-1.6, 1.6)));
     tracer(muzzle, aimAt); flash(muzzle); shot(ARMS[e.kind].snd, d);
     e.p.userData.recoil = 0.12;
+    if (hit && !foot.on && car.mesh && window.RBDamage && window.RBDamage.shootCar) window.RBDamage.shootCar({ mesh: car.mesh }, rnd(...W.dmg) * 0.3); // the car takes some of it
     if (hit) hurt(Math.round(rnd(...W.dmg) * (foot.on ? 1 : 0.5 * (1 - ((car.tune && car.tune.armour) || 0) * 0.15))), e.cop ? "the police" : "a rival crew", [e.x, e.z]);
   }
   // armed police: with 3+ stars and combat on, a cop car that gets close lets out two officers (four at most)
