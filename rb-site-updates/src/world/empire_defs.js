@@ -93,6 +93,29 @@ export const NODE_INCOME = 0.02;
 export const NODE_CAP_H = 24;
 export const NODE_MAX = 10;
 export const WALK_DAY_M = 1000; // metres walked (phone location, walking pace) that count a day for the streak
+// Upgrades: each level costs NODE_UP_COST x its price x the new level and adds NODE_UP_RATE to the income rate. The
+// levels stay with the node: a takeover pays a quarter more than its price and what was spent on it.
+export const NODE_UP_MAX = 5;
+export const NODE_UP_COST = 0.5;
+export const NODE_UP_RATE = 0.5;
+// The city set (like Monopoly): more nodes in the same city, more from each of them there.
+export function cityBonus(n) { return n >= 4 ? 1.5 : n === 3 ? 1.25 : n === 2 ? 1.1 : 1; }
+export function nodeIncomeH(price, level, bonus) { return Number(price) * NODE_INCOME * (1 + NODE_UP_RATE * (Number(level) || 0)) * (bonus || 1); }
+export function nodeUpCost(price, level) { return Math.round(Number(price) * NODE_UP_COST * ((Number(level) || 0) + 1)); }
+// Raids (combat on): fight the crew guarding another player's node (3 + its level) to take it, plus RAID_REWARD of
+// what it's worth in cash. The fight has to take at least RAID_MIN_S (plus 3 s a crew member) and end inside RAID_LEN_S.
+export const RAID_MIN_S = 20;
+export const RAID_LEN_S = 300;
+export const RAID_COOLDOWN_MIN = 30;
+export const RAID_REWARD = 0.1;
+export function raidCrew(level) { return Math.min(8, 3 + (Number(level) || 0)); }
+// Heists (💰): get to the vault, crack it (stay HEIST_CRACK_S), then get the money to the drop before time runs out.
+export const HEIST_PAY = [40000, 60000];
+export const HEIST_LEN_S = 600;
+export const HEIST_CRACK_S = 40;
+export const HEIST_NEAR = 90;
+export const HEIST_COOLDOWN_MIN = 20;
+export const HEIST_DAY_MAX = 6;
 function nodeHash(a, b, salt) { let h = 2166136261 ^ salt; h = Math.imul(h ^ a, 16777619); h = Math.imul(h ^ b, 16777619); h ^= h >>> 13; h = Math.imul(h, 2246822507); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 export function nodeAt(cx, cy) {
   const lng = (cx + 0.15 + 0.7 * nodeHash(cx, cy, 11)) * NODE_CELL[0], lat = (cy + 0.15 + 0.7 * nodeHash(cx, cy, 23)) * NODE_CELL[1];

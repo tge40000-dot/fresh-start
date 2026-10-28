@@ -628,9 +628,11 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     beacon.position.set(p[0], 35, p[1]); beacon.userData.noAO = true; scene.add(beacon);
   }
   function spotNear(at, r0, r1) { for (let k = 0; k < 40; k++) { const a = Math.random() * 6.28, r = rnd(r0, r1), x = at[0] + Math.sin(a) * r, z = at[1] + Math.cos(a) * r; if (!CITY.blocked(x, z, 0.6)) return [x, z]; } return [at[0], at[1]]; }
-  function startMission(def) {
+  // def.onEnd(ok, why), when given, is told how it went instead of paying here (a raid: the server pays); at, when
+  // given, is where it happens (a node) instead of a road nearby.
+  function startMission(def, place) {
     if (!out.on) return openPanel();
-    const at = CITY.roadPoint({ away: [car.x, car.z], minFrom: 220, near: [car.x, car.z], maxFrom: 650 });
+    const at = place || CITY.roadPoint({ away: [car.x, car.z], minFrom: 220, near: [car.x, car.z], maxFrom: 650 });
     out.mission = { def, stage: "go", at, wave: 0, say: "Get to the marker." };
     setBeacon(at); E.toast(`${def.icon} ${def.name}: get to the red marker.`); hud();
   }
@@ -646,7 +648,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
   function alive() { return out.enemies.filter((e) => !e.dead && !e.cop).length; }
   function missionCheck() {
     const m = out.mission; if (!m || m.stage !== "fight" || alive()) return;
-    if (m.def.key === "turf") endMission(true);
+    if (m.def.key === "turf" || m.def.key === "raid") endMission(true);
     else if (m.def.key === "stash") {
       m.stage = "case"; m.say = "Grab the case.";
       caseMesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.15), new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6, roughness: 0.3 }));
@@ -660,7 +662,8 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     const m = out.mission; if (!m) return;
     out.mission = null; setBeacon(null); if (caseMesh) { scene.remove(caseMesh); caseMesh = null; }
     mchip.style.display = "none";
-    if (ok) { grenades++; P.netWorth += m.def.pay; P.tokens += m.def.tokens; ctx.play && ctx.play("cash"); E.toast(`✅ ${m.def.name} done: ${E.money(m.def.pay)} + ${m.def.tokens} tokens.`); E.emit("mission-done", m.def.key); ctx.sync && ctx.sync(); }
+    if (m.def.onEnd) { try { m.def.onEnd(!!ok, why); } catch (e) {} }
+    else if (ok) { grenades++; P.netWorth += m.def.pay; P.tokens += m.def.tokens; ctx.play && ctx.play("cash"); E.toast(`✅ ${m.def.name} done: ${E.money(m.def.pay)} + ${m.def.tokens} tokens.`); E.emit("mission-done", m.def.key); ctx.sync && ctx.sync(); }
     else E.toast(`❌ ${m.def.name} failed. ${why || ""}`, true);
     // anyone left walks off
     setTimeout(() => { for (const e of out.enemies) if (!e.dead && !e.cop) { e.dead = true; e.deadT = 13.5; } }, ok ? 0 : 2000);
@@ -756,6 +759,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
   }
   out.streakUp = streakUp; out.streak = () => streak;
   // for the story (story.js) and street events (events.js)
+  out.startRaid = (def, at) => { if (!out.on || out.mission) return false; startMission({ icon: "⚔️", pay: 0, tokens: 0, ...def, key: "raid" }, at); return true; };
   out.startMission = (key) => { const d = MISSIONS.find((x) => x.key === key); if (d && out.on && !out.mission) { startMission(d); return true; } return false; };
   out.spawnEnemy = spawnEnemy; out.dropCash = drop; out.attachments = att;
 

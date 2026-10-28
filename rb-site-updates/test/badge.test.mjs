@@ -259,7 +259,7 @@ USERS.u_bob = { email: "bob@example.com" };
   const csp = w.headers.get("Content-Security-Policy");
   assert.ok(/connect-src 'self'[^;]*basemaps\.cartocdn\.com/.test(csp) && !/esm\.sh|instantdb|stripe/i.test(csp), "the game's hosts only: no InstantDB, no Stripe");
   assert.ok(!/instantdb|esm\.sh|js\.stripe\.com|\$9\.99/i.test(wh), "no InstantDB, Stripe or the unbacked $9.99 offer");
-  assert.ok(wh.includes('src="/app/world/main.js?v=w18"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
+  assert.ok(wh.includes('src="/app/world/main.js?v=w19"') && wh.includes('data-rbtabs="off"') && wh.includes(JSON.stringify(PK)) && wh.includes("window.RBLoadClerk"));
   assert.ok(wh.includes("OPEN THE RB APP") && wh.includes("SEE MEMBERSHIPS"));
   // the car radio and the notice come from RB Command > RB World; "Enter as Admin" opens RB World's controls there
   assert.ok(wh.includes('window.RB_WORLD_CFG = {"radio":true,"notice":"","combat":true}') && wh.includes("data-rb-radio-host") && wh.includes('id="radio-vol"'));
@@ -269,7 +269,7 @@ USERS.u_bob = { email: "bob@example.com" };
   // the phone: everything else on screen in one place (📱 or T), with a Classic layout in Settings
   const pj = await (await go("/app/world/phone.js")).text();
   assert.ok(pj.includes("export function initPhone") && pj.includes('"KeyT"') && pj.includes("rb-phone-ui") && pj.includes('"set-screen"'));
-  for (const app of ["jobs", "empire", "races", "goals", "chat", "radio", "leaders", "events", "nodes", "deals", "market", "bay", "story", "customs", "wardrobe", "settings", "help"]) assert.ok(pj.includes(`["${app}", `), "phone app " + app);
+  for (const app of ["jobs", "empire", "races", "goals", "chat", "radio", "leaders", "events", "nodes", "deals", "market", "heist", "bay", "story", "customs", "wardrobe", "settings", "help"]) assert.ok(pj.includes(`["${app}", `), "phone app " + app);
   assert.ok(wh.includes('id="set-screen"') && wh.includes("Classic: everything on screen"));
   const mjs = await (await go("/app/world/main.js")).text(); assert.ok(mjs.includes("from './phone.js'") && mjs.includes("initPhone(window.RBEmpire, ectx)"));
   // the billboards and posters: sponsors' ads from RB Command, labelled, counted, with a link when you drive close
@@ -278,7 +278,7 @@ USERS.u_bob = { email: "bob@example.com" };
   assert.ok(aj.includes("export function initAds") && aj.includes("/api/world/billboards") && aj.includes("/api/world/ad-event") && aj.includes("SPONSORED · ") && aj.includes('rel = "sponsored noopener"'));
   const cityj = await (await go("/app/world/city.js")).text(); assert.ok(cityj.includes("adSpots") && cityj.includes("adPool"));
   // on foot (F), 18+ combat, car damage and live play with other players
-  for (const [f, needs] of Object.entries({ "onfoot.js": ["export function initFoot", '"KeyF"', "takeTraffic"], "char.js": ["export function person", "export function pose"], "combat.js": ["export function initCombat", "rb_world_18", "I'M 18 OR OLDER"], "live.js": ["export function initLive", "wss://rb-world-live.tge40000.workers.dev"], "damage.js": ["export function initDamage", "car.stall"], "garage.js": ["export function initGarage", "rb_customs_v1", "car.tune"], "wardrobe.js": ["export function initWardrobe", "foot.setLook"], "story.js": ["export function initStory", "RISE OF RB", "rb_story_v1"], "events.js": ["export function initEvents", "Speed camera", "armored truck"], "stream.js": ["export function initStream", "tiles.openfreemap.org", "CITY.ext.blocked"], "stream_worker.js": ["from \"./mvt.js\"", "from \"./earcut.js\"", "brunnel"], "mvt.js": ["export function decode"], "earcut.js": ["ISC License", "export default function earcut"], "bay.js": ["export function initBay", "FasTrak", "AAA average"], "bay_data.js": ["Golden Gate Bridge", "fastrak: 10.25", "Zillow", "export const CITIES"], "nodes.js": ["export function initNodes", "/api/world/node", "MY REAL LOCATION"], "deals.js": ["export function initDeals", "/api/world/deal", "HOSTILE TAKEOVER"], "market.js": ["export function initMarket", "Tax audit", "Lifestyle"] })) {
+  for (const [f, needs] of Object.entries({ "onfoot.js": ["export function initFoot", '"KeyF"', "takeTraffic"], "char.js": ["export function person", "export function pose"], "combat.js": ["export function initCombat", "rb_world_18", "I'M 18 OR OLDER"], "live.js": ["export function initLive", "wss://rb-world-live.tge40000.workers.dev"], "damage.js": ["export function initDamage", "car.stall"], "garage.js": ["export function initGarage", "rb_customs_v1", "car.tune"], "wardrobe.js": ["export function initWardrobe", "foot.setLook"], "story.js": ["export function initStory", "RISE OF RB", "rb_story_v1"], "events.js": ["export function initEvents", "Speed camera", "armored truck"], "stream.js": ["export function initStream", "tiles.openfreemap.org", "CITY.ext.blocked"], "stream_worker.js": ["from \"./mvt.js\"", "from \"./earcut.js\"", "brunnel"], "mvt.js": ["export function decode"], "earcut.js": ["ISC License", "export default function earcut"], "bay.js": ["export function initBay", "FasTrak", "AAA average"], "bay_data.js": ["Golden Gate Bridge", "fastrak: 10.25", "Zillow", "export const CITIES"], "nodes.js": ["export function initNodes", "/api/world/node", "MY REAL LOCATION"], "deals.js": ["export function initDeals", "/api/world/deal", "HOSTILE TAKEOVER"], "market.js": ["export function initMarket", "Tax audit", "Lifestyle"], "heist.js": ["export function initHeist", "/api/world/heist", "BANK JOBS"] })) {
     const t = await (await go("/app/world/" + f)).text(); for (const n of needs) assert.ok(t.includes(n), f + ": " + n);
   }
   assert.ok(mjs.includes("from './account.js'") && mjs.includes("applySave(who)") && mjs.includes("startSaving(player.id"), "the same player every visit, saved to RB");
@@ -521,6 +521,68 @@ USERS.u_bob = { email: "bob@example.com" };
     assert.ok(q.body.walk.today >= 1000, JSON.stringify(q.body.walk));
     const s2 = (await beatM(N1, 100000)).body.settle; assert.equal(s2.length, 1); assert.equal(s2[0].tokens, 10, "day one of the streak");
     q = await node(N1, "near", lat + 0.5, -122.40, {}, "gps", 30000); assert.equal(q.body.moving, true, "driving with the phone isn't walking");
+    // upgrades: a level at a time, paid from your money, more income; only yours
+    q = await node(N1, "upgrade", n0.lat, n0.lng, { node: n0.id }, "car", 60000); assert.equal(q.status, 403, "not yours");
+    await node(N2, "near", n0.lat, n0.lng, {}, "car", 60000);
+    q = await node(N2, "upgrade", n0.lat, n0.lng, { node: n0.id }); assert.equal(q.status, 200, JSON.stringify(q.body));
+    assert.equal(q.body.paid, DEFS.nodeUpCost(12500, 0)); assert.equal(q.body.node.level, 1); assert.equal(q.body.node.incomeH, Math.round(12500 * DEFS.NODE_INCOME * 1.5));
+    // the city set: two nodes in the same town earn a tenth more each; a made-up town counts as its area
+    const [n1, n2] = DEFS.nodesNear(n0.lat, n0.lng, 1).filter((x) => x.id !== n0.id);
+    q = await node(N2, "claim", n1.lat, n1.lng, { node: n1.id, town: "Oakland" }, "car", 60000); assert.equal(q.status, 200, JSON.stringify(q.body));
+    q = await node(N2, "claim", n2.lat, n2.lng, { node: n2.id, town: "Oakland" }, "car", 60000); assert.equal(q.status, 200, JSON.stringify(q.body));
+    assert.equal(one("SELECT city FROM world_node_info WHERE id = ?", n2.id).city, "Oakland");
+    const empire = (id) => { NOW += 1000; return api("/api/world/empire", { method: "POST", body: { id } }); };
+    let e = await empire(N2); assert.equal(e.status, 200);
+    assert.deepEqual(e.body.cities.Oakland, { count: 2, bonus: 1.1 }); assert.equal(e.body.nodes.length, 3);
+    assert.equal(e.body.nodesValue, 12500 + DEFS.nodeUpCost(12500, 0) + 2 * DEFS.NODE_BASE, "price and upgrades");
+    assert.equal(e.body.incomeH, Math.round(12500 * DEFS.NODE_INCOME * 1.5 + 2 * DEFS.NODE_BASE * DEFS.NODE_INCOME * 1.1));
+    assert.ok(e.body.events.some((x) => x.kind === "upgrade") && e.body.events.some((x) => x.kind === "claim"), "what happened");
+    assert.equal(e.body.value, e.body.cash + e.body.lots.value + e.body.nodesValue);
+    // giving a node to another player
+    q = await node(N2, "give", n1.lat, n1.lng, { node: n1.id, to: "nobody-00000" }, "car", 3000); assert.equal(q.status, 404);
+    q = await node(N2, "give", n1.lat, n1.lng, { node: n1.id, to: N1 }, "car", 3000); assert.equal(q.status, 200, JSON.stringify(q.body));
+    assert.equal(one("SELECT owner_id FROM world_nodes WHERE id = ?", n1.id).owner_id, N1);
+    e = await empire(N1); assert.ok(e.body.events.some((x) => x.kind === "given")); assert.equal(e.body.nodes.length, 1);
+    // a raid: shielded at first; then the crew has to be fought for long enough; a win takes the node and pays a tenth
+    await beatM(N1, 100000); await beatM(N2, 100000);
+    q = await node(N1, "raid", n2.lat, n2.lng, { node: n2.id, weapon: "rifle" }, "car", 60000); assert.equal(q.status, 409); assert.match(q.body.error, /safe for/);
+    NOW += 7 * 3600e3; await beatM(N1, 100000); await beatM(N2, 100000);
+    q = await node(N1, "raid", n2.lat, n2.lng, { node: n2.id, weapon: "rifle" }, "car", 60000); assert.equal(q.status, 200, JSON.stringify(q.body));
+    const rd = q.body.raid; assert.equal(rd.crew, DEFS.raidCrew(0)); assert.equal(rd.weapon, "rifle");
+    q = await node(N2, "claim", n2.lat, n2.lng, { node: n2.id }, "car", 1000); assert.equal(q.status, 409, "being fought over, and yours");
+    q = await node(N1, "raid-end", n2.lat, n2.lng, { raid: rd.id, won: true }, "car", 1000); assert.equal(q.status, 409); assert.match(q.body.error, /too quick/);
+    q = await node(N1, "raid-end", n2.lat, n2.lng, { raid: rd.id, won: true }, "car", 40000); assert.equal(q.status, 200, JSON.stringify(q.body));
+    assert.equal(q.body.raid.status, "won"); assert.equal(q.body.raid.reward, DEFS.NODE_BASE * DEFS.RAID_REWARD);
+    assert.equal(one("SELECT owner_id FROM world_nodes WHERE id = ?", n2.id).owner_id, N1);
+    assert.ok((await beatM(N1, 100000)).body.settle.some((x) => x.cash === DEFS.NODE_BASE * DEFS.RAID_REWARD), "the reward, on the beat");
+    assert.ok((await empire(N2)).body.events.some((x) => x.kind === "raided"));
+    q = await node(N1, "raid-status", n2.lat, n2.lng, { raid: rd.id }, "car", 1000); assert.equal(q.body.raid.status, "won");
+    assert.equal((await node(N1, "raid-end", n2.lat, n2.lng, { raid: rd.id, won: true }, "car", 1000)).body.raid.status, "won", "counted once");
+    // a lost raid: nothing changes hands
+    NOW += 7 * 3600e3; await beatM(N1, 100000); await beatM(N2, 100000);
+    q = await node(N2, "raid", n2.lat, n2.lng, { node: n2.id, weapon: "pistol" }, "car", 60000); assert.equal(q.status, 200, JSON.stringify(q.body));
+    q = await node(N2, "raid-end", n2.lat, n2.lng, { raid: q.body.raid.id, won: false }, "car", 5000); assert.equal(q.body.raid.status, "lost");
+    assert.equal(one("SELECT owner_id FROM world_nodes WHERE id = ?", n2.id).owner_id, N1);
+    // bank jobs: vault, crack (stay 40 s), getaway to the drop, in time; one every 20 minutes
+    const H = "heist000-0001";
+    const heist = (op, lat, lng, wait = 2000) => { NOW += wait; return api("/api/world/heist", { method: "POST", body: { id: H, name: "Hst", op, lat, lng, src: "car" } }); };
+    q = await heist("start", 37.80, -122.27); assert.equal(q.status, 200, JSON.stringify(q.body));
+    const hs = q.body.heist, dv = DEFS.metresBetween(37.80, -122.27, hs.vault.lat, hs.vault.lng);
+    assert.ok(dv >= 250 && dv <= 1000, String(dv)); assert.ok(hs.pay >= DEFS.HEIST_PAY[0] && hs.pay <= DEFS.HEIST_PAY[1]); assert.equal(hs.stage, "vault");
+    assert.equal((await heist("start", 37.80, -122.27)).status, 409, "one at a time");
+    assert.equal((await heist("finish", 37.80, -122.27)).status, 409, "crack it first");
+    assert.equal((await heist("arrive", 37.80, -122.27)).status, 409, "not at the vault");
+    q = await heist("arrive", hs.vault.lat, hs.vault.lng, 60000); assert.equal(q.body.heist.stage, "crack", JSON.stringify(q.body)); assert.equal(q.body.heist.crackLeft, DEFS.HEIST_CRACK_S);
+    assert.equal((await heist("loot", hs.vault.lat, hs.vault.lng, 5000)).status, 409, "not open yet");
+    q = await heist("loot", hs.vault.lat, hs.vault.lng, DEFS.HEIST_CRACK_S * 1000); assert.equal(q.body.heist.stage, "getaway", JSON.stringify(q.body));
+    assert.equal((await heist("finish", hs.vault.lat, hs.vault.lng)).status, 409, "the drop is elsewhere");
+    q = await heist("finish", hs.drop.lat, hs.drop.lng, 60000); assert.equal(q.status, 200, JSON.stringify(q.body)); assert.equal(q.body.paid, hs.pay);
+    const hset = (await beatM(H, 1000)).body.settle; assert.ok(hset.some((x) => x.cash === hs.pay && x.tokens === 25), JSON.stringify(hset));
+    q = await heist("start", 37.80, -122.27, 60000); assert.equal(q.status, 429, "lie low");
+    NOW += DEFS.HEIST_COOLDOWN_MIN * 60000;
+    q = await heist("start", 37.80, -122.27, 60000); assert.equal(q.status, 200);
+    NOW += (DEFS.HEIST_LEN_S + 5) * 1000;
+    q = await heist("status", 37.80, -122.27); assert.equal(q.body.heist.status, "failed", "out of time");
   }
   const files = [];
   for (const f of ["/app/world/empire.js", "/app/world/empire_defs.js"]) { const r = await go(f); files.push([r.status, await r.text()]); }

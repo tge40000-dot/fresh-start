@@ -112,7 +112,7 @@ function drawRadar(t) {
   // nodes.js: Empire Nodes, gold yours, grey others', white free
   for (const b of window.__rbBlips3 || []) dot(b.x, b.z, b.r || 4, b.c, "#000");
   // the target: job or race checkpoint, on the rim with an arrow when it's out of range
-  const tgt = R.job ? R.job.stops[R.job.stage].at : window.__rbRaceTarget || window.__rbMissionTarget || window.__rbStoryTarget || window.__rbEventTarget || null;
+  const tgt = R.job ? R.job.stops[R.job.stage].at : window.__rbRaceTarget || window.__rbMissionTarget || window.__rbStoryTarget || window.__rbEventTarget || window.__rbHeistTarget || null;
   if (tgt) {
     let [px, pz] = at(tgt[0], tgt[1]); const col = R.job && R.job.stage ? "#00E676" : "#F5D547";
     const dx = px - mid, dz = pz - mid, dd = Math.hypot(dx, dz), lim = mid - 14;
@@ -185,7 +185,8 @@ export function help() {
     <tr><td>🎨 Paint</td><td>In the race menu: colours for your car. Other players see it, with your name and level.</td></tr>
     <tr><td>📋 Goals</td><td>Daily rewards, three daily quests, achievements and your level.</td></tr>
     <tr><td>🌉 Bay Area</td><td>The whole Bay Area, streamed in from OpenStreetMap as you drive out of downtown Vallejo. Bridge tolls are real 2026 rates, charged the way they really are (FasTrak, plate or invoice: pick in 🌉). Fuel runs down as you drive; fill up at a real petrol station at the area's AAA average price (<kbd>U</kbd>). Each town shows its real typical home value and rent (Zillow).</td></tr>
-    <tr><td>🏛️ Nodes</td><td>Empire Nodes: real places, the same for everyone. Walk there with your location on, or drive there, to claim one; it earns every hour, even while you're away. Others can take it over after a few hours (you get half). Walk 1 km a day with your location on for tokens.</td></tr>
+    <tr><td>🏛️ Nodes</td><td>Empire Nodes: real places, the same for everyone. Walk there with your location on, or drive there, to claim one; it earns every hour, even while you're away. Others can take it over after a few hours (you get half). Walk 1 km a day with your location on for tokens. Upgrade yours to earn more; more in the same city earn more each. With combat on, fight a node's crew to take it.</td></tr>
+    <tr><td>🏦 Bank jobs</td><td>A timed heist: get to the vault, stay while it's cracked, then get the money to the drop with the cops on you, for $40,000 to $60,000.</td></tr>
     <tr><td>🤝 Deals</td><td>Stop by another player's lot to make an offer or a hostile takeover bid. An empty lot nobody defends goes to the bidder after a day.</td></tr>
     <tr><td>📈 Market</td><td>Every half hour something happens in the city that changes some businesses' customers. Living large costs more the richer you get, and expanding fast draws heat (and tax audits).</td></tr>
     <tr><td>📖 Story</td><td>Rise of RB: five chapters in the phone, each with its own reward.</td></tr>
