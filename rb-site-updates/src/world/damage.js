@@ -4,6 +4,10 @@
 // stops for a moment.
 //   Fixing it: stop next to one of your own lots (free), or pay at any time from the 🔧 chip ($250 + $15 per 1%).
 //   A car you take from the traffic starts undamaged; the damage stays with each car.
+// With combat on (18+), bullets and blasts damage cars too (shootCar, blast; combat.js calls them): traffic, police
+// cars and your own, parked or with you in it. Past half they smoke, at 100% the engine dies, and a traffic or police
+// car shot up past that catches fire and blows up a moment later (combat.js runs the blast). Your own car stops at a
+// dead engine instead: fix it as usual.
 import * as THREE from "three";
 import { on } from "./empire.js";
 
@@ -11,7 +15,7 @@ export function initDamage(E, ctx) {
   const car = E.car, P = ctx.player, scene = ctx.scene;
   const dmg = () => (car.mesh && car.mesh.userData.dmg) || 0;
   const setDmg = (v) => { if (!car.mesh) return; car.mesh.userData.dmg = Math.max(0, Math.min(100, v)); car.stall = car.mesh.userData.dmg >= 100; chipNow(); };
-  const out = { damage: dmg, repair: () => repair(true), set: setDmg };
+  const out = { damage: dmg, repair: () => repair(true), set: setDmg, shootCar, blast };
   const cost = () => Math.round(250 + dmg() * 15);
 
   // the chip: how bad it is, and a button to fix it
@@ -38,14 +42,58 @@ export function initDamage(E, ctx) {
   }
   on("crash", hurt);
 
+  // ---------------------------------------------------------------- shot up: bullets and blasts (combat.js)
+  const WRECK = 100, BOOM = 160;
+  const isOwn = (m) => m === car.mesh || !!(window.RBFoot && window.RBFoot.parked && window.RBFoot.parked.mesh === m);
+  // c: a traffic or police car, your parked car (onfoot.js parked) or { mesh: car.mesh } for the one you're in
+  function shootCar(c, n) {
+    const m = c && c.mesh; if (!m || m.userData.burnt || !(n > 0)) return;
+    const own = isOwn(m), before = m.userData.dmg || 0, soak = m === car.mesh && car.tune ? ((car.tune.armour || 0) * 0.2) : 0;
+    m.userData.dmg = Math.min(own ? WRECK : BOOM, before + n * (1 - soak));
+    if (m === car.mesh) { setDmg(m.userData.dmg); if (before < WRECK && dmg() >= WRECK) E.toast("💥 The engine's shot to pieces. Get out (F) and take another car, or fix it from the 🔧 chip.", true); return; }
+    if (own) return;
+    if (before < WRECK && m.userData.dmg >= WRECK) { c.wrecked = true; c.speed = 0; c.held = 1e9; }
+    if (m.userData.dmg >= BOOM && !c.boomAt) c.boomAt = performance.now() + 700 + Math.random() * 900; // it burns for a moment first
+  }
+  // a blast at `at` (THREE.Vector3): every car within reach takes some of it, more the closer it is
+  function blast(at, r, n) {
+    const reach = r + 1.5, list = [...E.traffic(), ...E.cops()];
+    const pk = window.RBFoot && window.RBFoot.parked; if (pk) list.push(pk);
+    if (!car.onFoot && car.mesh) list.push({ mesh: car.mesh, x: car.x, z: car.z });
+    for (const c of list) { const d = Math.hypot(c.x - at.x, c.z - at.z); if (d < reach) shootCar(c, n * (1 - d / reach) * 0.9); }
+  }
+  // burnt out: blackened, smoking, going nowhere until the traffic replaces it out of sight
+  function burn(c) {
+    const m = c.mesh; m.userData.burnt = true; c.wrecked = true; c.speed = 0; c.held = 1e9; c.burnT = 25;
+    // matte charcoal: no clearcoat or reflections left
+    m.traverse((o) => { if (!o.isMesh || !o.material || Array.isArray(o.material)) return; const k = o.material = o.material.clone();
+      if (k.color) k.color.multiplyScalar(0.1).add(new THREE.Color(0x0d0b09)); if (k.emissive) k.emissive.setHex(0);
+      if ("roughness" in k) k.roughness = 1; if ("metalness" in k) k.metalness = 0; if ("clearcoat" in k) k.clearcoat = 0; if ("envMapIntensity" in k) k.envMapIntensity = 0.1; if ("transmission" in k) k.transmission = 0; });
+    if (window.RBCombat && window.RBCombat.carBoom) window.RBCombat.carBoom([c.x, c.z]);
+  }
+
   // ---------------------------------------------------------------- smoke
   const smoke = [], geo = new THREE.SphereGeometry(0.35, 7, 5);
   let smokeT = 0;
-  function puff(dark) {
-    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: dark ? 0x1a1a1a : 0x9a9a9a, transparent: true, opacity: 0.55, depthWrite: false }));
-    const h = car.heading, len = (car.mesh.userData.len || 4.4) / 2 - 0.4;
-    m.position.set(car.x + Math.sin(h) * len, 1.1, car.z + Math.cos(h) * len); m.userData.noAO = true; scene.add(m);
-    smoke.push({ m, t: 1.6 });
+  function puff(dark, at, fire) {
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: fire ? 0xff7a1a : dark ? 0x1a1a1a : 0x9a9a9a, transparent: true, opacity: 0.55, depthWrite: false }));
+    if (at) m.position.set(at[0], at[1], at[2]);
+    else { const h = car.heading, len = (car.mesh.userData.len || 4.4) / 2 - 0.4; m.position.set(car.x + Math.sin(h) * len, 1.1, car.z + Math.cos(h) * len); }
+    m.userData.noAO = true; scene.add(m);
+    smoke.push({ m, t: fire ? 0.6 : 1.6 });
+  }
+  // the other cars: smoke past half, flames once it's going to blow, then it does
+  function shotCarsTick(dt) {
+    const now = performance.now(), list = [...E.traffic(), ...E.cops()];
+    const pk = window.RBFoot && window.RBFoot.parked; if (pk) list.push(pk);
+    for (const c of list) {
+      const m = c.mesh, d = (m && m.userData.dmg) || 0; if (!m || d <= 50 || Math.hypot(c.x - car.x, c.z - car.z) > 160) continue;
+      if (c.boomAt && now >= c.boomAt && !m.userData.burnt) { c.boomAt = 0; burn(c); }
+      const burning = !!c.boomAt, burnt = !!m.userData.burnt;
+      if (burnt) { c.burnT -= dt; if (c.burnT <= 0) continue; }
+      c.smokeT = (c.smokeT || 0) - dt * (burning ? 6 : d >= WRECK || burnt ? 3 : 1.4);
+      if (c.smokeT <= 0) { c.smokeT = 0.2; const h = m.rotation.y, len = 1.6; puff(d >= 80 || burnt, [c.x + Math.sin(h) * len, 1.1, c.z + Math.cos(h) * len], burning && Math.random() < 0.6); }
+    }
   }
 
   // ---------------------------------------------------------------- bumping into cars
@@ -85,6 +133,7 @@ export function initDamage(E, ctx) {
       k.vx *= Math.pow(0.08, dt); k.vz *= Math.pow(0.08, dt); c.mesh.rotation.y += k.spin * dt; k.spin *= Math.pow(0.15, dt);
       if (k.t <= 0) c.knock = null;
     }
+    shotCarsTick(dt);
     // smoke from a damaged car
     const d = dmg();
     if (!car.onFoot && car.mesh && d > 50) { smokeT -= dt * (d > 80 ? 3 : 1.4); if (smokeT <= 0) { smokeT = 0.18; puff(d > 80); } }
