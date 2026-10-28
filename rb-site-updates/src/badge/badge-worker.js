@@ -99,11 +99,44 @@ function rbbEarnList(g) {
   return out;
 }
 
+// ---------------------------------------------------------------- membership classes
+// One badge for each RB membership class: the /memberships tiers (asked for at /memberships, kept in shop_inquiries
+// as membership:<how>:<tier>, matched by the member's verified email) and RB Studio (paid, from studio_memberships,
+// matched by the RB account). Each says what it really is: Passport is free, so asking is joining; Just Starting is a
+// waitlist; Coach and the business plans are applications, shown as applied; RB Studio counts only while it's paid up.
+// The same list is in RB Command's badge desk (badgedesk.js), so the door sees the same badges.
+const RBB_CLASSES = [
+  { key: "passport", name: "Passport", icon: "🛂", color: "#3FB8AF", how: "Join free at /memberships" },
+  { key: "just-starting", name: "Just Starting", icon: "🌱", color: "#5FBF5F", how: "Join the waitlist at /memberships" },
+  { key: "coach", name: "Put Me In Coach", icon: "🎯", color: "#E0893A", how: "Apply at /memberships" },
+  { key: "business-starter", name: "Business Starter", icon: "💼", color: "#9AA7B4", how: "Apply at /memberships/business" },
+  { key: "business-pro", name: "Business Pro", icon: "📈", color: "#4A90D9", how: "Apply at /memberships/business" },
+  { key: "business-elite", name: "Business Elite", icon: "👑", color: "#C9A227", how: "Apply at /memberships/business" },
+  { key: "studio", name: "RB Studio", icon: "🎚️", color: "#9B6CF0", how: "Become a member at /studio/pricing" },
+];
+const RBB_CLASS_STATE = { "membership:free:passport": "member", "membership:waitlist:just-starting": "waitlist", "membership:apply:coach": "applied",
+  "membership:apply:business-starter": "applied", "membership:apply:business-pro": "applied", "membership:apply:business-elite": "applied" };
+async function rbbClasses(env, m) {
+  const tryRead = async (fn) => { try { return await fn(); } catch { return null; } };
+  const got = {};
+  if (m.email_norm) {
+    const inq = await tryRead(() => env.DB.prepare("SELECT options, min(created_at) AS since FROM shop_inquiries WHERE lower(trim(email)) = ? AND options LIKE 'membership:%' GROUP BY options").bind(m.email_norm).all());
+    for (const r of inq?.results || []) {
+      const opt = String(r.options || "").toLowerCase(), state = RBB_CLASS_STATE[opt];
+      if (state) got[opt.split(":")[2]] = { state, since: r.since || null };
+    }
+  }
+  const st = await tryRead(() => env.DB.prepare("SELECT tier_key, created_at FROM studio_memberships WHERE clerk_user_id = ? AND status = 'active' AND (current_period_end IS NULL OR datetime(current_period_end) > datetime('now')) LIMIT 1").bind(m.clerk_user_id).first());
+  if (st) got.studio = { state: "member", since: st.created_at || null, tier: String(st.tier_key || "").replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 30) };
+  return RBB_CLASSES.map((c) => ({ key: c.key, name: c.name, icon: c.icon, color: c.color, how: c.how, state: got[c.key]?.state || null, since: got[c.key]?.since || null, tier: got[c.key]?.tier || null }));
+}
+
 function rbbPublicState(g) {
   return { status: g.status, events: g.on ? g.events || [] : [], game: g.on ? { round_max: g.amounts.gameRound, per_point: g.amounts.gamePerPoint, daily: g.amounts.gameDaily, rounds: g.amounts.gameRounds, ms: RBG_MS } : null, eligibility: g.cfg.eligibility, redeem_how: g.cfg.redeem_how,
     levels: g.on ? g.levels.map((l) => ({ key: l.key, name: l.name, min: l.min, perks: l.perks })) : [],
     rewards: g.on ? g.rewards.map((r) => ({ id: r.id, name: r.name, description: r.description, cost: r.cost, remaining: r.remaining, min_level: r.min_level, image_url: r.image_url })) : [],
     achievements: g.on ? g.achievements.map((a) => ({ key: a.key, name: a.name, description: a.description })) : [],
+    classes: g.on ? RBB_CLASSES.map((c) => ({ key: c.key, name: c.name, icon: c.icon, color: c.color, how: c.how })) : [],
     earn: g.on ? rbbEarnList(g) : [] };
 }
 
@@ -234,7 +267,7 @@ async function rbbMe(env, g, m) {
   ]);
   const [user, domain] = String(m.email_norm || "").split("@");
   return { ok: true, member: { name: m.display_name || "", email: user ? `${user.slice(0, 2)}${"•".repeat(Math.max(1, Math.min(6, user.length - 2)))}@${domain}` : null, since: m.created_at },
-    standing: await rbbStanding(env, g, m.id), pass: await rbbPass(m), game: await rbbGameToday(env, m.id),
+    standing: await rbbStanding(env, g, m.id), pass: await rbbPass(m), game: await rbbGameToday(env, m.id), classes: await rbbClasses(env, m),
     history: (hist.results || []).map((r) => ({ source: r.source, label: RBB_SOURCES[r.source] || r.source, points: Number(r.points), note: r.source === "checkin" || r.source === "adjust" ? r.note || "" : "", at: r.created_at })),
     redemptions: (reds.results || []).map((r) => ({ id: r.id, reward: r.reward_name, cost: Number(r.cost), status: r.status, at: r.created_at })) };
 }

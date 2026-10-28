@@ -47,6 +47,15 @@ assert.equal((await desk.checkToken(env, "https://example.com")).state, "bad");
 let r = await desk.lookup(env, { token: tok(nowMin) });
 assert.equal(r.token, "ok"); assert.equal(r.member.name, "Alice"); assert.equal(r.member.code, "ABCD-EFGH-JKLM"); assert.equal(r.member.level, null);
 assert.ok(!JSON.stringify(r).includes(secret), "the pass secret never leaves the server");
+// membership class badges: none without the tables, then the ones asked for with the verified email and RB Studio
+assert.deepEqual(r.member.classes, []);
+DB.raw.exec(`CREATE TABLE shop_inquiries (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT NOT NULL, options TEXT, status TEXT DEFAULT 'new', created_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE studio_memberships (clerk_user_id TEXT PRIMARY KEY, tier_key TEXT NOT NULL, status TEXT NOT NULL, current_period_end TEXT);
+INSERT INTO shop_inquiries (name, email, options) VALUES ('A', 'Alice@Example.com ', 'membership:free:passport'), ('A', 'alice@example.com', 'membership:apply:business-pro'), ('A', 'alice@example.com', 'membership:made-up'), ('B', 'bob@example.com', 'membership:apply:coach');
+INSERT INTO studio_memberships VALUES ('u_alice', 'artist', 'active', NULL);`);
+assert.deepEqual((await desk.lookup(env, { id: "m_alice" })).member.classes.map((c) => [c.key, c.state]), [["passport", "member"], ["business-pro", "applied"], ["studio", "member"]]);
+sql("UPDATE studio_memberships SET status = 'canceled'");
+assert.ok(!(await desk.lookup(env, { id: "m_alice" })).member.classes.some((c) => c.key === "studio"), "RB Studio only while it's active");
 assert.equal((await desk.lookup(env, { q: "ALICE@" })).members[0].id, "m_alice");
 assert.equal((await desk.lookup(env, { q: "abcd-efgh-jklm" })).members[0].id, "m_alice", "by pass code");
 assert.equal((await desk.lookup(env, { q: "100%" })).members.length, 0, "LIKE wildcards are literal");

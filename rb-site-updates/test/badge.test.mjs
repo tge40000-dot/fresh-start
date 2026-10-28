@@ -141,6 +141,13 @@ sql("INSERT INTO rb_event_submissions (submitter_email, status) VALUES ('alice@e
   for (const k of ["on_the_list", "supporter", "backer", "member", "released", "promoter"]) assert.ok(m.body.standing.earned.includes(k), k);
   assert.ok(!m.body.standing.earned.includes("first_night") && !m.body.standing.earned.includes("founding"), "no check-in yet; drafts never earned");
   assert.ok(m.body.standing.earned.includes("club_1k"));
+  // membership class badges: Coach asked for twice counts once, as applied; RB Studio active as member; a made-up tier
+  // is ignored; the others are there, not yet held, with how to get them
+  assert.deepEqual(st.body.classes.map((c) => c.key), ["passport", "just-starting", "coach", "business-starter", "business-pro", "business-elite", "studio"]);
+  const cls = Object.fromEntries(m.body.classes.map((c) => [c.key, c]));
+  assert.equal(cls.coach.state, "applied"); assert.equal(cls.studio.state, "member"); assert.equal(cls.studio.tier, "Pro");
+  assert.equal(cls.passport.state, null); assert.match(cls.passport.how, /memberships/);
+  assert.equal(m.body.classes.filter((c) => c.state).length, 2);
   const again = await me("u_alice");
   assert.equal(again.body.added, 0, "nothing counts twice"); assert.equal(again.body.standing.lifetime, want);
   NOW += DAY;
