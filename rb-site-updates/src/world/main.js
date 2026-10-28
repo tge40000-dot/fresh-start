@@ -29,6 +29,7 @@ import { initBay } from './bay.js';
 import { initNodes } from './nodes.js';
 import { initDeals } from './deals.js';
 import { initMarket } from './market.js';
+import { initHeist } from './heist.js';
 
 // --- CORE ---
 const db = init();
@@ -491,6 +492,7 @@ async function startGame() {
     window.RBNodes = initNodes(window.RBEmpire, ectx); // Empire Nodes: real places to claim, walking or driving (🏛️)
     window.RBDeals = initDeals(window.RBEmpire, ectx); // offers and hostile takeovers on lots, and money owed to you (🤝)
     window.RBMarket = initMarket(window.RBEmpire, ectx); // market events, lifestyle costs and heat (📈)
+    window.RBHeist = initHeist(window.RBEmpire, ectx); // bank jobs: vault, crack, getaway, checked by the server (🏦)
     window.RBSave = startSaving(player.id, () => ({ netWorth: Math.floor(player.netWorth), tokens: Math.floor(player.tokens) })); // the saved game, to RB
     setTimeout(() => window.RBEmpire.toast(player.signedIn ? '💾 Saved to your RB account: play on any device.' : '💾 Saved on this device. Sign in on the start screen to keep it on your RB account.'), 4500);
     const notice = (window.RB_WORLD_CFG || {}).notice; if (notice) setTimeout(() => window.RBEmpire.toast('📣 ' + notice), 2500);

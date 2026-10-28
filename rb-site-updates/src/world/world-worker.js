@@ -12,6 +12,10 @@
 //   POST /api/world/ticket      a one-use ticket (60 seconds) to join the live room (rb-world-live) as this player
 //   POST /api/world/node        Empire Nodes: real places near you (phone location or your car), claim and take over
 //   POST /api/world/deal        offers to buy other players' lots and hostile takeover bids, accept, decline, list
+//   POST /api/world/node        also upgrades (a level at a time), raids (fights for another player's node) and giving
+//                               a node to another player
+//   POST /api/world/empire      what your empire is worth (money, lots, nodes), its income an hour, city sets, events
+//   POST /api/world/heist       a timed job: the vault, the crack, the getaway to the drop, for big money
 //   POST /api/world/save        the saved game (empire, progress, customs, story, wardrobe, ...), so it follows the
 //                               player: to any device for an RB account, back after signing out for a guest
 // One player per RB account (world_accounts) and one per device for guests (world_guests: the device keeps a random
@@ -24,7 +28,7 @@
 // relentlessbillionaire.com/game/ keeps working); play-time points only start once RB Badge itself is switched on.
 const WORLD_PEER_SECONDS = 20;
 const WORLD_BEAT_CREDIT = 10;
-const WORLD_VERSION = "w18";
+const WORLD_VERSION = "w19";
 const WORLD_OWNER_DAYS = 14; // a lot whose owner hasn't played for this long is for sale again
 const WORLD_CAR_COLOR = /^#[0-9a-fA-F]{6}$/;
 
@@ -210,12 +214,27 @@ async function worldSave(env, body) {
 function worldSettle(env, pid, cash, tokens, note) {
   return env.DB.prepare("INSERT INTO world_settle (player_id, cash, tokens, note, created_at) VALUES (?, ?, ?, ?, ?)").bind(pid, Math.round(cash) || 0, Math.round(tokens) || 0, String(note || "").slice(0, 120), Date.now());
 }
+// The nodes a player owns, with their level, city and income an hour (price, upgrade level and the city set bonus).
+async function worldNodesOf(env, pid) {
+  const rows = (await env.DB.prepare("SELECT n.id, n.owner_name, n.price, n.collected_at, n.shield_until, coalesce(i.level, 0) AS level, coalesce(i.spent, 0) AS spent, i.city FROM world_nodes n LEFT JOIN world_node_info i ON i.id = n.id WHERE n.owner_id = ?").bind(pid).all()).results || [];
+  const per = {};
+  for (const r of rows) if (r.city) per[r.city] = (per[r.city] || 0) + 1;
+  return rows.map((r) => {
+    const bonus = RBE.cityBonus(r.city ? per[r.city] : 1);
+    return { ...r, price: Number(r.price), level: Number(r.level), spent: Number(r.spent), bonus, incomeH: RBE.nodeIncomeH(r.price, r.level, bonus), cityCount: r.city ? per[r.city] : 1 };
+  });
+}
+// what a node has earned its owner since they last collected (at most a day's worth)
+function worldEarned(n, now) { return (n.incomeH * Math.min(Math.max(0, now - Number(n.collected_at || now)), RBE.NODE_CAP_H * 3600e3)) / 3600e3; }
+function worldEvent(env, pid, kind, text, other, node, amount) {
+  return env.DB.prepare("INSERT INTO world_events (at, kind, player_id, other_id, node, amount, text) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(Date.now(), kind, pid, other || null, node || null, Math.round(amount) || 0, String(text || "").slice(0, 160));
+}
+// money and tokens owed to a player, delivered once on the beat: node income, sales, payments from other players
 async function worldPayouts(env, pid) {
   const now = Date.now();
-  // node income since the last collection (at most a day's worth), at most once a minute
-  const mine = (await env.DB.prepare("SELECT id, price, collected_at FROM world_nodes WHERE owner_id = ?").bind(pid).all()).results || [];
+  const mine = await worldNodesOf(env, pid);
   let income = 0;
-  for (const n of mine) if (now - Number(n.collected_at || now) >= 60000) income += (Number(n.price) * RBE.NODE_INCOME * Math.min(now - Number(n.collected_at), RBE.NODE_CAP_H * 3600e3)) / 3600e3;
+  for (const n of mine) if (now - Number(n.collected_at || now) >= 60000) income += worldEarned(n, now);
   const due = (await env.DB.prepare("SELECT id, cash, tokens, note FROM world_settle WHERE player_id = ? AND applied_at IS NULL ORDER BY id LIMIT 20").bind(pid).all()).results || [];
   const w = [];
   if (income >= 1) w.push(env.DB.prepare("UPDATE world_nodes SET collected_at = ? WHERE owner_id = ? AND collected_at <= ?").bind(now, pid, now - 60000));
@@ -224,17 +243,9 @@ async function worldPayouts(env, pid) {
   return { nodeIncome: Math.floor(income), settle: due.map((d) => ({ cash: Number(d.cash), tokens: Number(d.tokens), note: d.note })) };
 }
 
-// ---------------------------------------------------------------- Empire Nodes: real places, claimed in person
-// POST /api/world/node { id, name, op: "near" | "claim", lat, lng, src: "gps" | "car", node }. Where you are comes from
-// your phone's location (src gps, with your consent in the browser) or your car in the game (src car, for players
-// without location). The server keeps your last position only to check speed: claims made while moving faster than a
-// car can go are refused. Walking (phone location, walking pace) counts towards a daily streak worth tokens.
-async function worldNode(env, body) {
-  const pid = String(body?.id || ""), op = String(body?.op || "near"), lat = Number(body?.lat), lng = Number(body?.lng), src = body?.src === "gps" ? "gps" : "car";
-  if (!WORLD_ID.test(pid)) return rbcJson({ ok: false, error: "Start the game again." }, 400);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 85 || Math.abs(lng) > 180) return rbcJson({ ok: false, error: "Where are you? (no location)" }, 400);
-  if (!(await worldRateOk(env, "n:" + pid, 30))) return rbcJson({ ok: false, error: "Slow down a little." }, 429);
-  const now = Date.now(), day = rbcLaDay(now), name = worldClean(body?.name, 24) || "Hustler";
+// Where a player is, checked against where they last were: moving faster than a person (phone location) or a car can
+// go means a jump, so nothing that needs you to be somewhere counts until you stop. Walking pace counts as walking.
+async function worldWhere(env, pid, lat, lng, src, now) {
   const fix = await env.DB.prepare("SELECT lat, lng, at, src FROM world_fix WHERE player_id = ?").bind(pid).first();
   let moving = false, walked = 0;
   if (fix && fix.src === src) {
@@ -242,7 +253,42 @@ async function worldNode(env, body) {
     if (dist > 150 && dist / Math.max(dt, 0.5) > (src === "gps" ? 45 : 70)) moving = true;
     else if (src === "gps" && dt > 2 && dist < 400 && dist / dt < 3.5) walked = dist;
   }
-  const w = [env.DB.prepare("INSERT INTO world_fix (player_id, lat, lng, at, src) VALUES (?, ?, ?, ?, ?) ON CONFLICT(player_id) DO UPDATE SET lat = excluded.lat, lng = excluded.lng, at = excluded.at, src = excluded.src").bind(pid, lat, lng, now, src)];
+  return { moving, walked, stmt: env.DB.prepare("INSERT INTO world_fix (player_id, lat, lng, at, src) VALUES (?, ?, ?, ?, ?) ON CONFLICT(player_id) DO UPDATE SET lat = excluded.lat, lng = excluded.lng, at = excluded.at, src = excluded.src").bind(pid, lat, lng, now, src) };
+}
+function worldPlace(body) {
+  const lat = Number(body?.lat), lng = Number(body?.lng), src = body?.src === "gps" ? "gps" : "car";
+  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 85 && Math.abs(lng) <= 180 ? { lat, lng, src } : null;
+}
+// The city a node is in: the Bay Area town the game reports (bay_data.js names), else an area of about 4 km round it.
+// A node keeps the city it was first claimed in.
+let worldTowns = null;
+function worldCity(town, lat, lng) {
+  if (!worldTowns) {
+    worldTowns = new Set(["Vallejo"]);
+    try { const m = /export const CITIES = (\{.*?\});/s.exec(RB_WORLD_FILES["bay_data.js"] || ""); if (m) for (const k of Object.keys(JSON.parse(m[1]))) worldTowns.add(k); } catch (e) {}
+  }
+  const t = String(town || "").trim();
+  return worldTowns.has(t) ? t : `Area ${Math.floor(lng / 0.05)}:${Math.floor(lat / 0.04)}`;
+}
+
+// ---------------------------------------------------------------- Empire Nodes: real places, claimed in person
+// POST /api/world/node { id, name, op, lat, lng, src: "gps" | "car", node, ... }. Where you are comes from your phone's
+// location (src gps, with your consent in the browser) or your car in the game (src car, for players without
+// location). The server keeps your last position only to check speed (worldWhere). Ops:
+//   near    the nodes round you (r: 1 to 4 cells each way), with owner, level, city and income an hour
+//   claim   a free node, or another player's after its shield (a quarter more than its price and upgrades; they get half)
+//   upgrade one of yours, a level at a time (it earns more; the cost comes off your money)
+//   raid    start a fight for another player's node (combat on): its crew, 3 + its level, guards it
+//   raid-end / raid-status   the fight's result (a win takes the node and pays a tenth of its worth) or where it's at
+//   give    one of yours to another player (a trade agreed in chat, or after a fight)
+async function worldNode(env, g, body) {
+  const pid = String(body?.id || ""), op = String(body?.op || "near"), here = worldPlace(body);
+  if (!WORLD_ID.test(pid)) return rbcJson({ ok: false, error: "Start the game again." }, 400);
+  if (!here) return rbcJson({ ok: false, error: "Where are you? (no location)" }, 400);
+  if (!(await worldRateOk(env, "n:" + pid, 30))) return rbcJson({ ok: false, error: "Slow down a little." }, 429);
+  const { lat, lng, src } = here, now = Date.now(), day = rbcLaDay(now), name = worldClean(body?.name, 24) || "Hustler";
+  const where = await worldWhere(env, pid, lat, lng, src, now), moving = where.moving, walked = where.walked;
+  const w = [where.stmt];
   let today = Number((await env.DB.prepare("SELECT metres FROM world_walk WHERE player_id = ? AND day = ?").bind(pid, day).first())?.metres) || 0;
   if (walked > 0) {
     w.push(env.DB.prepare("INSERT INTO world_walk (player_id, day, metres) VALUES (?, ?, ?) ON CONFLICT(player_id, day) DO UPDATE SET metres = metres + excluded.metres").bind(pid, day, walked));
@@ -255,40 +301,239 @@ async function worldNode(env, body) {
   }
   await env.DB.batch(w);
   const active = worldActiveSince();
+  const myNodes = Object.fromEntries((await worldNodesOf(env, pid)).map((n) => [n.id, n]));
   const view = async (list) => {
-    const rows = list.length ? ((await env.DB.prepare(`SELECT n.*, (SELECT p.seen_at FROM world_players p WHERE p.id = n.owner_id) AS seen FROM world_nodes n WHERE n.id IN (${list.map(() => "?").join(",")})`).bind(...list.map((n) => n.id)).all()).results || []) : [];
+    const rows = list.length ? ((await env.DB.prepare(`SELECT n.*, coalesce(i.level, 0) AS level, coalesce(i.spent, 0) AS spent, i.city, (SELECT p.seen_at FROM world_players p WHERE p.id = n.owner_id) AS seen FROM world_nodes n LEFT JOIN world_node_info i ON i.id = n.id WHERE n.id IN (${list.map(() => "?").join(",")})`).bind(...list.map((n) => n.id)).all()).results || []) : [];
     const by = Object.fromEntries(rows.map((r) => [r.id, r]));
     return list.map((n) => {
-      const r = by[n.id], owned = r && r.owner_id && r.seen && r.seen >= active, d = RBE.metresBetween(lat, lng, n.lat, n.lng);
-      const price = owned ? Math.round(Number(r.price) * RBE.NODE_STEP) : r ? Number(r.price) : RBE.NODE_BASE;
-      return { id: n.id, name: n.name, lat: n.lat, lng: n.lng, d: Math.round(d), owner: owned ? r.owner_name : null, mine: !!(owned && r.owner_id === pid), price, shield: owned ? Math.max(0, Number(r.shield_until) - now) : 0, value: r ? Number(r.price) : RBE.NODE_BASE };
+      const r = by[n.id], owned = !!(r && r.owner_id && r.seen && r.seen >= active), d = RBE.metresBetween(lat, lng, n.lat, n.lng), mine = owned && r.owner_id === pid;
+      const level = r ? Number(r.level) : 0, base = r ? Number(r.price) : RBE.NODE_BASE, spent = r ? Number(r.spent) : 0;
+      // to take it: a quarter more than its price and its upgrades if someone holds it, else what it last cost
+      const price = owned ? Math.round(base * RBE.NODE_STEP) + Math.round(spent * RBE.NODE_STEP) : base + spent;
+      const me = mine ? myNodes[n.id] : null;
+      return { id: n.id, name: n.name, lat: n.lat, lng: n.lng, d: Math.round(d), owner: owned ? r.owner_name : null, ownerId: owned ? r.owner_id : null, mine, price, level, city: r?.city || null,
+        incomeH: Math.round(me ? me.incomeH : RBE.nodeIncomeH(base, level, 1)), bonus: me ? me.bonus : 1, upCost: mine && level < RBE.NODE_UP_MAX ? RBE.nodeUpCost(base, level) : null,
+        shield: owned ? Math.max(0, Number(r.shield_until) - now) : 0, value: base + spent, _base: base, _spent: spent };
     });
   };
+  const clean = (v) => { const { _base, _spent, ...rest } = v; return rest; };
   const walk = { today: Math.round(today), goal: RBE.WALK_DAY_M };
-  if (op === "near") return rbcJson({ ok: true, nodes: (await view(RBE.nodesNear(lat, lng, 2))).sort((a, b) => a.d - b.d), walk, moving });
-  if (op !== "claim") return rbcJson({ ok: false, error: "Unknown action." }, 400);
+  if (op === "near") {
+    const r = Math.max(1, Math.min(4, Math.round(Number(body?.r)) || 2));
+    return rbcJson({ ok: true, nodes: (await view(RBE.nodesNear(lat, lng, r))).sort((a, b) => a.d - b.d).map(clean), walk, moving });
+  }
+  if (op === "raid-status" || op === "raid-end") return await worldRaidEnd(env, body, pid, name, here, moving, op);
+  if (!["claim", "upgrade", "raid", "give"].includes(op)) return rbcJson({ ok: false, error: "Unknown action." }, 400);
   const n = RBE.nodeById(body?.node);
   if (!n) return rbcJson({ ok: false, error: "That node isn't on the map." }, 400);
   const [v] = await view([n]);
+  const worthOf = async (id) => Number((await env.DB.prepare("SELECT net_worth FROM world_players WHERE id = ?").bind(id).first())?.net_worth) || 0;
+  const openRaid = await env.DB.prepare("SELECT id, attacker_id FROM world_raids WHERE node = ? AND status = 'open' AND ends_at > ?").bind(n.id, now).first();
+
+  if (op === "upgrade" || op === "give") {
+    if (!v.mine) return rbcJson({ ok: false, error: "That node isn't yours." }, 403);
+    const me = myNodes[n.id];
+    if (op === "upgrade") {
+      if (v.level >= RBE.NODE_UP_MAX) return rbcJson({ ok: false, error: `It's at the top level (${RBE.NODE_UP_MAX}).` }, 409);
+      const cost = RBE.nodeUpCost(v._base, v.level);
+      if ((await worthOf(pid)) < cost) return rbcJson({ ok: false, error: `The next level costs $${cost.toLocaleString("en-US")}.` }, 402);
+      // what it earned at the old rate is paid first, so the new rate only counts from now
+      const earned = worldEarned(me, now);
+      const [, up] = await env.DB.batch([
+        env.DB.prepare("UPDATE world_nodes SET collected_at = ? WHERE id = ? AND owner_id = ?").bind(now, n.id, pid),
+        env.DB.prepare("INSERT INTO world_node_info (id, city, level, spent) VALUES (?, ?, 1, ?) ON CONFLICT(id) DO UPDATE SET level = world_node_info.level + 1, spent = world_node_info.spent + excluded.spent WHERE world_node_info.level = ?").bind(n.id, worldCity(body?.town, n.lat, n.lng), cost, v.level),
+      ]);
+      if (!up.meta.changes) return rbcJson({ ok: false, error: "It was just upgraded. Try again." }, 409);
+      await env.DB.batch([
+        ...(earned >= 1 ? [worldSettle(env, pid, earned, 0, `🏛️ ${n.name} earned`)] : []),
+        worldEvent(env, pid, "upgrade", `Upgraded ${n.name} to level ${v.level + 1}`, null, n.id, -cost),
+      ]);
+      const [after] = await view([n]);
+      return rbcJson({ ok: true, paid: cost, node: clean({ ...after, incomeH: Math.round(RBE.nodeIncomeH(after._base, after.level, me.bonus)), bonus: me.bonus }) });
+    }
+    const to = String(body?.to || "");
+    if (!WORLD_ID.test(to) || to === pid) return rbcJson({ ok: false, error: "Pick another player." }, 400);
+    const them = await env.DB.prepare("SELECT id, name FROM world_players WHERE id = ? AND seen_at >= ?").bind(to, active).first();
+    if (!them) return rbcJson({ ok: false, error: "That player hasn't played lately." }, 404);
+    if (openRaid) return rbcJson({ ok: false, error: "It's being fought over right now." }, 409);
+    const theirs = Number((await env.DB.prepare("SELECT count(*) AS n FROM world_nodes WHERE owner_id = ?").bind(to).first())?.n) || 0;
+    if (theirs >= RBE.NODE_MAX) return rbcJson({ ok: false, error: `${them.name} already holds ${RBE.NODE_MAX} nodes.` }, 409);
+    const earned = worldEarned(me, now);
+    const moved = await env.DB.prepare("UPDATE world_nodes SET owner_id = ?, owner_name = ?, claimed_at = ?, shield_until = ?, collected_at = ? WHERE id = ? AND owner_id = ?").bind(to, them.name, now, now + RBE.NODE_SHIELD_H * 3600e3, now, n.id, pid).run();
+    if (!moved.meta.changes) return rbcJson({ ok: false, error: "It isn't yours any more." }, 409);
+    await env.DB.batch([
+      ...(earned >= 1 ? [worldSettle(env, pid, earned, 0, `🏛️ ${n.name} earned`)] : []),
+      worldEvent(env, pid, "give", `Gave ${n.name} to ${them.name}`, to, n.id, 0),
+      worldEvent(env, to, "given", `${name} gave you ${n.name}`, pid, n.id, 0),
+    ]);
+    return rbcJson({ ok: true, to: them.name });
+  }
+
+  // the rest need you to be there and standing still
   if (v.d > RBE.NODE_RADIUS) return rbcJson({ ok: false, error: `Get within ${RBE.NODE_RADIUS} m of it (you're ${v.d} m away).` }, 403);
-  if (moving) return rbcJson({ ok: false, error: "You're moving too fast to claim. Stop for a moment." }, 409);
+  if (moving) return rbcJson({ ok: false, error: "You're moving too fast. Stop for a moment." }, 409);
   if (v.mine) return rbcJson({ ok: false, error: "It's already yours." }, 409);
   if (v.shield > 0) return rbcJson({ ok: false, error: `${v.owner} just took it: safe for another ${Math.ceil(v.shield / 3600e3)} h.` }, 409);
-  const count = Number((await env.DB.prepare("SELECT count(*) AS n FROM world_nodes WHERE owner_id = ?").bind(pid).first())?.n) || 0;
+  if (openRaid && openRaid.attacker_id !== pid) return rbcJson({ ok: false, error: "Someone is fighting for it right now." }, 409);
+  const count = Object.keys(myNodes).length;
   if (count >= RBE.NODE_MAX) return rbcJson({ ok: false, error: `You hold ${RBE.NODE_MAX} nodes, the most anyone can.` }, 409);
-  const worth = Number((await env.DB.prepare("SELECT net_worth FROM world_players WHERE id = ?").bind(pid).first())?.net_worth) || 0;
-  if (worth < v.price) return rbcJson({ ok: false, error: `It costs $${v.price.toLocaleString("en-US")}.` }, 402);
+
+  if (op === "raid") {
+    if (!g.worldCombat) return rbcJson({ ok: false, error: "Fights are switched off in RB World right now." }, 403);
+    if (!v.owner) return rbcJson({ ok: false, error: "Nobody holds it: claim it instead." }, 409);
+    if (openRaid) return rbcJson({ ok: false, error: "You're already fighting for it." }, 409);
+    const mine = await env.DB.prepare("SELECT id FROM world_raids WHERE attacker_id = ? AND status = 'open' AND ends_at > ?").bind(pid, now).first();
+    if (mine) return rbcJson({ ok: false, error: "Finish the fight you're in first." }, 409);
+    const recent = await env.DB.prepare("SELECT id FROM world_raids WHERE attacker_id = ? AND node = ? AND started_at > ?").bind(pid, n.id, now - RBE.RAID_COOLDOWN_MIN * 60000).first();
+    if (recent) return rbcJson({ ok: false, error: `You raided it lately. Try again within the hour (${RBE.RAID_COOLDOWN_MIN} min between raids on the same node).` }, 429);
+    const weapon = /^[a-z]{2,12}$/.test(String(body?.weapon || "")) ? String(body.weapon) : "unarmed";
+    const crew = RBE.raidCrew(v.level), id = rbcId("rd_");
+    await env.DB.prepare("INSERT INTO world_raids (id, node, attacker_id, attacker_name, defender_id, defender_name, weapon, crew, status, started_at, ends_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)")
+      .bind(id, n.id, pid, name, v.ownerId, v.owner, weapon, crew, now, now + RBE.RAID_LEN_S * 1000).run();
+    return rbcJson({ ok: true, raid: { id, node: n.id, name: n.name, owner: v.owner, crew, weapon, ends: now + RBE.RAID_LEN_S * 1000, minS: RBE.RAID_MIN_S + 3 * crew, reward: Math.round(v.value * RBE.RAID_REWARD) } });
+  }
+
+  // claim: a free node, or a takeover
+  if ((await worthOf(pid)) < v.price) return rbcJson({ ok: false, error: `It costs $${v.price.toLocaleString("en-US")}.` }, 402);
   const cur = await env.DB.prepare("SELECT owner_id, owner_name, price, collected_at FROM world_nodes WHERE id = ?").bind(n.id).first();
+  const newBase = v.owner ? Math.round(v._base * RBE.NODE_STEP) : v._base, newSpent = v.owner ? Math.round(v._spent * RBE.NODE_STEP) : v._spent;
+  const prev = v.owner && cur?.owner_id && cur.owner_id !== pid ? (await worldNodesOf(env, cur.owner_id)).find((x) => x.id === n.id) : null;
   await env.DB.prepare("INSERT INTO world_nodes (id, owner_id, owner_name, price, takes, claimed_at, shield_until, collected_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET owner_id = excluded.owner_id, owner_name = excluded.owner_name, price = excluded.price, takes = world_nodes.takes + 1, claimed_at = excluded.claimed_at, shield_until = excluded.shield_until, collected_at = excluded.collected_at WHERE coalesce(world_nodes.owner_id, '') = ?")
-    .bind(n.id, pid, name, v.price, now, now + RBE.NODE_SHIELD_H * 3600e3, now, cur?.owner_id || "").run();
+    .bind(n.id, pid, name, newBase, now, now + RBE.NODE_SHIELD_H * 3600e3, now, cur?.owner_id || "").run();
   const after = await env.DB.prepare("SELECT owner_id FROM world_nodes WHERE id = ?").bind(n.id).first();
   if (after?.owner_id !== pid) return rbcJson({ ok: false, error: "Someone else just claimed it." }, 409);
+  const w2 = [
+    env.DB.prepare("INSERT INTO world_node_info (id, city, level, spent) VALUES (?, ?, 0, ?) ON CONFLICT(id) DO UPDATE SET spent = excluded.spent, city = coalesce(world_node_info.city, excluded.city)").bind(n.id, worldCity(body?.town, n.lat, n.lng), newSpent),
+    worldEvent(env, pid, "claim", `${v.owner ? "Took over" : "Claimed"} ${n.name}${v.owner ? ` from ${v.owner}` : ""}`, v.owner ? cur?.owner_id : null, n.id, -v.price),
+  ];
   // the owner it was taken from: half the price, plus what it earned them since they last collected
-  if (v.owner && cur?.owner_id && cur.owner_id !== pid) {
-    const earned = (Number(cur.price) * RBE.NODE_INCOME * Math.min(now - Number(cur.collected_at || now), RBE.NODE_CAP_H * 3600e3)) / 3600e3;
-    await worldSettle(env, cur.owner_id, v.price * 0.5 + earned, 0, `🏛️ ${name} took over ${n.name}: you get half the price`).run();
+  if (prev) {
+    const back = v.price * 0.5 + worldEarned(prev, now);
+    w2.push(worldSettle(env, cur.owner_id, back, 0, `🏛️ ${name} took over ${n.name}: you get half the price`));
+    w2.push(worldEvent(env, cur.owner_id, "lost", `${name} took over ${n.name}`, pid, n.id, back));
   }
-  return rbcJson({ ok: true, paid: v.price, node: (await view([n]))[0] });
+  await env.DB.batch(w2);
+  return rbcJson({ ok: true, paid: v.price, node: clean((await view([n]))[0]) });
+}
+
+// A raid's result, or where it's at. A win counts if it took long enough for the crew it had, came in time and you're
+// still at the node: the node is yours (safe for the shield hours), its owner keeps what it had earned them, and you
+// get a tenth of what it's worth. The win itself is reported by your game (the fight runs in your browser).
+async function worldRaidEnd(env, body, pid, name, here, moving, op) {
+  const now = Date.now(), r = await env.DB.prepare("SELECT * FROM world_raids WHERE id = ? AND attacker_id = ?").bind(String(body?.raid || ""), pid).first();
+  if (!r) return rbcJson({ ok: false, error: "No such fight." }, 404);
+  const n = RBE.nodeById(r.node), out = (status, extra) => rbcJson({ ok: true, raid: { id: r.id, node: r.node, name: n?.name, owner: r.defender_name, crew: Number(r.crew), status, ends: Number(r.ends_at), ...extra } });
+  if (r.status === "open" && now > Number(r.ends_at)) { await env.DB.prepare("UPDATE world_raids SET status = 'lapsed', done_at = ? WHERE id = ? AND status = 'open'").bind(now, r.id).run(); r.status = "lapsed"; }
+  if (op === "raid-status" || r.status !== "open") return out(r.status);
+  const close = (status) => env.DB.prepare("UPDATE world_raids SET status = ?, done_at = ? WHERE id = ? AND status = 'open'").bind(status, now, r.id);
+  if (body?.won !== true) {
+    await env.DB.batch([close("lost"), worldEvent(env, r.defender_id, "defended", `Your crew at ${n.name} fought off ${name}`, pid, r.node, 0), worldEvent(env, pid, "raid-lost", `Lost the fight for ${n.name}`, r.defender_id, r.node, 0)]);
+    return out("lost");
+  }
+  const minMs = (RBE.RAID_MIN_S + 3 * Number(r.crew)) * 1000;
+  if (now - Number(r.started_at) < minMs) return rbcJson({ ok: false, error: "That was too quick to count." }, 409);
+  if (RBE.metresBetween(here.lat, here.lng, n.lat, n.lng) > RBE.NODE_RADIUS * 1.5 || moving) return rbcJson({ ok: false, error: "Stay at the node to take it." }, 409);
+  const prev = (await worldNodesOf(env, r.defender_id)).find((x) => x.id === r.node);
+  if (!prev) { await close("gone").run(); return out("gone"); }
+  const reward = Math.round((prev.price + prev.spent) * RBE.RAID_REWARD), earned = worldEarned(prev, now);
+  const [done] = await env.DB.batch([close("won")]);
+  if (!done.meta.changes) return out("closed");
+  const moved = await env.DB.prepare("UPDATE world_nodes SET owner_id = ?, owner_name = ?, takes = takes + 1, claimed_at = ?, shield_until = ?, collected_at = ? WHERE id = ? AND owner_id = ?").bind(pid, name, now, now + RBE.NODE_SHIELD_H * 3600e3, now, r.node, r.defender_id).run();
+  if (!moved.meta.changes) { await env.DB.prepare("UPDATE world_raids SET status = 'gone' WHERE id = ?").bind(r.id).run(); return out("gone"); }
+  await env.DB.batch([
+    worldSettle(env, pid, reward, 0, `⚔️ Took ${n.name} from ${r.defender_name}`),
+    ...(earned >= 1 ? [worldSettle(env, r.defender_id, earned, 0, `🏛️ ${n.name} earned before ${name} took it`)] : []),
+    worldEvent(env, pid, "raid-won", `Took ${n.name} from ${r.defender_name} in a fight (${r.weapon})`, r.defender_id, r.node, reward),
+    worldEvent(env, r.defender_id, "raided", `${name} took ${n.name} in a fight`, pid, r.node, 0),
+  ]);
+  return out("won", { reward });
+}
+
+// ---------------------------------------------------------------- your empire: what it's worth and what happened
+// POST /api/world/empire { id }: money (from the last beat), lots and nodes at what they're worth, income an hour from
+// the nodes, the city sets, open fights and heists, and the last things that happened to you.
+async function worldEmpire(env, body) {
+  const pid = String(body?.id || ""), now = Date.now();
+  if (!WORLD_ID.test(pid)) return rbcJson({ ok: false, error: "Start the game again." }, 400);
+  const p = await env.DB.prepare("SELECT net_worth, tokens FROM world_players WHERE id = ?").bind(pid).first();
+  const nodes = await worldNodesOf(env, pid);
+  const lots = (await env.DB.prepare("SELECT lot, business, level FROM world_lots WHERE owner_id = ?").bind(pid).all()).results || [];
+  const events = ((await env.DB.prepare("SELECT at, kind, text, amount FROM world_events WHERE player_id = ? ORDER BY id DESC LIMIT 12").bind(pid).all()).results || []).map((e) => ({ at: Number(e.at), kind: e.kind, text: e.text, amount: Number(e.amount) }));
+  const lotsValue = lots.reduce((s, l) => s + RBE.lotValue(l.lot, l.business, l.level), 0), nodesValue = nodes.reduce((s, n) => s + n.price + n.spent, 0), cash = Math.max(0, Number(p?.net_worth) || 0);
+  const cities = {};
+  for (const n of nodes) if (n.city) cities[n.city] = { count: n.cityCount, bonus: n.bonus };
+  return rbcJson({ ok: true, cash, tokens: Number(p?.tokens) || 0, value: cash + lotsValue + nodesValue, incomeH: Math.round(nodes.reduce((s, n) => s + n.incomeH, 0)),
+    lots: { count: lots.length, value: lotsValue }, nodes: nodes.map((n) => { const d = RBE.nodeById(n.id); return { id: n.id, name: d?.name, lat: d?.lat, lng: d?.lng, city: n.city, level: n.level, incomeH: Math.round(n.incomeH), bonus: n.bonus, value: n.price + n.spent, upCost: n.level < RBE.NODE_UP_MAX ? RBE.nodeUpCost(n.price, n.level) : null, shield: Math.max(0, Number(n.shield_until) - now) }; }),
+    nodesValue, cities, events });
+}
+
+// ---------------------------------------------------------------- heists: a timed job for big money
+// POST /api/world/heist { id, op, lat, lng, src }: op "start" (a vault 250 m to 1 km from you and a drop further on),
+// "arrive" (at the vault: the crack starts), "loot" (still at the vault HEIST_CRACK_S later), "finish" (at the drop in
+// time: the pay comes in with the next beat), "status", "cancel". One at a time, HEIST_COOLDOWN_MIN apart, at most
+// HEIST_DAY_MAX a day. Each step is checked where you are and how fast you got there (worldWhere).
+async function worldHeist(env, body) {
+  const pid = String(body?.id || ""), op = String(body?.op || "status"), here = worldPlace(body), now = Date.now(), name = worldClean(body?.name, 24) || "Hustler";
+  if (!WORLD_ID.test(pid)) return rbcJson({ ok: false, error: "Start the game again." }, 400);
+  if (!(await worldRateOk(env, "h:" + pid, 30))) return rbcJson({ ok: false, error: "Slow down a little." }, 429);
+  let h = await env.DB.prepare("SELECT * FROM world_heists WHERE player_id = ? ORDER BY started_at DESC LIMIT 1").bind(pid).first();
+  if (h && h.status === "open" && now > Number(h.ends_at)) { await env.DB.prepare("UPDATE world_heists SET status = 'failed', done_at = ? WHERE id = ? AND status = 'open'").bind(now, h.id).run(); h.status = "failed"; }
+  const show = (x) => {
+    if (!x) return null;
+    const v = RBE.nodeById(x.vault), d = RBE.nodeById(x.drop_node);
+    return { id: x.id, stage: x.stage, status: x.status, pay: Number(x.pay), ends: Number(x.ends_at), vault: { lat: v.lat, lng: v.lng, name: v.name }, drop: { lat: d.lat, lng: d.lng, name: d.name },
+      crackLeft: x.stage === "crack" ? Math.max(0, Math.ceil((Number(x.arrived_at) + RBE.HEIST_CRACK_S * 1000 - now) / 1000)) : null };
+  };
+  if (op === "status") return rbcJson({ ok: true, heist: show(h), cooldown: h ? Math.max(0, Number(h.started_at) + RBE.HEIST_COOLDOWN_MIN * 60000 - now) : 0 });
+  const open = h && h.status === "open" ? h : null;
+  if (op === "cancel") {
+    if (open) await env.DB.prepare("UPDATE world_heists SET status = 'cancelled', done_at = ? WHERE id = ? AND status = 'open'").bind(now, open.id).run();
+    return rbcJson({ ok: true });
+  }
+  if (!here) return rbcJson({ ok: false, error: "Where are you? (no location)" }, 400);
+  const where = await worldWhere(env, pid, here.lat, here.lng, here.src, now);
+  await where.stmt.run();
+  if (op === "start") {
+    if (open) return rbcJson({ ok: false, error: "You're on a job already." }, 409);
+    if (h && now - Number(h.started_at) < RBE.HEIST_COOLDOWN_MIN * 60000) return rbcJson({ ok: false, error: `Lie low: the next job is in ${Math.ceil((Number(h.started_at) + RBE.HEIST_COOLDOWN_MIN * 60000 - now) / 60000)} min.` }, 429);
+    const done = Number((await env.DB.prepare("SELECT count(*) AS n FROM world_heists WHERE player_id = ? AND started_at > ?").bind(pid, now - 864e5).first())?.n) || 0;
+    if (done >= RBE.HEIST_DAY_MAX) return rbcJson({ ok: false, error: `That's ${RBE.HEIST_DAY_MAX} jobs today. Come back tomorrow.` }, 429);
+    const pick = (list) => list[Math.floor((crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296) * list.length)];
+    const vaults = RBE.nodesNear(here.lat, here.lng, 4).filter((n) => { const d = RBE.metresBetween(here.lat, here.lng, n.lat, n.lng); return d >= 250 && d <= 1000; });
+    const vault = vaults.length ? pick(vaults) : null;
+    const drops = vault ? RBE.nodesNear(vault.lat, vault.lng, 5).filter((n) => { const d = RBE.metresBetween(vault.lat, vault.lng, n.lat, n.lng); return d >= 500 && d <= 1400 && RBE.metresBetween(here.lat, here.lng, n.lat, n.lng) >= 300; }) : [];
+    if (!vault || !drops.length) return rbcJson({ ok: false, error: "No job round here. Try somewhere else." }, 409);
+    const step = 500, pay = RBE.HEIST_PAY[0] + step * Math.floor((crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296) * ((RBE.HEIST_PAY[1] - RBE.HEIST_PAY[0]) / step + 1));
+    const x = { id: rbcId("hs_"), player_id: pid, vault: vault.id, drop_node: pick(drops).id, stage: "vault", status: "open", pay, started_at: now, ends_at: now + RBE.HEIST_LEN_S * 1000, arrived_at: null };
+    await env.DB.prepare("INSERT INTO world_heists (id, player_id, vault, drop_node, stage, status, pay, started_at, ends_at) VALUES (?, ?, ?, ?, 'vault', 'open', ?, ?, ?)").bind(x.id, pid, x.vault, x.drop_node, pay, now, x.ends_at).run();
+    return rbcJson({ ok: true, heist: show(x) });
+  }
+  if (!open) return rbcJson({ ok: false, error: "You're not on a job." }, 409);
+  if (where.moving) return rbcJson({ ok: false, error: "You're moving too fast. Stop for a moment." }, 409);
+  const at = (nodeId) => { const n = RBE.nodeById(nodeId); return RBE.metresBetween(here.lat, here.lng, n.lat, n.lng) <= RBE.HEIST_NEAR; };
+  const set = (sql, ...v) => env.DB.prepare(`UPDATE world_heists SET ${sql} WHERE id = ? AND status = 'open'`).bind(...v, open.id).run();
+  if (op === "arrive") {
+    if (open.stage !== "vault") return rbcJson({ ok: true, heist: show(open) });
+    if (!at(open.vault)) return rbcJson({ ok: false, error: "Get to the vault first." }, 409);
+    await set("stage = 'crack', arrived_at = ?", now);
+    return rbcJson({ ok: true, heist: show({ ...open, stage: "crack", arrived_at: now }) });
+  }
+  if (op === "loot") {
+    if (open.stage !== "crack") return rbcJson({ ok: true, heist: show(open) });
+    if (!at(open.vault)) return rbcJson({ ok: false, error: "Stay at the vault while it's cracked." }, 409);
+    if (now - Number(open.arrived_at) < RBE.HEIST_CRACK_S * 1000) return rbcJson({ ok: false, error: "Not open yet." }, 409);
+    await set("stage = 'getaway', looted_at = ?", now);
+    return rbcJson({ ok: true, heist: show({ ...open, stage: "getaway" }) });
+  }
+  if (op === "finish") {
+    if (open.stage !== "getaway") return rbcJson({ ok: false, error: "Crack the vault first." }, 409);
+    if (!at(open.drop_node)) return rbcJson({ ok: false, error: "Get the money to the drop." }, 409);
+    const r = await env.DB.prepare("UPDATE world_heists SET status = 'done', stage = 'done', done_at = ? WHERE id = ? AND status = 'open'").bind(now, open.id).run();
+    if (!r.meta.changes) return rbcJson({ ok: false, error: "That job is over." }, 409);
+    await env.DB.batch([worldSettle(env, pid, open.pay, 25, "💰 Heist done"), worldEvent(env, pid, "heist", `Pulled off a heist at ${RBE.nodeById(open.vault).name}`, null, open.vault, open.pay)]);
+    return rbcJson({ ok: true, heist: show({ ...open, stage: "done", status: "done" }), paid: open.pay });
+  }
+  return rbcJson({ ok: false, error: "Unknown action." }, 400);
 }
 
 // ---------------------------------------------------------------- deals: buy offers and hostile takeovers on lots
@@ -640,7 +885,7 @@ async function rbWorldRoute(request, env, url, path, method) {
   if (!g.worldOpen) return rbcJson({ ok: false, error: "RB World is coming soon." }, 403);
   if (path === "/api/world/ads" && method === "GET") return await worldAds(env, g);
   if (path === "/api/world/billboards" && method === "GET") return await worldBillboards(env);
-  if (["/api/world/beat", "/api/world/chat", "/api/world/lot", "/api/world/rent", "/api/world/race", "/api/world/ad-event", "/api/world/me", "/api/world/save", "/api/world/ticket", "/api/world/node", "/api/world/deal"].includes(path) && method === "POST") {
+  if (["/api/world/beat", "/api/world/chat", "/api/world/lot", "/api/world/rent", "/api/world/race", "/api/world/ad-event", "/api/world/me", "/api/world/save", "/api/world/ticket", "/api/world/node", "/api/world/deal", "/api/world/empire", "/api/world/heist"].includes(path) && method === "POST") {
     const origin = request.headers.get("Origin");
     if (origin && origin !== url.origin) return rbcJson({ ok: false, error: "Not allowed from another site." }, 403);
     if (!/^application\/json/i.test(request.headers.get("Content-Type") || "")) return rbcJson({ ok: false, error: "Send JSON." }, 415);
@@ -653,7 +898,9 @@ async function rbWorldRoute(request, env, url, path, method) {
     }
     if (path === "/api/world/save") return await worldSave(env, body);
     if (path === "/api/world/ticket") return await worldTicket(env, body);
-    if (path === "/api/world/node") return await worldNode(env, body);
+    if (path === "/api/world/node") return await worldNode(env, g, body);
+    if (path === "/api/world/empire") return await worldEmpire(env, body);
+    if (path === "/api/world/heist") return await worldHeist(env, body);
     if (path === "/api/world/deal") return await worldDeal(env, body);
     if (path === "/api/world/ad-event") return await worldAdEvent(request, env, body);
     if (path === "/api/world/lot") return await worldLot(env, body);
