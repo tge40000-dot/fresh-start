@@ -26,6 +26,9 @@ import { initStory } from './story.js';
 import { initEvents } from './events.js';
 import { initStream } from './stream.js';
 import { initBay } from './bay.js';
+import { initNodes } from './nodes.js';
+import { initDeals } from './deals.js';
+import { initMarket } from './market.js';
 
 // --- CORE ---
 const db = init();
@@ -485,6 +488,9 @@ async function startGame() {
     window.RBEvents = initEvents(window.RBEmpire, ectx, window.RBFoot, window.RBCombat); // cash crates, speed cameras, the armored truck
     window.RBStream = initStream(window.RBEmpire, ectx); // the rest of the Bay Area, streamed in as you drive
     window.RBBay = initBay(window.RBEmpire, ectx, window.RBFoot, window.RBStream); // real tolls, fuel and prices (🌉)
+    window.RBNodes = initNodes(window.RBEmpire, ectx); // Empire Nodes: real places to claim, walking or driving (🏛️)
+    window.RBDeals = initDeals(window.RBEmpire, ectx); // offers and hostile takeovers on lots, and money owed to you (🤝)
+    window.RBMarket = initMarket(window.RBEmpire, ectx); // market events, lifestyle costs and heat (📈)
     window.RBSave = startSaving(player.id, () => ({ netWorth: Math.floor(player.netWorth), tokens: Math.floor(player.tokens) })); // the saved game, to RB
     setTimeout(() => window.RBEmpire.toast(player.signedIn ? '💾 Saved to your RB account: play on any device.' : '💾 Saved on this device. Sign in on the start screen to keep it on your RB account.'), 4500);
     const notice = (window.RB_WORLD_CFG || {}).notice; if (notice) setTimeout(() => window.RBEmpire.toast('📣 ' + notice), 2500);

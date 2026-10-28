@@ -42,6 +42,19 @@ export const ATTACH = [
   { k: "scope", icon: "🔭", name: "Scope", what: "Tighter shots, and it zooms in when you aim.", cost: 3000, fits: ["rifle"] },
 ];
 const ATT_KEY = "rb_world_attach";
+// Perks: unlocked with tokens in the Combat panel, one on at a time (kept on this device and in your saved game).
+export const PERKS = [
+  { k: "quick", icon: "⚡", name: "Quick hands", what: "Reload a third faster.", cost: 100 },
+  { k: "steady", icon: "🎯", name: "Steady aim", what: "A quarter less spread on every weapon.", cost: 120 },
+  { k: "kevlar", icon: "🦺", name: "Kevlar weave", what: "Armour soaks 85% of a hit instead of 70%.", cost: 150 },
+  { k: "scavenger", icon: "💵", name: "Scavenger", what: "Fallen crew drop twice the cash.", cost: 150 },
+  { k: "insured", icon: "🩺", name: "Insured", what: "No clinic bill when you're wasted.", cost: 200 },
+];
+const PERK_KEY = "rb_world_perks";
+const perks = (() => { try { const v = JSON.parse(store.get(PERK_KEY) || "{}"); return { own: Array.isArray(v.own) ? v.own : [], on: v.on || null }; } catch (e) { return { own: [], on: null }; } })();
+const perk = (k) => perks.on === k;
+// Security: guards hired for game money fight crews beside you while you're on foot with combat on.
+const GUARD_COST = 3000, GUARD_MIN = 10, GUARD_MAX = 2;
 const att = (() => { try { const a = JSON.parse(store.get(ATT_KEY) || "{}"); return a && typeof a === "object" ? a : {}; } catch (e) { return {}; } })();
 const has = (id, k) => !!(id && att[id] && att[id][k]);
 const magOf = (id) => Math.round(ARMS[id].mag * (has(id, "ext") ? 1.5 : 1));
@@ -160,6 +173,12 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
       return;
     }
     const own = owned(), m = out.mission, attActs = {};
+    const H3 = (t) => `<h3 style="font:800 11px Inter,sans-serif;color:var(--gold);letter-spacing:2px;margin:14px 0 6px">${t}</h3>`;
+    const perkRows = H3("PERK (ONE AT A TIME)") + PERKS.map((x) => { const got = perks.own.includes(x.k), on = perks.on === x.k; attActs["p-" + x.k] = () => setPerk(x);
+      return `<div class="rb-card"><div><b>${x.icon} ${x.name}</b><div class="rb-muted">${x.what}</div></div><button class="rb-btn" data-e="p-${x.k}" ${on || (!got && (P.tokens || 0) < x.cost) ? "disabled" : ""}>${on ? "ON" : got ? "USE" : x.cost + " TOKENS"}</button></div>`; }).join("");
+    const live = guards.filter((g) => g.until > Date.now());
+    attActs.hire = hireGuard;
+    const guardRows = H3("SECURITY") + `<div class="rb-card"><div><b>🕴️ Hire a guard</b><div class="rb-muted">${E.money(GUARD_COST)} for ${GUARD_MIN} minutes. Guards follow you on foot and fight crews beside you (not the police). Up to ${GUARD_MAX}. ${live.length ? `On duty: ${live.map((g) => Math.ceil((g.until - Date.now()) / 60000) + " min").join(", ")}.` : ""}</div></div><button class="rb-btn" data-e="hire" ${!out.on || live.length >= GUARD_MAX || P.netWorth < GUARD_COST ? "disabled" : ""}>HIRE</button></div>`;
     const attRows = own.length ? `<h3 style="font:800 11px Inter,sans-serif;color:var(--gold);letter-spacing:2px;margin:14px 0 6px">ATTACHMENTS</h3>` + own.map((id) => {
       const list = ATTACH.filter((a) => a.fits.includes(id)); if (!list.length) return "";
       return `<div class="rb-card" style="display:block"><b>${ARMS[id].name}</b>${list.map((a) => { attActs[`a-${id}-${a.k}`] = () => fit(id, a);
@@ -172,7 +191,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
       <button class="btn-ghost" data-e="shop">ARMORY (BUY WEAPONS AND ARMOUR)</button>
       ${m ? `<div class="rb-card"><div><b>${m.def.icon} ${m.def.name}</b><div class="rb-muted">${m.say || ""}</div></div><button class="rb-btn" data-e="quit">GIVE UP</button></div>` : ""}
       <h3 style="font:800 11px Inter,sans-serif;color:var(--gold);letter-spacing:2px;margin:14px 0 6px">MISSIONS</h3>${rows}
-      ${attRows}
+      ${attRows}${perkRows}${guardRows}
       <button class="btn-ghost" data-e="x">CLOSE</button>`,
       { toggle: () => { setOn(!out.on); openPanel(); }, shop: () => { E.hidePanel(); const b = document.getElementById("btn-shop"); if (b) b.click(); }, x: E.hidePanel, quit: () => { endMission(false, "You gave up."); E.hidePanel(); },
         ...Object.fromEntries(MISSIONS.map((x) => ["m-" + x.key, () => { E.hidePanel(); startMission(x); }])), ...attActs });
@@ -186,6 +205,52 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     if (out.armed === id) arm(id);
     E.toast(`${a.icon} ${a.name} fitted to the ${ARMS[id].name}.`); openPanel();
   }
+  function setPerk(x) {
+    if (!perks.own.includes(x.k)) { if ((P.tokens || 0) < x.cost) return; P.tokens -= x.cost; perks.own.push(x.k); ctx.sync && ctx.sync(); ctx.play && ctx.play("cash"); }
+    perks.on = x.k; store.set(PERK_KEY, JSON.stringify(perks)); E.toast(`${x.icon} Perk on: ${x.name}.`); openPanel();
+  }
+  // ---------------------------------------------------------------- security guards
+  const guards = [];
+  function hireGuard() {
+    const live = guards.filter((g) => g.until > Date.now());
+    if (!out.on || live.length >= GUARD_MAX || P.netWorth < GUARD_COST) return;
+    P.netWorth -= GUARD_COST; ctx.sync && ctx.sync(); ctx.play && ctx.play("cash");
+    guards.push({ until: Date.now() + GUARD_MIN * 60000, mesh: null, x: car.x, z: car.z, h: 0, cool: 1, side: guards.length % 2 ? 1 : -1 });
+    E.toast(`🕴️ A guard is on duty for ${GUARD_MIN} minutes. Get out of the car (F) and they're with you.`); openPanel();
+  }
+  function guardLOS(ax, az, bx, bz) { const d = Math.hypot(bx - ax, bz - az), n = Math.ceil(d / 1.5); for (let i = 1; i < n; i++) { const t = i / n; if (CITY.blocked(ax + (bx - ax) * t, az + (bz - az) * t, 0)) return false; } return true; }
+  function guardsTick(dt) {
+    const now = Date.now();
+    for (let i = guards.length - 1; i >= 0; i--) {
+      const g = guards[i];
+      if (g.until <= now || !out.on) { if (g.mesh) scene.remove(g.mesh); guards.splice(i, 1); if (out.on) feed("🕴️ A guard's shift ended"); continue; }
+      if (!foot.on || dead) { if (g.mesh) g.mesh.visible = false; g.x = car.x; g.z = car.z; continue; }
+      if (!g.mesh) { g.mesh = person({ top: 0x101010, jacket: 0x0b0b0b, pants: 0x111111, style: "buzz", beard: false }); gun(g.mesh, model(i % 2 ? "rifle" : "smg")); scene.add(g.mesh); }
+      g.mesh.visible = true;
+      // keep a step behind you, one either side
+      const tx = car.x - Math.sin(foot.yaw) * 2.2 + Math.cos(foot.yaw) * 1.6 * g.side, tz = car.z - Math.cos(foot.yaw) * 2.2 - Math.sin(foot.yaw) * 1.6 * g.side;
+      const dx = tx - g.x, dz = tz - g.z, d = Math.hypot(dx, dz);
+      if (d > 25) { g.x = tx; g.z = tz; }
+      else if (d > 0.6) { const sp = Math.min(d * 2, 6) * dt, nx = g.x + (dx / d) * sp, nz = g.z + (dz / d) * sp; if (!CITY.blocked(nx, nz, 0.3)) { g.x = nx; g.z = nz; } g.h = Math.atan2(dx, dz); }
+      // the nearest crew member it can see
+      let tgt = null, td = 40;
+      for (const e of out.enemies) { if (e.dead || e.cop) continue; const ed = Math.hypot(e.x - g.x, e.z - g.z); if (ed < td && (e.alert || ed < 20) && guardLOS(g.x, g.z, e.x, e.z)) { td = ed; tgt = e; } }
+      g.cool -= dt;
+      if (tgt) {
+        g.h = Math.atan2(tgt.x - g.x, tgt.z - g.z);
+        if (g.cool <= 0) {
+          g.cool = rnd(0.7, 1.3); out.guardShots = (out.guardShots || 0) + 1;
+          const a = new THREE.Vector3(g.x, 1.4, g.z), b = new THREE.Vector3(tgt.x, 1.2, tgt.z); tracer(a, b); flash(a); shot(ARMS.rifle.snd, Math.hypot(g.x - car.x, g.z - car.z));
+          if (Math.random() < 0.45) damageEnemy(tgt, 22, false, true);
+          tgt.alert = true;
+        }
+      }
+      g.mesh.position.set(g.x, 0, g.z); g.mesh.rotation.y = g.h; g.mesh.userData.aiming = !!tgt;
+      pose(g.mesh, d > 0.6 && d <= 25 ? (d > 4 ? "run" : "walk") : "idle", dt, Math.min(6, d * 2));
+    }
+    window.__rbGuards = guards.length;
+  }
+  out.perks = perks; out.guards = guards; out.hireGuard = hireGuard;
   function setOn(v) {
     out.on = !!v && allowed(); store.set(ON_KEY, out.on ? "on" : "off");
     if (out.on && !(P.weapons || []).length) { P.weapons = ["pistol"]; P.equippedWeapon = "pistol"; feed("Starter pistol added. Buy more in the Armory."); }
@@ -209,7 +274,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
   foot.onExit.push(() => { if (out.on) arm(P.equippedWeapon && (P.weapons || []).includes(P.equippedWeapon) ? P.equippedWeapon : owned()[0] || null); hud(); });
   foot.onEnter.push(() => { foot.aim = false; firing = false; hud(); });
   function cycle(dir) { const own = owned(); if (!own.length) return; const i = own.indexOf(out.armed); arm(own[(i + dir + own.length) % own.length]); click(1800, 0.05); }
-  function reload() { const w = out.armed && ARMS[out.armed]; if (!w || reloading > 0 || out.ammo[out.armed] >= magOf(out.armed)) return; reloading = w.reload; click(900, 0.06); hud(); }
+  function reload() { const w = out.armed && ARMS[out.armed]; if (!w || reloading > 0 || out.ammo[out.armed] >= magOf(out.armed)) return; reloading = w.reload * (perk("quick") ? 0.65 : 1); click(900, 0.06); hud(); }
 
   // ---------------------------------------------------------------- input
   const typing = () => /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "");
@@ -280,7 +345,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
     let first = null;
     if (w.rocket) { rocket(muzzle, ray.d.clone(), from); first = muzzle.clone().addScaledVector(ray.d, 60); }
     else for (let i = 0; i < (w.pellets || 1); i++) {
-      const sp = w.spread * (foot.aim ? (has(id, "dot") || has(id, "scope") ? 0.4 : 0.6) : 1.4) * (foot.speed > 1 ? 1.6 : 1);
+      const sp = w.spread * (foot.aim ? (has(id, "dot") || has(id, "scope") ? 0.4 : 0.6) : 1.4) * (foot.speed > 1 ? 1.6 : 1) * (perk("steady") ? 0.75 : 1);
       const d = ray.d.clone().add(new THREE.Vector3(rnd(-sp, sp), rnd(-sp, sp), rnd(-sp, sp))).normalize();
       const end = bullet(ray.o, d, from, w, id, muzzle); first ||= end; suppress(ray.o, d, w.range);
     }
@@ -368,7 +433,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
   function hurt(n, by, from) {
     if (dead || !out.on) return;
     let left = n;
-    if ((P.armor || 0) > 0) { const a = Math.min(P.armor, Math.round(left * 0.7)); P.armor -= a; left -= a; }
+    if ((P.armor || 0) > 0) { const a = Math.min(P.armor, Math.round(left * (perk("kevlar") ? 0.85 : 0.7))); P.armor -= a; left -= a; }
     P.health = Math.max(0, Math.round(P.health - left)); ouch(from);
     if (P.health <= 0) die(by);
     hud();
@@ -392,7 +457,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
   function die(by) {
     if (dead) return; dead = true; streak = 0; grenades = 3; P.deaths = (P.deaths || 0) + 1; P.streak = 0;
     out.onDeath.forEach((f) => f(by));
-    const bill = Math.min(5000, Math.round(P.netWorth * 0.1));
+    const bill = perk("insured") ? 0 : Math.min(5000, Math.round(P.netWorth * 0.1));
     P.netWorth = Math.max(0, P.netWorth - bill);
     wasted.querySelector("span").textContent = (by ? "Taken out by " + by + ". " : "") + "Clinic bill: " + E.money(bill);
     wasted.style.display = "flex"; firing = false; foot.aim = false;
@@ -427,14 +492,14 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
       rusher: !cop && Math.random() < 0.33, state: "move", cover: null, peek: null, t: 0, mag: MAGS[kind] || 10, pinned: 0 };
     out.enemies.push(e); return e;
   }
-  function damageEnemy(e, n, head) {
+  function damageEnemy(e, n, head, guard) {
     if (e.dead) return; e.hp -= n; e.alert = true; e.pinned = 1.5;
     puff(new THREE.Vector3(e.x, head ? 1.65 : 1.15, e.z), 0x7a1010, 0.6, 0.25);
     if (e.hp > 0) return;
-    e.dead = true; e.deadT = 0; out.stats.kills++; P.npcKills = (P.npcKills || 0) + 1; streakUp();
+    e.dead = true; e.deadT = 0; if (!guard) { out.stats.kills++; P.npcKills = (P.npcKills || 0) + 1; streakUp(); } // your guards' kills don't count for your streak
     if (e.cop) { feed("💀 Officer down"); E.setWanted(Math.min(5, E.wanted() + 1)); return; }
     feed(head ? "💀 Headshot" : "💀 Crew member down"); E.emit("crew-down");
-    drop(e.x, e.z, Math.round(rnd(100, 400) / 10) * 10);
+    drop(e.x, e.z, Math.round(rnd(100, 400) / 10) * 10 * (perk("scavenger") ? 2 : 1));
     missionCheck();
   }
   function clear(x0, z0, x1, z1) { const d = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(d / 1.5); for (let i = 1; i < n; i++) { const t = i / n; if (CITY.blocked(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t, 0)) return false; } return true; }
@@ -720,7 +785,7 @@ body:has(.overlay[style*="flex"]) .rb-cpad,body:has(.overlay[style*="flex"]) #rb
       for (const [x, z] of cands) { const a = Math.atan2(x - car.x, z - car.z); let rel = a - foot.yaw; rel = Math.atan2(Math.sin(rel), Math.cos(rel)); const d = Math.hypot(x - car.x, z - car.z); if (d < 80 && Math.abs(rel) < bd) { bd = Math.abs(rel); best = rel; } }
       if (best != null) foot.yaw += best * Math.min(1, dt * 4);
     }
-    enemiesTick(dt); dropsTick(dt); rocketsTick(dt); grenadesTick(dt); missionTick(dt); fxTick(dt); blips(); vmTick(dt);
+    enemiesTick(dt); guardsTick(dt); dropsTick(dt); rocketsTick(dt); grenadesTick(dt); missionTick(dt); fxTick(dt); blips(); vmTick(dt);
     recoil *= Math.pow(0.001, dt);
   });
   setInterval(hud, 500);

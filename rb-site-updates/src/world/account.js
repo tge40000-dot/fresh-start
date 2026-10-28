@@ -8,7 +8,7 @@
 import { api, device, setDeviceId, clerkReady } from "./rb_world.js";
 
 const META = "rb_world_save_meta"; // { id, at: when RB last saved it, local: when this device last changed it, dirty, money }
-export const SAVE_KEYS = ["rb_empire_v1", "rb_progress_v1", "rb_customs_v1", "rb_story_v1", "rb_world_look", "rb_world_attach", "rb_traps_v1", "rb_state", "rb_investments", "rb_world_18", "rb_world_combat", "rb_bay_v1", "rb_fuel_v1"];
+export const SAVE_KEYS = ["rb_empire_v1", "rb_progress_v1", "rb_customs_v1", "rb_story_v1", "rb_world_look", "rb_world_attach", "rb_traps_v1", "rb_state", "rb_investments", "rb_world_18", "rb_world_combat", "rb_bay_v1", "rb_fuel_v1", "rb_world_perks", "rb_market_v1"];
 const ls = {
   get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set: (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} },

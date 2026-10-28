@@ -65,6 +65,70 @@ export function rentFor(lot, level, business) {
   return Math.round(l.price * (business ? 0.02 * Math.max(1, Math.min(MAX_LEVEL, Number(level) || 1)) : 0.01));
 }
 export function upgradeCost(b, level) { return Math.round(b.cost * 0.6 * level); }
+// What a lot is worth: the deed, plus its business and the upgrades on it (takeover bids start at TAKEOVER_MIN of this).
+export function lotValue(lot, business, level) {
+  const l = lotById(lot), b = businessByKey(business); if (!l) return 0;
+  let v = l.price; if (b) { v += b.cost; for (let i = 1; i < Math.max(1, Math.min(MAX_LEVEL, Number(level) || 1)); i++) v += upgradeCost(b, i); }
+  return v;
+}
+
+// Deals between players (deals.js, and the server's checks): an offer to buy someone's lot, or a hostile takeover bid.
+// A takeover bid starts at 1.5x what the lot is worth; if its owner doesn't answer within a day and the lot is empty
+// (no business: not doing anything with it), it goes to the bidder anyway. A lot with a business can only be bought.
+export const DEAL_OFFER_H = 48;
+export const DEAL_TAKEOVER_H = 24;
+export const TAKEOVER_MIN = 1.5;
+export const DEALS_OPEN_MAX = 10;
+
+// Empire Nodes (nodes.js): real places on the real map, one in each cell of about 330 m, the same for everyone.
+// Get within NODE_RADIUS of one (walking with your phone's location, or driving there in the game) to claim it; an
+// owner is safe for NODE_SHIELD_H hours, then anyone close enough can take it over for a quarter more than it last
+// cost (the owner it's taken from gets half of that). It earns NODE_INCOME of its price an hour, up to a day at a time.
+export const NODE_CELL = [0.0038, 0.003];
+export const NODE_RADIUS = 90;
+export const NODE_BASE = 10000;
+export const NODE_STEP = 1.25;
+export const NODE_SHIELD_H = 6;
+export const NODE_INCOME = 0.02;
+export const NODE_CAP_H = 24;
+export const NODE_MAX = 10;
+export const WALK_DAY_M = 1000; // metres walked (phone location, walking pace) that count a day for the streak
+function nodeHash(a, b, salt) { let h = 2166136261 ^ salt; h = Math.imul(h ^ a, 16777619); h = Math.imul(h ^ b, 16777619); h ^= h >>> 13; h = Math.imul(h, 2246822507); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+export function nodeAt(cx, cy) {
+  const lng = (cx + 0.15 + 0.7 * nodeHash(cx, cy, 11)) * NODE_CELL[0], lat = (cy + 0.15 + 0.7 * nodeHash(cx, cy, 23)) * NODE_CELL[1];
+  const code = Math.floor(nodeHash(cx, cy, 37) * 46656).toString(36).toUpperCase().padStart(3, "0");
+  return { id: `n_${cx}_${cy}`, lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6, name: "Empire Node " + code };
+}
+export function nodeById(id) { const m = /^n_(-?\d{1,6})_(-?\d{1,6})$/.exec(String(id || "")); return m ? nodeAt(Number(m[1]), Number(m[2])) : null; }
+export function nodesNear(lat, lng, r = 2) {
+  const cx = Math.floor(lng / NODE_CELL[0]), cy = Math.floor(lat / NODE_CELL[1]), out = [];
+  for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) out.push(nodeAt(cx + i, cy + j));
+  return out;
+}
+export function metresBetween(lat1, lng1, lat2, lng2) {
+  const R = 6371e3, p1 = (lat1 * Math.PI) / 180, p2 = (lat2 * Math.PI) / 180, dp = p2 - p1, dl = ((lng2 - lng1) * Math.PI) / 180;
+  const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+// The market (market.js): every half hour something happens somewhere, the same for everyone at the same time, and
+// it changes how many customers some businesses get for that half hour. Made-up game events, not real news.
+export const MARKET_SLOT_MIN = 30;
+export const MARKET = [
+  { key: "techboom", text: "Tech boom: startups and hotels are packed", biz: ["tech", "hotel"], k: 1.4 },
+  { key: "foodfest", text: "Food festival weekend: food trucks and coffee shops are busy", biz: ["foodtruck", "coffee"], k: 1.35 },
+  { key: "concert", text: "Big concert night: nightclubs and studios fill up", biz: ["club", "studio"], k: 1.5 },
+  { key: "carshow", text: "Car show in town: dealerships get the buyers", biz: ["dealer"], k: 1.6 },
+  { key: "fitness", text: "New-year fitness rush: gyms are full", biz: ["gym", "barber"], k: 1.3 },
+  { key: "fashion", text: "Fashion week: boutiques and barbers are booked", biz: ["boutique", "barber"], k: 1.35 },
+  { key: "tourists", text: "Tourist season: theme parks and hotels are busy", biz: ["park", "hotel"], k: 1.3 },
+  { key: "rain", text: "Storm rolls in: fewer people out at the food trucks and the theme park", biz: ["foodtruck", "park"], k: 0.7 },
+  { key: "inspect", text: "City health inspections: food trucks and coffee shops slow down", biz: ["foodtruck", "coffee"], k: 0.75 },
+  { key: "techdip", text: "Tech stocks dip: startups and dealerships go quiet", biz: ["tech", "dealer"], k: 0.75 },
+  { key: "noise", text: "Noise crackdown: nightclubs have to close early", biz: ["club"], k: 0.7 },
+  { key: "calm", text: "A normal half hour in the city", biz: [], k: 1 },
+];
+export function marketAt(ms) { const slot = Math.floor(ms / (MARKET_SLOT_MIN * 60000)); return { ...MARKET[Math.floor(nodeHash(slot, 7, 91) * MARKET.length)], slot, ends: (slot + 1) * MARKET_SLOT_MIN * 60000 }; }
 
 // Street races: the same tracks for solo time trials and multiplayer races, and the server's checks.
 // A track is a start point and the checkpoints in order (turns on real Midtown streets); the start faces the first

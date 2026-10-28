@@ -29,6 +29,8 @@ py "$ROOT/rb-site-updates/patch_rewards.py" "$W/artist-router"
 py "$ROOT/rb-site-updates/patch_badge.py" "$W/artist-router"
 # relentlessbillionaire.com/game/ sends players to RB World (/app/world/); the old game's files are still served
 py "$ROOT/rb-tools/patch_game_redirect.py" "$W/rb-game"
+# the extra /game/api added by an outside tool on 26 Oct 2026: its ideas are in RB World now; health kept, the rest closed
+py "$ROOT/rb-tools/patch_rb_game_api.py" "$W/rb-game"
 py "$ROOT/rb-site-updates/patch_embed_create.py" "$W/rb-mastering-studio"
 # RB Studio (rb-daw) is built from workers/rb-daw/src (its source since 18 Oct 2026; the old rb-daw patches are all in it).
 # --check builds it and compares with live: exit 1 just means src/ has changes that are not deployed yet.

@@ -72,7 +72,7 @@ export function initPhone(E, ctx) {
     ["talent", "🃏", "Talent", press("btn-cards")], ["armory", "🔫", "Armory", press("btn-shop")], ["combat", "⚔️", "Combat", press("btn-combat")], ["news", "📰", "News", "news"],
     ["camera", "📷", "Camera", press("btn-photo")], ["view", "🎥", "View", press("btn-pov")], ["map", "🗺️", "Map", press("rb-radar")], ["vr", "🥽", "VR", press("btn-vr")],
     ["profile", "👤", "Profile", press("btn-profile")], ["badge", "⭐", "RB Badge", () => { const c = $("rb-badge-chip"); window.open(c && c.href ? c.href : "/app", "_blank", "noopener"); }],
-    ["bay", "🌉", "Bay Area", () => window.RBBay && window.RBBay.open()], ["story", "📖", "Story", () => window.RBStory && window.RBStory.open()], ["customs", "🔧", "Customs", () => window.RBGarage && window.RBGarage.open()], ["wardrobe", "👕", "Wardrobe", () => window.RBWardrobe && window.RBWardrobe.open()],
+    ["nodes", "🏛️", "Nodes", () => window.RBNodes && window.RBNodes.open()], ["deals", "🤝", "Deals", () => window.RBDeals && window.RBDeals.open()], ["market", "📈", "Market", () => window.RBMarket && window.RBMarket.open()], ["bay", "🌉", "Bay Area", () => window.RBBay && window.RBBay.open()], ["story", "📖", "Story", () => window.RBStory && window.RBStory.open()], ["customs", "🔧", "Customs", () => window.RBGarage && window.RBGarage.open()], ["wardrobe", "👕", "Wardrobe", () => window.RBWardrobe && window.RBWardrobe.open()],
     ["settings", "⚙️", "Settings", press("btn-settings")], ["help", "❔", "Help", press("btn-help")],
   ];
   const txt = (id) => (($(id) || {}).textContent || "").trim();

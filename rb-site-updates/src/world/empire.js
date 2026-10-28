@@ -12,7 +12,7 @@ import { Sky } from "three/addons/objects/Sky.js";
 import { buildCar, headlights as carLights } from "./cars.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import * as CITY from "./city.js";
-import { LOTS, DISTRICTS, BUSINESSES, MAX_LEVEL, MAX_LOTS_PER_PLAYER, RENT_COOLDOWN_S, businessByKey, lotById, rentFor, upgradeCost } from "./empire_defs.js";
+import { LOTS, DISTRICTS, BUSINESSES, MAX_LEVEL, MAX_LOTS_PER_PLAYER, RENT_COOLDOWN_S, businessByKey, lotById, rentFor, upgradeCost, marketAt } from "./empire_defs.js";
 import { api, onBeat } from "./rb_world.js";
 
 const SAVE = "rb_empire_v1";
@@ -561,9 +561,10 @@ function figures(l) {
   const staff = 1 + st.staff.map((cid) => S.cards.find((c) => c.id === cid)).filter(Boolean).reduce((a, c) => a + (c.role === b.role ? RARITY.find((x) => x.key === c.rarity).bonus : 0.03), 0);
   const wages = st.staff.map((cid) => S.cards.find((c) => c.id === cid)).filter(Boolean).reduce((a, c) => a + RARITY.find((x) => x.key === c.rarity).wage, 0);
   const mkt = st.mkt > Date.now() ? 1.3 : 1;
-  const customers = b.cap * (1 + 0.5 * (lvl - 1)) * demand * day * set * staff * mkt * st.rep;
+  const ev = marketAt(Date.now()), market = ev.biz.includes(b.key) ? ev.k : 1; // the market this half hour (market.js)
+  const customers = b.cap * (1 + 0.5 * (lvl - 1)) * demand * day * set * staff * mkt * st.rep * market;
   const revenue = customers * price, cost = b.upkeep * (1 + 0.4 * (lvl - 1)) + wages;
-  return { b, lvl, price, r, demand, customers, revenue, cost, profit: revenue - cost, set, staff, mkt, wages };
+  return { b, lvl, price, r, demand, customers, revenue, cost, profit: revenue - cost, set, staff, mkt, wages, market, event: market !== 1 ? ev.text : null };
 }
 function tycoonTick(dt) {
   S.clock = (S.clock + dt * GAME_MIN_PER_SEC) % (24 * 60);
@@ -703,7 +704,11 @@ function openLot(l) {
     });
   }
   if (s.owner_id !== C.player.id) {
-    return panel(`${head}<div class="subtitle">${b ? `${b.icon} ${esc(s.name || b.name)} ${"★".repeat(s.level || 1)}` : "An empty lot"}, owned by <b>${esc(s.owner_name)}</b>. Stopping here costs ${money(rentFor(l.id, s.level, s.business))} rent.</div><button class="btn-ghost" data-e="close">CLOSE</button>`, { close: hidePanel });
+    // deals.js: buy it from them, or a hostile takeover bid
+    const D = window.RBDeals;
+    return panel(`${head}<div class="subtitle">${b ? `${b.icon} ${esc(s.name || b.name)} ${"★".repeat(s.level || 1)}` : "An empty lot"}, owned by <b>${esc(s.owner_name)}</b>. Stopping here costs ${money(rentFor(l.id, s.level, s.business))} rent.</div>
+      ${D ? `<button class="btn-gold" data-e="offer">🤝 MAKE AN OFFER</button><button class="btn-ghost" data-e="takeover">⚔️ HOSTILE TAKEOVER BID</button>` : ""}<button class="btn-ghost" data-e="close">CLOSE</button>`,
+      { close: hidePanel, offer: () => D.offer(l, s, "offer"), takeover: () => D.offer(l, s, "takeover") });
   }
   if (!b) {
     const tier = d.tier, acts = { close: hidePanel, sell: () => sellLot(l) };

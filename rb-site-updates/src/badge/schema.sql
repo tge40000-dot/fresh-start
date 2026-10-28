@@ -44,4 +44,13 @@ CREATE TABLE IF NOT EXISTS world_accounts (clerk_user_id TEXT PRIMARY KEY, playe
 CREATE TABLE IF NOT EXISTS world_guests (player_id TEXT PRIMARY KEY, key_hash TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS world_saves (player_id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS world_tickets (ticket TEXT PRIMARY KEY, player_id TEXT NOT NULL, expires_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS world_nodes (id TEXT PRIMARY KEY, owner_id TEXT, owner_name TEXT, price INTEGER NOT NULL, takes INTEGER NOT NULL DEFAULT 0, claimed_at INTEGER, shield_until INTEGER, collected_at INTEGER);
+CREATE INDEX IF NOT EXISTS world_nodes_owner ON world_nodes (owner_id);
+CREATE TABLE IF NOT EXISTS world_fix (player_id TEXT PRIMARY KEY, lat REAL NOT NULL, lng REAL NOT NULL, at INTEGER NOT NULL, src TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS world_walk (player_id TEXT NOT NULL, day TEXT NOT NULL, metres REAL NOT NULL DEFAULT 0, PRIMARY KEY (player_id, day));
+CREATE TABLE IF NOT EXISTS world_deals (id TEXT PRIMARY KEY, kind TEXT NOT NULL, lot INTEGER NOT NULL, from_id TEXT NOT NULL, from_name TEXT, to_id TEXT NOT NULL, to_name TEXT, amount INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, done_at INTEGER);
+CREATE INDEX IF NOT EXISTS world_deals_to ON world_deals (to_id, status);
+CREATE INDEX IF NOT EXISTS world_deals_from ON world_deals (from_id, status);
+CREATE TABLE IF NOT EXISTS world_settle (id INTEGER PRIMARY KEY AUTOINCREMENT, player_id TEXT NOT NULL, cash INTEGER NOT NULL DEFAULT 0, tokens INTEGER NOT NULL DEFAULT 0, note TEXT, created_at INTEGER NOT NULL, applied_at INTEGER);
+CREATE INDEX IF NOT EXISTS world_settle_player ON world_settle (player_id, applied_at);
 CREATE TABLE IF NOT EXISTS world_ad_stats (ad_id INTEGER NOT NULL, day TEXT NOT NULL, impressions INTEGER NOT NULL DEFAULT 0, viewable INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (ad_id, day));

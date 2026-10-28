@@ -109,6 +109,8 @@ function drawRadar(t) {
   for (const b of window.__rbBlips || []) dot(b.x, b.z, b.r || 4, b.c, "#000");
   // events.js: cash crates, speed cameras and the armored truck
   for (const b of window.__rbBlips2 || []) dot(b.x, b.z, b.r || 4, b.c, "#000");
+  // nodes.js: Empire Nodes, gold yours, grey others', white free
+  for (const b of window.__rbBlips3 || []) dot(b.x, b.z, b.r || 4, b.c, "#000");
   // the target: job or race checkpoint, on the rim with an arrow when it's out of range
   const tgt = R.job ? R.job.stops[R.job.stage].at : window.__rbRaceTarget || window.__rbMissionTarget || window.__rbStoryTarget || window.__rbEventTarget || null;
   if (tgt) {
@@ -161,7 +163,7 @@ export function help() {
     <tr><td><kbd>O</kbd> near an ad</td><td>Opens the sponsor's page (the card at the bottom shows whose ad it is)</td></tr>
     <tr><td><kbd>F</kbd> or GET OUT</td><td>Get out and walk; next to a car, get in (yours, or take one from the traffic)</td></tr>
     <tr><td>On foot</td><td><kbd>WASD</kbd> move, mouse looks (click to lock it, <kbd>Esc</kbd> to let go), <kbd>Shift</kbd> sprint, <kbd>Space</kbd> jump, <kbd>V</kbd> first or third person</td></tr>
-    <tr><td>Combat (18+, ⚔️)</td><td>Right mouse aims, left mouse fires, <kbd>R</kbd> reloads, <kbd>1</kbd>-<kbd>6</kbd> or the mouse wheel switch, hold <kbd>Tab</kbd> for the weapon wheel, <kbd>X</kbd> puts it away, <kbd>G</kbd> throws a grenade (3 a life); kills in a row earn armour, cash and health. Attachments (suppressor, extended magazine, red dot, scope) are in the ⚔️ panel</td></tr>
+    <tr><td>Combat (18+, ⚔️)</td><td>Right mouse aims, left mouse fires, <kbd>R</kbd> reloads, <kbd>1</kbd>-<kbd>6</kbd> or the mouse wheel switch, hold <kbd>Tab</kbd> for the weapon wheel, <kbd>X</kbd> puts it away, <kbd>G</kbd> throws a grenade (3 a life); kills in a row earn armour, cash and health. Attachments (suppressor, extended magazine, red dot, scope), perks and hired security are in the ⚔️ panel</td></tr>
     <tr><td><kbd>P</kbd></td><td>Photo mode: the HUD hides, orbit the car, set the blur and a filter, save the picture</td></tr>
     <tr><td><kbd>Shift</kbd> or <kbd>N</kbd></td><td>Nitro (the blue gauge refills)</td></tr>
     <tr><td><kbd>E</kbd></td><td>The lot you're next to: buy, build, manage</td></tr>
@@ -183,6 +185,9 @@ export function help() {
     <tr><td>🎨 Paint</td><td>In the race menu: colours for your car. Other players see it, with your name and level.</td></tr>
     <tr><td>📋 Goals</td><td>Daily rewards, three daily quests, achievements and your level.</td></tr>
     <tr><td>🌉 Bay Area</td><td>The whole Bay Area, streamed in from OpenStreetMap as you drive out of downtown Vallejo. Bridge tolls are real 2026 rates, charged the way they really are (FasTrak, plate or invoice: pick in 🌉). Fuel runs down as you drive; fill up at a real petrol station at the area's AAA average price (<kbd>U</kbd>). Each town shows its real typical home value and rent (Zillow).</td></tr>
+    <tr><td>🏛️ Nodes</td><td>Empire Nodes: real places, the same for everyone. Walk there with your location on, or drive there, to claim one; it earns every hour, even while you're away. Others can take it over after a few hours (you get half). Walk 1 km a day with your location on for tokens.</td></tr>
+    <tr><td>🤝 Deals</td><td>Stop by another player's lot to make an offer or a hostile takeover bid. An empty lot nobody defends goes to the bidder after a day.</td></tr>
+    <tr><td>📈 Market</td><td>Every half hour something happens in the city that changes some businesses' customers. Living large costs more the richer you get, and expanding fast draws heat (and tax audits).</td></tr>
     <tr><td>📖 Story</td><td>Rise of RB: five chapters in the phone, each with its own reward.</td></tr>
     <tr><td>🔧 Customs</td><td>Upgrade your own car: engine, brakes, tyres, nitro and armour. Every car drives like what it is: sports cars are quick, vans are slow.</td></tr>
     <tr><td>👕 Wardrobe</td><td>Your clothes, hair and skin tone. Other players see your look.</td></tr>
