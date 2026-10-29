@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Soho Luxury Atelier · Relentless Billionaire</title>
+<meta name="description" content="The Genesis collection from the Relentless Billionaire Soho Atelier: varsity jackets, wool, leather and billionaire cuts, made by Manzo Leathers.">
+<link rel="canonical" href="https://relentlessbillionaire.com/atelier">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Soho Luxury Atelier · Relentless Billionaire">
+<meta property="og:description" content="Varsity jackets, wool, leather, billionaire cuts. The Genesis collection, made by Manzo Leathers.">
+<meta property="og:url" content="https://relentlessbillionaire.com/atelier">
+<meta property="og:image" content="https://media.relentlessbillionaire.com/atelier/atelier-hero-crop.webp">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#05040A">
+<link rel="icon" href="https://relentlessbillionaire.com/brand/icon.svg?v=3" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" nonce="__NONCE__" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;800;900&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="preload" as="image" href="https://media.relentlessbillionaire.com/atelier/atelier-hero-crop.webp">
+<style nonce="__NONCE__">
+:root{
+  --bg:#05040A; --bg-elevated:#0C0A10; --bg-deep:#020203;
+  --gold:#D4AF37; --gold-highlight:#F5E6C8; --gold-deep:#8B6914;
+  --crimson:#C41E3A; --text:#F5F0E6; --text-muted:#A89F8C; --line:#2A261C;
+  --glass:rgba(12,10,16,.62); --ease:cubic-bezier(.22,1,.36,1);
+  --sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --serif:"Instrument Serif","Iowan Old Style","Times New Roman",serif;
+  --metal:linear-gradient(100deg,var(--gold-deep) 0%,var(--gold) 28%,var(--gold-highlight) 48%,var(--gold) 66%,var(--gold-deep) 100%);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:400 15px/1.6 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img{max-width:100%;display:block}
+a{color:inherit}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* film grain and vignette over everything, never in the way */
+body::before{content:"";position:fixed;inset:-50%;z-index:60;pointer-events:none;opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation:grain 1.2s steps(6) infinite}
+body::after{content:"";position:fixed;inset:0;z-index:59;pointer-events:none;background:radial-gradient(120% 90% at 50% 40%,transparent 55%,rgba(0,0,0,.55) 100%)}
+@keyframes grain{0%{transform:translate(0,0)}20%{transform:translate(-4%,3%)}40%{transform:translate(3%,-2%)}60%{transform:translate(-2%,-4%)}80%{transform:translate(4%,2%)}100%{transform:translate(0,0)}}
+
+/* ticker */
+.ticker{position:relative;z-index:5;border-bottom:1px solid var(--line);background:#000;overflow:hidden;height:34px;display:flex;align-items:center}
+.ticker .run{display:flex;gap:48px;white-space:nowrap;animation:tick 42s linear infinite;padding-left:24px}
+.ticker span{font:600 11px/1 var(--sans);letter-spacing:.22em;text-transform:uppercase;color:var(--text-muted)}
+.ticker span b{color:var(--gold);font-weight:600}
+.ticker span i{font-style:normal;color:var(--crimson)}
+@keyframes tick{to{transform:translateX(-50%)}}
+
+/* header */
+.top{position:sticky;top:0;z-index:40;backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3);
+  background:linear-gradient(180deg,rgba(5,4,10,.92),rgba(5,4,10,.72));border-bottom:1px solid rgba(212,175,55,.14)}
+.top .in{max-width:1320px;margin:0 auto;padding:14px clamp(16px,4vw,40px);display:flex;align-items:center;gap:28px}
+.mark{text-decoration:none;line-height:.92;font:900 17px/0.95 var(--sans);letter-spacing:.2em;text-transform:uppercase}
+.mark span{display:block}
+.mark span+span{background:var(--metal);-webkit-background-clip:text;background-clip:text;color:transparent}
+.nav{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+.nav a{text-decoration:none;font:600 11px/1 var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--text-muted);padding:10px 12px;border:1px solid transparent;transition:color .3s var(--ease),border-color .3s var(--ease)}
+.nav a:hover{color:var(--text)}
+.nav a.on{color:var(--gold);border-color:rgba(212,175,55,.45)}
+.tools{display:flex;gap:8px}
+.icon{width:40px;height:40px;display:grid;place-items:center;border:1px solid var(--line);background:transparent;position:relative;transition:border-color .3s var(--ease),background .3s var(--ease)}
+.icon:hover{border-color:var(--gold);background:rgba(212,175,55,.06)}
+.icon svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.6}
+.icon .n{position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;border-radius:9px;background:var(--crimson);color:#fff;font:700 10px/18px var(--sans);text-align:center;padding:0 5px}
+.icon .n:empty{display:none}
+
+/* hero */
+.hero{position:relative;min-height:min(86vh,820px);display:grid;align-items:end;overflow:hidden;isolation:isolate}
+.hero .bg{position:absolute;inset:0;z-index:-2;background:#000 url("https://media.relentlessbillionaire.com/atelier/atelier-hero-crop.webp") center/cover no-repeat;transform:scale(1.08);animation:drift 22s var(--ease) infinite alternate}
+.hero::before{content:"";position:absolute;inset:0;z-index:-1;background:
+  radial-gradient(70% 60% at 18% 80%,rgba(196,30,58,.28),transparent 70%),
+  linear-gradient(180deg,rgba(5,4,10,.25) 0%,rgba(5,4,10,.55) 45%,var(--bg) 100%),
+  linear-gradient(90deg,rgba(5,4,10,.9) 0%,rgba(5,4,10,.2) 70%)}
+@keyframes drift{to{transform:scale(1.16) translate(-1.5%,-1%)}}
+.hero .in{max-width:1320px;margin:0 auto;width:100%;padding:0 clamp(16px,4vw,40px) clamp(48px,9vh,96px)}
+.eyebrow{font:600 11px/1 var(--sans);letter-spacing:.32em;text-transform:uppercase;color:var(--gold);display:flex;align-items:center;gap:12px}
+.eyebrow::before{content:"";width:38px;height:1px;background:var(--gold)}
+.hero h1{margin:22px 0 0;font:400 clamp(54px,9vw,128px)/.9 var(--serif);letter-spacing:-.015em}
+.hero h1 em{font-style:italic;background:var(--metal);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sheen 7s ease-in-out infinite}
+@keyframes sheen{0%,100%{background-position:0% 0}50%{background-position:100% 0}}
+.hero p.lede{max-width:540px;margin:22px 0 0;font-size:17px;color:#d9d0bd}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:48px;padding:0 26px;border:1px solid var(--gold);background:transparent;color:var(--gold-highlight);
+  font:700 11px/1 var(--sans);letter-spacing:.24em;text-transform:uppercase;text-decoration:none;position:relative;overflow:hidden;transition:color .35s var(--ease),transform .35s var(--ease),box-shadow .35s var(--ease)}
+.btn.gold{background:var(--metal);background-size:200% 100%;color:#120d02;border-color:transparent;box-shadow:0 10px 40px -14px rgba(212,175,55,.65)}
+.btn.gold:hover{background-position:100% 0;transform:translateY(-2px);box-shadow:0 18px 50px -14px rgba(212,175,55,.8)}
+.btn:not(.gold):hover{background:rgba(212,175,55,.08);transform:translateY(-2px)}
+.btn[disabled]{opacity:.5;pointer-events:none}
+.maker{margin-top:38px;display:inline-flex;align-items:center;gap:14px;padding:12px 18px;border:1px solid rgba(212,175,55,.25);background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.maker small{display:block;font:600 10px/1.2 var(--sans);letter-spacing:.28em;text-transform:uppercase;color:var(--text-muted)}
+.maker strong{display:block;font:400 22px/1.1 var(--serif);font-style:italic;color:var(--gold-highlight)}
+.maker .seal{width:38px;height:38px;border-radius:50%;border:1px solid var(--gold);display:grid;place-items:center;font:400 18px/1 var(--serif);color:var(--gold)}
+
+/* collection */
+.wrap{max-width:1320px;margin:0 auto;padding:0 clamp(16px,4vw,40px)}
+.collection{padding:clamp(48px,8vw,96px) 0 40px}
+.head{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:20px;margin-bottom:28px}
+.head h2{margin:0;font:900 clamp(26px,3.4vw,40px)/1 var(--sans);letter-spacing:.14em;text-transform:uppercase}
+.head h2 span{background:var(--metal);-webkit-background-clip:text;background-clip:text;color:transparent}
+.head p{margin:0;font:600 11px/1.4 var(--sans);letter-spacing:.24em;text-transform:uppercase;color:var(--text-muted)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:30px}
+.chip{padding:10px 16px;border:1px solid var(--line);background:transparent;font:600 10.5px/1 var(--sans);letter-spacing:.22em;text-transform:uppercase;color:var(--text-muted);transition:all .3s var(--ease)}
+.chip:hover{color:var(--text);border-color:rgba(212,175,55,.4)}
+.chip[aria-pressed="true"]{color:#120d02;background:var(--gold);border-color:var(--gold)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:clamp(14px,2vw,24px)}
+.card{position:relative;background:linear-gradient(180deg,var(--bg-elevated),#07060b);border:1px solid var(--line);padding:14px;display:flex;flex-direction:column;
+  transition:transform .6s var(--ease),border-color .6s var(--ease),box-shadow .6s var(--ease)}
+.card:hover{transform:translateY(-6px);border-color:rgba(212,175,55,.5);box-shadow:0 30px 60px -30px rgba(0,0,0,.9),0 0 0 1px rgba(212,175,55,.08),0 20px 80px -40px rgba(196,30,58,.45)}
+.ph{position:relative;aspect-ratio:4/5;overflow:hidden;background:#0a0a0c}
+.ph img{width:100%;height:100%;object-fit:cover;transition:transform 1.2s var(--ease),filter 1.2s var(--ease);filter:saturate(.92) contrast(1.04)}
+.card:hover .ph img{transform:scale(1.06);filter:saturate(1.05) contrast(1.08)}
+.ph::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(5,4,10,.85));pointer-events:none}
+.ph .tag{position:absolute;left:12px;top:12px;z-index:1;font:700 9.5px/1 var(--sans);letter-spacing:.26em;text-transform:uppercase;padding:7px 10px;background:rgba(5,4,10,.7);border:1px solid rgba(212,175,55,.35);color:var(--gold-highlight);backdrop-filter:blur(6px)}
+.ph .fav{position:absolute;right:12px;top:12px;z-index:1;width:38px;height:38px;display:grid;place-items:center;background:rgba(5,4,10,.6);border:1px solid rgba(245,240,230,.15);backdrop-filter:blur(6px);transition:all .3s var(--ease)}
+.ph .fav svg{width:17px;height:17px;fill:none;stroke:var(--text);stroke-width:1.6;transition:all .3s var(--ease)}
+.ph .fav[aria-pressed="true"] svg{fill:var(--crimson);stroke:var(--crimson)}
+.ph .look{position:absolute;left:12px;right:12px;bottom:12px;z-index:1;min-height:40px;border:1px solid rgba(245,240,230,.25);background:rgba(5,4,10,.55);backdrop-filter:blur(8px);
+  font:700 10px/1 var(--sans);letter-spacing:.24em;text-transform:uppercase;opacity:0;transform:translateY(10px);transition:all .5s var(--ease)}
+.card:hover .look,.look:focus-visible{opacity:1;transform:none}
+.meta{padding:18px 4px 6px;flex:1;display:flex;flex-direction:column}
+.meta h3{margin:0;font:800 14px/1.25 var(--sans);letter-spacing:.2em;text-transform:uppercase}
+.meta .sub{margin:6px 0 0;font-size:12.5px;color:var(--text-muted);letter-spacing:.04em}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto;padding-top:18px}
+.price{font:400 26px/1 var(--serif);color:var(--gold-highlight)}
+.add{min-height:42px;padding:0 18px;border:0;background:var(--metal);background-size:200% 100%;color:#120d02;font:800 10.5px/1 var(--sans);letter-spacing:.22em;text-transform:uppercase;transition:background-position .5s var(--ease),transform .3s var(--ease)}
+.add:hover{background-position:100% 0;transform:translateY(-1px)}
+.add.in{background:transparent;color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
+.skel{aspect-ratio:4/6;border:1px solid var(--line);background:linear-gradient(100deg,#0b0a0f 30%,#17141c 50%,#0b0a0f 70%);background-size:220% 100%;animation:sk 1.6s ease-in-out infinite}
+@keyframes sk{to{background-position:-120% 0}}
+.empty{grid-column:1/-1;padding:40px;text-align:center;color:var(--text-muted);border:1px dashed var(--line)}
+
+/* the maker */
+.atelier{padding:clamp(56px,9vw,120px) 0;border-top:1px solid var(--line);margin-top:40px;background:radial-gradient(60% 80% at 85% 20%,rgba(212,175,55,.08),transparent 70%),radial-gradient(50% 70% at 10% 90%,rgba(196,30,58,.12),transparent 70%)}
+.atelier .cols{display:grid;grid-template-columns:1.1fr .9fr;gap:clamp(28px,5vw,72px);align-items:center}
+.atelier h2{margin:16px 0 0;font:400 clamp(40px,5.6vw,76px)/.95 var(--serif)}
+.atelier h2 em{color:var(--gold-highlight)}
+.atelier p{color:#cfc6b4;max-width:560px}
+.pillars{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin-top:28px}
+.pillars div{background:var(--bg);padding:20px 18px}
+.pillars b{display:block;font:800 11px/1.2 var(--sans);letter-spacing:.24em;text-transform:uppercase;color:var(--gold)}
+.pillars span{display:block;margin-top:8px;font-size:13px;color:var(--text-muted)}
+.frame{position:relative;aspect-ratio:4/5;border:1px solid rgba(212,175,55,.35);padding:10px}
+.frame img{width:100%;height:100%;object-fit:cover}
+.frame::before{content:"";position:absolute;inset:-14px 14px 14px -14px;border:1px solid rgba(196,30,58,.35);z-index:-1}
+
+/* footer */
+footer{border-top:1px solid var(--line);padding:40px 0 120px;color:var(--text-muted);font-size:13px}
+footer .in{display:flex;flex-wrap:wrap;gap:16px 28px;justify-content:space-between;align-items:center}
+footer nav{display:flex;flex-wrap:wrap;gap:14px 22px}
+footer a{text-decoration:none;color:var(--text-muted);letter-spacing:.14em;text-transform:uppercase;font:600 11px/1 var(--sans)}
+footer a:hover{color:var(--gold)}
+
+/* dialogs */
+dialog{border:0;padding:0;background:transparent;color:var(--text);max-width:min(980px,calc(100vw - 24px));width:100%}
+dialog::backdrop{background:rgba(2,2,3,.78);backdrop-filter:blur(6px)}
+dialog[open]{animation:pop .5s var(--ease)}
+@keyframes pop{from{opacity:0;transform:translateY(18px) scale(.98)}}
+.sheet{background:var(--bg-elevated);border:1px solid rgba(212,175,55,.3);display:grid;grid-template-columns:1fr 1fr;max-height:calc(100vh - 32px);overflow:auto}
+.sheet .pic{background:#000;min-height:420px}
+.sheet .pic img{width:100%;height:100%;object-fit:cover}
+.sheet .body{padding:clamp(22px,3vw,36px);position:relative}
+.x{position:absolute;right:14px;top:14px;width:38px;height:38px;border:1px solid var(--line);background:transparent;font-size:20px;line-height:1}
+.x:hover{border-color:var(--gold)}
+.sheet h3{margin:14px 0 4px;font:400 40px/1 var(--serif)}
+.sheet .p{font:400 28px/1 var(--serif);color:var(--gold-highlight);margin:14px 0}
+.sheet .desc{color:#cfc6b4;font-size:14px}
+.sizes{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0}
+.sizes button{min-width:46px;height:40px;border:1px solid var(--line);background:transparent;font:700 11px/1 var(--sans);letter-spacing:.14em}
+.sizes button[aria-pressed="true"]{border-color:var(--gold);color:var(--gold);background:rgba(212,175,55,.08)}
+.note{font-size:12px;color:var(--text-muted);margin-top:14px}
+.bag .sheet{grid-template-columns:1fr;max-width:620px;margin-left:auto}
+.bag-list{list-style:none;margin:16px 0;padding:0;display:grid;gap:10px}
+.bag-list li{display:grid;grid-template-columns:64px 1fr auto;gap:14px;align-items:center;padding:10px;border:1px solid var(--line)}
+.bag-list img{width:64px;height:80px;object-fit:cover}
+.bag-list b{display:block;font:800 12px/1.3 var(--sans);letter-spacing:.16em;text-transform:uppercase}
+.bag-list small{color:var(--text-muted)}
+.bag-list .rm{border:0;background:transparent;color:var(--text-muted);font-size:12px;text-decoration:underline}
+.total{display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--line);padding-top:14px}
+.total span{font:400 30px/1 var(--serif);color:var(--gold-highlight)}
+form.req{display:grid;gap:10px;margin-top:18px}
+form.req .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+form.req input,form.req textarea{width:100%;background:#07060b;border:1px solid var(--line);color:var(--text);padding:12px 14px;font:400 14px/1.4 var(--sans);transition:border-color .3s var(--ease)}
+form.req input:focus,form.req textarea:focus{outline:0;border-color:var(--gold)}
+form.req label{font:600 10px/1 var(--sans);letter-spacing:.22em;text-transform:uppercase;color:var(--text-muted)}
+.msg{min-height:20px;font-size:13px}
+.msg.ok{color:#9fd8a8}.msg.err{color:#ff8fa3}
+
+/* reveal */
+.rv{opacity:0;transform:translateY(26px);transition:opacity 1s var(--ease),transform 1s var(--ease)}
+.rv.on{opacity:1;transform:none}
+
+@media (max-width:900px){
+  .top .in{flex-wrap:wrap;gap:12px}
+  .nav{order:3;flex-basis:100%;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}
+  .atelier .cols{grid-template-columns:1fr}
+  .sheet{grid-template-columns:1fr}.sheet .pic{min-height:0;aspect-ratio:4/5}
+  .pillars{grid-template-columns:1fr}
+}
+@media (max-width:520px){form.req .two{grid-template-columns:1fr}.hero{min-height:78vh}}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+  .rv{opacity:1;transform:none}
+}
+</style>
+</head>
+<body>
+<a class="sr" href="#collection">Skip to the collection</a>
+<div class="ticker" aria-hidden="true"><div class="run" id="ticker"></div></div>
+
+<header class="top">
+  <div class="in">
+    <a class="mark" href="https://relentlessbillionaire.com/" aria-label="Relentless Billionaire home"><span>Relentless</span><span>Billionaire</span></a>
+    <nav class="nav" aria-label="Relentless Billionaire">
+      <a href="https://relentlessbillionaire.com/store">Shop</a>
+      <a class="on" href="https://relentlessbillionaire.com/atelier" aria-current="page">Atelier</a>
+      <a href="https://relentlessbillionaire.com/events">Events</a>
+      <a href="https://relentlessbillionaire.com/app/world/">World</a>
+      <a href="https://relentlessbillionaire.com/jobs">Jobs</a>
+      <a href="https://studio.relentlessbillionaire.com/">Studio</a>
+      <a href="https://relentlessbillionaire.com/radio">Radio</a>
+      <a href="https://relentlessbillionaire.com/memberships">Memberships</a>
+    </nav>
+    <div class="tools">
+      <button class="icon" type="button" id="open-favs" aria-label="Saved pieces"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg><span class="n" id="fav-n"></span></button>
+      <button class="icon" type="button" id="open-bag" aria-label="Your bag"><svg viewBox="0 0 24 24"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg><span class="n" id="bag-n"></span></button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero" aria-labelledby="hero-h">
+    <div class="bg" role="img" aria-label="Relentless Billionaire varsity details: the gold RB monogram, cream leather sleeves, black wool"></div>
+    <div class="in">
+      <div class="eyebrow">Soho Luxury Atelier · Genesis</div>
+      <h1 id="hero-h">The Soho <em>Atelier</em></h1>
+      <p class="lede">Varsity jackets, wool, leather, billionaire cuts. The Genesis collection, finished in black, ivory and gold.</p>
+      <div class="cta">
+        <a class="btn gold" href="#collection">View the collection</a>
+        <a class="btn" href="#atelier">The maker</a>
+      </div>
+      <div class="maker"><div class="seal" aria-hidden="true">M</div><div><small>Manufactured by</small><strong>Manzo Leathers</strong></div></div>
+    </div>
+  </section>
+
+  <section class="collection" id="collection" aria-labelledby="col-h">
+    <div class="wrap">
+      <div class="head rv">
+        <h2 id="col-h">Atelier / <span>All</span></h2>
+        <p id="count"></p>
+      </div>
+      <div class="chips rv" id="chips" role="group" aria-label="Filter the collection"></div>
+      <div class="grid" id="grid" aria-live="polite">
+        <div class="skel"></div><div class="skel"></div><div class="skel"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="atelier" id="atelier" aria-labelledby="mk-h">
+    <div class="wrap cols">
+      <div class="rv">
+        <div class="eyebrow">The maker</div>
+        <h2 id="mk-h">Made by <em>Manzo Leathers</em></h2>
+        <p>Every piece in the Genesis collection is manufactured by Manzo Leathers for the Relentless Billionaire Soho Atelier: varsity bodies in wool, leather sleeves and full leather cuts, finished with the RB monogram in gold.</p>
+        <div class="pillars">
+          <div><b>Wool</b><span>Varsity and coach bodies</span></div>
+          <div><b>Leather</b><span>Sleeves, motos and bombers</span></div>
+          <div><b>Gold</b><span>The RB monogram</span></div>
+        </div>
+        <div class="cta"><a class="btn gold" href="#collection">Choose a piece</a></div>
+      </div>
+      <div class="frame rv"><img src="https://media.relentlessbillionaire.com/atelier/leather-moto-varsity-1200.webp" alt="The Leather Moto Varsity in black leather with the gold RB monogram" loading="lazy" width="800" height="1000"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap in">
+    <div>Relentless Billionaire · Soho Luxury Atelier · Manufactured by Manzo Leathers</div>
+    <nav aria-label="More from Relentless Billionaire">
+      <a href="https://relentlessbillionaire.com/">Home</a>
+      <a href="https://relentlessbillionaire.com/store">The Store</a>
+      <a href="https://beatstore.relentlessbillionaire.com/">Beats</a>
+      <a href="https://relentlessbillionaire.com/tv">RB TV</a>
+      <a href="https://relentlessbillionaire.com/badge">RB Badge</a>
+      <a href="https://relentlessbillionaire.com/legal">Legal</a>
+    </nav>
+  </div>
+</footer>
+
+<dialog id="view" aria-labelledby="v-title">
+  <div class="sheet">
+    <div class="pic"><img id="v-img" alt=""></div>
+    <div class="body">
+      <button class="x" type="button" data-close aria-label="Close">×</button>
+      <div class="eyebrow" id="v-sub"></div>
+      <h3 id="v-title"></h3>
+      <div class="p" id="v-price"></div>
+      <p class="desc" id="v-desc"></p>
+      <div class="eyebrow">Your size</div>
+      <div class="sizes" id="v-sizes" role="group" aria-label="Size"></div>
+      <div class="cta"><button class="btn gold" type="button" id="v-add">Add to bag</button><button class="btn" type="button" id="v-fav">Save</button></div>
+      <p class="note">Manufactured by Manzo Leathers. Pieces are requested, not charged here: the atelier replies by email to confirm sizing, timing and payment.</p>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="bag" class="bag" aria-labelledby="b-title">
+  <div class="sheet">
+    <div class="body">
+      <button class="x" type="button" data-close aria-label="Close">×</button>
+      <div class="eyebrow" id="b-eyebrow">Your bag</div>
+      <h3 id="b-title">Request your pieces</h3>
+      <ul class="bag-list" id="b-list"></ul>
+      <div class="total"><small class="eyebrow">Listed total</small><span id="b-total">$0</span></div>
+      <form class="req" id="b-form" novalidate>
+        <div class="two">
+          <div><label for="f-name">Name</label><input id="f-name" name="name" autocomplete="name" required maxlength="100"></div>
+          <div><label for="f-email">Email</label><input id="f-email" name="email" type="email" autocomplete="email" required maxlength="200"></div>
+        </div>
+        <div><label for="f-phone">Phone (optional)</label><input id="f-phone" name="phone" type="tel" autocomplete="tel" maxlength="40"></div>
+        <div><label for="f-msg">Anything we should know (optional)</label><textarea id="f-msg" name="message" rows="3" maxlength="400"></textarea></div>
+        <button class="btn gold" type="submit" id="b-send">Send the request</button>
+        <p class="msg" id="b-msg" role="status"></p>
+        <p class="note">Nothing is charged here. The atelier replies by email to confirm each piece, your size, timing and payment.</p>
+      </form>
+    </div>
+  </div>
+</dialog>
+
+<script nonce="__NONCE__">
+(function(){
+  var MEDIA = 'https://media.relentlessbillionaire.com/atelier/';
+  var SIZES = ['XS','S','M','L','XL','XXL'];
+  var $ = function(id){ return document.getElementById(id); };
+  var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); };
+  var store = {
+    get: function(k, d){ try { var v = JSON.parse(localStorage.getItem('rb_atelier_' + k)); return v == null ? d : v; } catch (e) { return d; } },
+    set: function(k, v){ try { localStorage.setItem('rb_atelier_' + k, JSON.stringify(v)); } catch (e) {} }
+  };
+  var all = [], filter = '', favOnly = false, current = null, size = '';
+  var bag = store.get('bag', []), favs = store.get('favs', []);
+
+  // the ticker: what the atelier is, nothing invented
+  var words = ['<b>Soho Luxury Atelier</b>', 'Genesis collection', 'Made by <b>Manzo Leathers</b>', 'Varsity · Wool · Leather', '<i>Billionaire cuts</i>', 'Request a piece · the atelier replies by email'];
+  $('ticker').innerHTML = words.concat(words).concat(words).concat(words).map(function(w){ return '<span>' + w + '</span>'; }).join('');
+
+  var money = function(c){ return '$' + Math.round(c / 100).toLocaleString('en-US'); };
+  var cents = function(p){ var n = Number(String(p.price || '').replace(/[^0-9.]/g, '')); return isFinite(n) ? Math.round(n * 100) : 0; };
+  var img = function(p, w){ var u = p.image_url || ''; return /-1200\.webp$/.test(u) ? u.replace(/-1200\.webp$/, '-' + w + '.webp') : u; };
+  var category = function(p){ return String(p.subtitle || '').split('·')[0].split('•')[0].trim(); };
+
+  function counts(){
+    $('bag-n').textContent = bag.length || '';
+    $('fav-n').textContent = favs.length || '';
+  }
+  function render(){
+    var list = all.filter(function(p){ return (!filter || category(p) === filter) && (!favOnly || favs.indexOf(p.id) >= 0); });
+    var cats = []; all.forEach(function(p){ var c = category(p); if (c && cats.indexOf(c) < 0) cats.push(c); });
+    $('chips').innerHTML = ['All'].concat(cats).map(function(c){
+      var on = c === 'All' ? !filter && !favOnly : filter === c;
+      return '<button class="chip" type="button" data-c="' + esc(c) + '" aria-pressed="' + on + '">' + esc(c) + '</button>';
+    }).join('') + (favs.length ? '<button class="chip" type="button" data-c="__saved" aria-pressed="' + favOnly + '">Saved · ' + favs.length + '</button>' : '');
+    var sum = all.reduce(function(s, p){ return s + cents(p); }, 0);
+    $('count').textContent = all.length ? all.length + ' pieces · ' + money(sum / all.length) + ' average' : '';
+    document.querySelector('#col-h span').textContent = favOnly ? 'Saved' : (filter || 'All');
+    if (!list.length){ $('grid').innerHTML = '<p class="empty">' + (favOnly ? 'Nothing saved yet. Tap the heart on a piece to keep it here.' : 'The collection is being restocked. Check back soon.') + '</p>'; return; }
+    $('grid').innerHTML = list.map(function(p){
+      var inBag = bag.some(function(b){ return b.id === p.id; }), fav = favs.indexOf(p.id) >= 0;
+      return '<article class="card rv" data-id="' + p.id + '">' +
+        '<div class="ph"><span class="tag">' + esc(category(p) || 'Genesis') + '</span>' +
+        '<button class="fav" type="button" data-fav="' + p.id + '" aria-pressed="' + fav + '" aria-label="Save ' + esc(p.title) + '"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></button>' +
+        '<img src="' + esc(img(p, 640)) + '" srcset="' + esc(img(p, 640)) + ' 640w, ' + esc(img(p, 1200)) + ' 1200w" sizes="(max-width:700px) 92vw, 420px" alt="' + esc(p.title) + '" loading="lazy" decoding="async" width="640" height="800">' +
+        '<button class="look" type="button" data-view="' + p.id + '">Quick view</button></div>' +
+        '<div class="meta"><h3>' + esc(p.title) + '</h3><p class="sub">' + esc(p.subtitle || '') + '</p>' +
+        '<div class="row"><span class="price">' + esc(p.price || '') + '</span>' +
+        '<button class="add' + (inBag ? ' in' : '') + '" type="button" data-add="' + p.id + '">' + (inBag ? 'In your bag' : 'Add to bag') + '</button></div></div></article>';
+    }).join('');
+    reveal();
+  }
+
+  function byId(id){ return all.filter(function(p){ return p.id === Number(id); })[0]; }
+  function toggleFav(id){
+    id = Number(id); var i = favs.indexOf(id);
+    if (i >= 0) favs.splice(i, 1); else favs.push(id);
+    store.set('favs', favs); counts(); if (favOnly && !favs.length) favOnly = false; render();
+  }
+  function addToBag(p, sz){
+    var hit = bag.filter(function(b){ return b.id === p.id; })[0];
+    if (hit) { if (sz) hit.size = sz; } else bag.push({ id: p.id, size: sz || '' });
+    store.set('bag', bag); counts(); render();
+  }
+  function openView(p){
+    current = p; size = (bag.filter(function(b){ return b.id === p.id; })[0] || {}).size || '';
+    $('v-img').src = img(p, 1200); $('v-img').alt = p.title;
+    $('v-title').textContent = p.title; $('v-sub').textContent = p.subtitle || '';
+    $('v-price').textContent = p.price || ''; $('v-desc').textContent = p.description || '';
+    $('v-sizes').innerHTML = SIZES.map(function(s){ return '<button type="button" data-size="' + s + '" aria-pressed="' + (s === size) + '">' + s + '</button>'; }).join('');
+    $('v-fav').textContent = favs.indexOf(p.id) >= 0 ? 'Saved' : 'Save';
+    $('view').showModal();
+  }
+  function openBag(){
+    var items = bag.map(function(b){ var p = byId(b.id); return p ? { p: p, size: b.size } : null; }).filter(Boolean);
+    $('b-list').innerHTML = items.length ? items.map(function(it){
+      return '<li><img src="' + esc(img(it.p, 640)) + '" alt=""><div><b>' + esc(it.p.title) + '</b><small>' + esc(it.p.price || '') + (it.size ? ' · Size ' + esc(it.size) : ' · Size to confirm') + '</small></div>' +
+        '<button class="rm" type="button" data-rm="' + it.p.id + '">Remove</button></li>';
+    }).join('') : '<li><div></div><div><b>Your bag is empty</b><small>Add a piece from the collection.</small></div><div></div></li>';
+    $('b-total').textContent = money(items.reduce(function(s, it){ return s + cents(it.p); }, 0));
+    $('b-send').disabled = !items.length;
+    $('b-msg').textContent = ''; $('b-msg').className = 'msg';
+    if (!$('bag').open) $('bag').showModal();
+  }
+
+  document.addEventListener('click', function(e){
+    var t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.c != null){ if (t.dataset.c === '__saved') { favOnly = !favOnly; filter = ''; } else { favOnly = false; filter = t.dataset.c === 'All' ? '' : t.dataset.c; } render(); }
+    else if (t.dataset.fav) toggleFav(t.dataset.fav);
+    else if (t.dataset.view) openView(byId(t.dataset.view));
+    else if (t.dataset.add){ var p = byId(t.dataset.add); if (bag.some(function(b){ return b.id === p.id; })) openBag(); else openView(p); }
+    else if (t.dataset.size){ size = t.dataset.size; $('v-sizes').querySelectorAll('button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.size === size)); }); }
+    else if (t.dataset.rm){ bag = bag.filter(function(b){ return b.id !== Number(t.dataset.rm); }); store.set('bag', bag); counts(); render(); openBag(); }
+    else if (t.hasAttribute('data-close')) t.closest('dialog').close();
+  });
+  $('v-add').addEventListener('click', function(){ addToBag(current, size); $('view').close(); openBag(); });
+  $('v-fav').addEventListener('click', function(){ toggleFav(current.id); $('v-fav').textContent = favs.indexOf(current.id) >= 0 ? 'Saved' : 'Save'; });
+  $('open-bag').addEventListener('click', openBag);
+  $('open-favs').addEventListener('click', function(){ if (!favs.length) { location.hash = 'collection'; return; } favOnly = true; filter = ''; render(); document.getElementById('collection').scrollIntoView({ behavior: 'smooth' }); });
+  ['view', 'bag'].forEach(function(id){ $(id).addEventListener('click', function(e){ if (e.target === e.currentTarget) e.currentTarget.close(); }); });
+
+  $('b-form').addEventListener('submit', function(e){
+    e.preventDefault();
+    var items = bag.map(function(b){ var p = byId(b.id); return p ? { p: p, size: b.size } : null; }).filter(Boolean);
+    var name = $('f-name').value.trim(), email = $('f-email').value.trim(), box = $('b-msg');
+    if (!items.length) return;
+    if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { box.textContent = 'Please add your name and a valid email.'; box.className = 'msg err'; return; }
+    var btn = $('b-send'); btn.disabled = true; btn.textContent = 'Sending…';
+    var lines = items.map(function(it){ return it.p.title + ' (' + (it.p.price || '') + ', size ' + (it.size || 'to confirm') + ')'; });
+    fetch('/api/shop/inquire', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      product_id: items.length === 1 ? items[0].p.id : null,
+      product_title: items.length === 1 ? items[0].p.title : 'Atelier bag: ' + items.length + ' pieces',
+      brand: 'atelier', name: name, email: email, phone: $('f-phone').value.trim(),
+      options: items.map(function(it){ return it.p.title + ' ' + (it.size || '?'); }).join('; ').slice(0, 120),
+      quantity: items.length,
+      message: (lines.join('\n') + ($('f-msg').value.trim() ? '\n\n' + $('f-msg').value.trim() : '')).slice(0, 600)
+    }) }).then(function(r){ return r.json().then(function(d){ if (!r.ok || !d.ok) throw new Error(d.error || 'That didn\'t send. Please try again.'); }); })
+      .then(function(){
+        box.textContent = 'Sent. The atelier will reply to ' + email + ' to confirm your pieces.'; box.className = 'msg ok';
+        bag = []; store.set('bag', bag); counts(); render(); $('b-list').innerHTML = ''; $('b-total').textContent = '$0';
+        $('b-form').reset();
+      })
+      .catch(function(err){ box.textContent = err.message; box.className = 'msg err'; })
+      .finally(function(){ btn.disabled = !bag.length; btn.textContent = 'Send the request'; });
+  });
+
+  var io = 'IntersectionObserver' in window ? new IntersectionObserver(function(es){ es.forEach(function(en){ if (en.isIntersecting) { en.target.classList.add('on'); io.unobserve(en.target); } }); }, { rootMargin: '0px 0px -8% 0px' }) : null;
+  function reveal(){ document.querySelectorAll('.rv:not(.on)').forEach(function(el, i){ if (io) { el.style.transitionDelay = Math.min(i % 6, 5) * 70 + 'ms'; io.observe(el); } else el.classList.add('on'); }); }
+  reveal(); counts();
+
+  fetch('/api/shop?brand=atelier').then(function(r){ return r.json(); }).then(function(d){
+    all = (d.products || []).filter(function(p){ return p.brand === 'atelier'; });
+    bag = bag.filter(function(b){ return byId(b.id); }); favs = favs.filter(function(id){ return byId(id); });
+    store.set('bag', bag); store.set('favs', favs); counts(); render();
+    if (location.hash === '#bag' && bag.length) openBag();
+  }).catch(function(){ $('grid').innerHTML = '<p class="empty">The collection couldn\'t load just now. Please refresh in a moment.</p>'; });
+})();
+</script>
+</body>
+</html>

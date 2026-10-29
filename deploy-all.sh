@@ -29,6 +29,8 @@ fi
 py "$ROOT/rb-tools/palettes.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_artist_router.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_home_status.py" "$W/artist-router"
 # RB Create at /create; /record and /studio may be framed by their own site; the free AI voice it uses
 py "$ROOT/rb-site-updates/patch_artist_router_create.py" "$W/artist-router"
+# the Soho Luxury Atelier at /atelier (the Genesis jackets, made by Manzo Leathers; pieces live in shop_products, brand atelier)
+py "$ROOT/rb-site-updates/patch_atelier.py" "$W/artist-router"
 # gold skeletons (with the words kept for screen readers) for the shop, store, roster and scoreboard loading states
 py "$ROOT/rb-site-updates/patch_loading_states.py" "$W/artist-router"
 # next steps after a beat purchase (record, master, release); /advertise media kit; the RB list with interests
@@ -138,6 +140,7 @@ node --no-warnings "$ROOT/rb-world-live/test.mjs"
 node --no-warnings "$ROOT/rb-surface/test/fresh.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$ROOT/rb-site-updates/test/post-link.test.mjs" "$W/artist-router/artist-router-v14.js"
 node --no-warnings "$ROOT/rb-site-updates/test/create.test.mjs" "$W/artist-router/artist-router-v14.js"
+node --no-warnings "$ROOT/rb-site-updates/test/atelier.test.mjs" "$W/artist-router/artist-router-v14.js"
 node "$ROOT/rb-site-updates/test/film.test.mjs"
 node --no-warnings "$ROOT/rb-site-updates/test/rewards.test.mjs" "$W/artist-router/artist-router-v14.js" | tail -c 120
 node --no-warnings "$ROOT/rb-site-updates/test/badge.test.mjs" "$W/artist-router/artist-router-v14.js"
