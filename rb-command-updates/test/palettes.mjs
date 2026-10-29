@@ -4,8 +4,9 @@
 import assert from "node:assert/strict";
 const { PALETTES, tones, contrast, siteCss, MAPPED_SITES, paletteList } = await import(process.argv[2]);
 const keys = Object.keys(PALETTES);
-assert.equal(keys.length, 26, "26 palettes");
-assert.equal(new Set(keys).size, 26);
+// 27 since 28 Oct 2026: Dark Luxury (rb-tools/patch_luxe_tokens.py) joined the 26
+assert.equal(keys.length, 27, "27 palettes");
+assert.equal(new Set(keys).size, 27);
 const rows = [];
 for (const k of keys) {
   const p = PALETTES[k], t = tones(p);
@@ -14,6 +15,6 @@ for (const k of keys) {
   for (const s of MAPPED_SITES) siteCss(s, k); // every site's stylesheet builds
   rows.push(`${k.padEnd(10)} text ${c.text.toFixed(1)}  muted ${c.muted.toFixed(1)}  accent ${c.accent.toFixed(1)}  hot ${c.hot.toFixed(1)}  button ${c.button.toFixed(1)}`);
 }
-assert.equal(paletteList().length, 26);
+assert.equal(paletteList().length, 27);
 console.log(rows.join("\n"));
-console.log("palettes ok: all 26 pass the 4.5:1 checks and build every site's stylesheet");
+console.log("palettes ok: all 27 pass the 4.5:1 checks and build every site's stylesheet");
