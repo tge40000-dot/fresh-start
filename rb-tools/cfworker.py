@@ -49,10 +49,12 @@ def pull(script, folder):
         if part.is_multipart():
             continue
         name = part.get_filename() or part.get_param("name", header="content-disposition")
-        if not name or "/" in name or name.startswith("."):
+        # a bundler may name a part "./x.html"; it's saved as x.html and uploaded under its own name again
+        file = name[2:] if name and name.startswith("./") else name
+        if not file or "/" in file or file.startswith("."):
             raise SystemExit(f"unexpected part name {name!r}")
-        (folder / name).write_bytes(part.get_payload(decode=True))
-        parts.append({"name": name, "type": part.get_content_type() if part.get_content_type() != "text/plain" else part.get("Content-Type", "application/javascript+module")})
+        (folder / file).write_bytes(part.get_payload(decode=True))
+        parts.append({"name": name, **({"file": file} if file != name else {}), "type": part.get_content_type() if part.get_content_type() != "text/plain" else part.get("Content-Type", "application/javascript+module")})
     manifest = {"script": script, "entry": headers.get("cf-entrypoint"), "version": version, "parts": parts}
     (folder / "manifest.json").write_text(json.dumps(manifest, indent=2))
     print(f"{script}: pulled version {version}, entry {manifest['entry']}, {len(parts)} module(s) into {folder}")
@@ -66,7 +68,7 @@ def push(script, folder):
     live = live_version(script)
     if live != manifest["version"]:
         raise SystemExit(f"{script} is now on {live}, not {manifest['version']} which was pulled. Pull again and re-apply.")
-    names = {p["name"] for p in manifest["parts"]}
+    names = {p.get("file", p["name"]) for p in manifest["parts"]}
     parts = list(manifest["parts"]) + [{"name": p.name, "type": "application/javascript+module"} for p in sorted(folder.glob("*.js")) if p.name not in names]
     boundary = uuid.uuid4().hex
     out = bytearray()
@@ -80,7 +82,7 @@ def push(script, folder):
 
     field("metadata", json.dumps({"main_module": manifest["entry"]}).encode(), "application/json")
     for p in parts:
-        field(p["name"], (folder / p["name"]).read_bytes(), p["type"], p["name"])
+        field(p["name"], (folder / p.get("file", p["name"])).read_bytes(), p["type"], p["name"])
     out.extend(f"--{boundary}--\r\n".encode())
     _, body = call("PUT", f"{API}/{script}/content", bytes(out), {"Content-Type": f"multipart/form-data; boundary={boundary}"})
     res = json.loads(body)
