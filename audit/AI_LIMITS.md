@@ -79,10 +79,14 @@ The defaults apply as soon as the code is live, before anyone opens the screen:
     built-in filters read the prompt and lyrics first. Its five earlier attempts (19â€“30 Aug) all failed, so no one
     loses a working tool. It has its own database, so the owner's saved changes in RB Command don't reach it: it uses
     RB's defaults.
-- **Still outside the policy: `rb-cloud`** (cover art, voice-over, transcription, writing, and the picture check behind
-  release uploads). Every call needs a key (the operator key, RB's internal token, or a member's `rbk_` key), so it
-  isn't open to the public. It has no database binding, so it can't read the policy or write the log. Wiring it is a
-  small patch once it has a D1 binding to `waitlist-db` (named `DB`); adding a binding is the owner's call.
+- **`rb-cloud`: wired, waiting on one switch.** It runs cover art, voice-over, transcription, writing, and the
+  picture check behind release uploads.
+  - Every call needs a key (the operator key, RB's internal token, or a member's `rbk_` key), so it isn't open to the
+    public.
+  - The check and the log are now in its code (`patch_ai_policy_cloud.py`), but they only switch on when the Worker has
+    a D1 binding named `DB` pointing at `waitlist-db`. Until then it runs exactly as before; the test checks that.
+  - **To turn it on:** Cloudflare > Workers > rb-cloud > Settings > Bindings > add a D1 database binding, variable `DB`,
+    database `waitlist-db`. Adding a binding is the owner's call, so it wasn't done here.
 - **Correction:** the CRM's autopilot (`relentless-backend`) calls no AI model. Its replies and drafts don't need
   wiring. It only passes `/cloud/*` through to `rb-cloud`, which is the item above.
 
@@ -94,7 +98,7 @@ order: `relentless-billionaire-api`, `rb-autopilot`, `rb-studio` (RB account), â
 | Worker | Live and rollback |
 | --- | --- |
 | `rb-command` | `a8486556` per the 28 Oct session summary (roll back to it) |
-| `relentless-billionaire-api`, `rb-autopilot`, `rb-studio`, `relentless-studio`, `yoshcoastmusic` | Not in the session summary. The deploy prints and saves each one's previous version (`*/deployed.json`) |
+| `relentless-billionaire-api`, `rb-autopilot`, `rb-studio`, `relentless-studio`, `yoshcoastmusic`, `rb-cloud` | Not in the session summary. The deploy prints and saves each one's previous version (`*/deployed.json`) |
 
 Roll back from Cloudflare > Workers > the Worker > Deployments. Rolling back RB Command alone just hides the screen; the
 rules saved in `site_settings.ai_policy` stay and are still applied. To switch everything off without a rollback,

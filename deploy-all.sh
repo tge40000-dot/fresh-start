@@ -12,7 +12,7 @@ W=$(mktemp -d)
 ACCOUNT=0a7be075f32d9d615349825b83ab8fcb
 py() { python3 -I "$@"; }
 
-for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-memberships rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners rb-game rb-showcase yoshcoastmusic assassin-in-the-room-signal weed-relentless-billionaire relentless-studio; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
+for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-memberships rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners rb-game rb-showcase yoshcoastmusic assassin-in-the-room-signal weed-relentless-billionaire relentless-studio rb-cloud; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
 # the AI Forge lives in the RB account
 CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" pull rb-studio "$W/rb-studio"
 # artist-router: colours (no-op once live), post links and the ad slot
@@ -91,6 +91,8 @@ py "$ROOT/rb-site-updates/patch_ai_policy_autopilot.py" "$W/rb-autopilot"; py "$
 # the last two Workers that call AI on their own: relentless-studio's helpers get the policy and the log (its PLATFORM_DB
 # is waitlist-db); yoshcoastmusic's paid music model is for its signed-in admin only, with the built-in filters
 py "$ROOT/rb-site-updates/patch_ai_policy_relentless_studio.py" "$W/relentless-studio"; py "$ROOT/rb-site-updates/patch_yoshcoast_ai.py" "$W/yoshcoastmusic"
+# rb-cloud: the same check and log, switched on only once it has a D1 binding named DB (until then it runs as before)
+py "$ROOT/rb-site-updates/patch_ai_policy_cloud.py" "$W/rb-cloud"
 # the baseline security header on the last pages without one (before the guard, so the guard stays outermost)
 EXTRA_SITES="rb-showcase yoshcoastmusic assassin-in-the-room-signal weed-relentless-billionaire"
 py "$ROOT/rb-tools/patch_csp_more.py" $(for s in $EXTRA_SITES; do echo "$W/$s"; done)
@@ -144,6 +146,7 @@ node --no-warnings "$ROOT/rb-site-updates/test/ai-policy-autopilot.test.mjs" "$W
 node --no-warnings "$ROOT/rb-command-updates/test/ai-policy.test.mjs" "$W/rb-command"
 node --no-warnings "$ROOT/rb-site-updates/test/ai-policy-relentless-studio.test.mjs" "$W/relentless-studio/script.js"
 node --no-warnings "$ROOT/rb-site-updates/test/yoshcoast-ai.test.mjs" "$W/yoshcoastmusic/worker.js"
+node --no-warnings "$ROOT/rb-site-updates/test/ai-policy-cloud.test.mjs" "$W/rb-cloud"
 node --no-warnings "$ROOT/rb-site-updates/test/radio-tv.test.mjs" "$W/rb-radio" "$W/rb-tv"
 node "$ROOT/rb-site-updates/test/flow.test.mjs" "$W/rb-radio"
 node "$ROOT/rb-site-updates/test/onesound.test.mjs" "$W/rb-radio"
@@ -177,7 +180,7 @@ py "$ROOT/rb-tools/cfworker.py" push artist-router "$W/artist-router"
 for s in rb-favicon rb-release beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners; do py "$ROOT/rb-tools/cfworker.py" push "$s" "$W/$s"; done
 # after artist-router, which serves RB World
 py "$ROOT/rb-tools/cfworker.py" push rb-game "$W/rb-game"
-for s in $EXTRA_SITES relentless-studio; do py "$ROOT/rb-tools/cfworker.py" push "$s" "$W/$s"; done
+for s in $EXTRA_SITES relentless-studio rb-cloud; do py "$ROOT/rb-tools/cfworker.py" push "$s" "$W/$s"; done
 if curl -fsS -m 20 https://relentlessbillionaire.com/radio/api/now | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("live") else 1)'; then
   echo "rb-radio: a live show is on air, so it's skipped. Run this again after the show."
 else
