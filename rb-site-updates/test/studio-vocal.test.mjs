@@ -102,9 +102,27 @@ const voice = (t) => 0.25 * Math.sin(2 * Math.PI * 220 * t) + 0.12 * Math.sin(2 
   assert.deepEqual(c.bars, [2, 3, 4]);
 }
 
-// 5. the page wiring
+// 5. latency measurement: clicks heard 37 ms late over room noise, one lost, one with an echo after it
+{
+  const L = new Function(cut("function rbClickDelays(", "async function rbMeasureLatency(") + "; return { rbClickDelays, rbLatencyFrom };")();
+  const clicks = Array.from({ length: 8 }, (_, k) => 0.5 + k * 0.45), x = new Float32Array(Math.round(4.5 * sr));
+  for (let i = 0; i < x.length; i++) x[i] = 0.002 * rnd();
+  clicks.forEach((c, k) => {
+    if (k === 3) return; // lost
+    const at = Math.round((c + 0.037) * sr);
+    for (let j = 0; j < 144; j++) x[at + j] += 0.4 * (j % 2 ? -1 : 1) * (1 - j / 144);
+    if (k === 5) for (let j = 0; j < 144; j++) x[at + 2400 + j] += 0.2 * (j % 2 ? -1 : 1); // echo 50 ms later
+  });
+  const d = L.rbClickDelays(x, sr, clicks);
+  assert.equal(d.length, 7, "the lost click isn't invented");
+  assert.ok(Math.abs(L.rbLatencyFrom(d) - 0.037) < 0.0005, "37 ms measured: " + L.rbLatencyFrom(d));
+  assert.equal(L.rbLatencyFrom(L.rbClickDelays(x.map(() => 0.002 * rnd()), sr, clicks)), null, "nothing heard, nothing set");
+  assert.equal(L.rbLatencyFrom([0.03, 0.05, 0.07, 0.09, 0.11]), null, "clicks that disagree aren't trusted");
+}
+
+// 6. the page wiring
 const once = (x, msg) => assert.equal(main.split(x).length - 1, 1, msg || x);
 for (const k of ['label: "Warm vocal"', 'label: "Radio-Ready vocal"', 'label: "Aggressive vocal"', 'label: "Clean vocal"']) once(k);
-for (const k of ["function rbOrig(", "function rbFixPanel(", "async function rbFix(", "function rbFixOff(", "async function rbBuildComp(", "function rbPreview("]) once(k);
+for (const k of ["function rbLatencyNote(", "async function rbMeasureLatency(", "function rbOrig(", "function rbFixPanel(", "async function rbFix(", "function rbFixOff(", "async function rbBuildComp(", "function rbPreview("]) once(k);
 once("(o.audio.fix && o.audio.fix.src === e)", "a take kept under a clean-up still counts as in use");
-console.log("studio vocal tools ok: noise down, voice kept, refusals, phrases on the grid unstretched, comp per bar without clicks, bar lines, presets and wiring");
+console.log("studio vocal tools ok: noise down, voice kept, refusals, phrases on the grid unstretched, comp per bar without clicks, bar lines, latency measured from clicks, presets and wiring");

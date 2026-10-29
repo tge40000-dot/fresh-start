@@ -4529,13 +4529,99 @@ function ba() {
             value: String(r.p.latencyMs || 0),
             title: "Extra recording latency correction in milliseconds. Raise it if recordings land late.",
             style: "width:60px;background:var(--bg);border:1px solid var(--line2);border-radius:5px;color:var(--text)",
-            onchange: (n) => x(() => (r.p.latencyMs = O(+n.target.value || 0, -200, 500)), { what: "none" }),
+            onchange: (n) => x(() => (r.p.latencyMs = O(+n.target.value || 0, -200, 500)), { what: "mixer" }),
           }),
         ),
+        l("button", {
+          class: "mini",
+          type: "button",
+          title: "Plays clicks through your speakers and listens with the mic to measure the delay. Unplug headphones first.",
+          onclick: (n) => bn(n.target, rbMeasureLatency),
+          text: "Measure",
+        }),
+        rbLatencyNote(),
       ),
     ),
     l("div", { class: "mixer" }, t)
   );
+}
+/* RB latency (Prompt C, 29 Oct 2026): what each take is corrected by, and a loopback measurement. */
+// What gets taken off the start of every take: the delay the browser reports for the mic and the speakers, plus the
+// project's own Latency number. Shown under the master strip so it's never a mystery.
+function rbLatencyNote() {
+  let i = g.input,
+    dev = i && g.ctx ? Math.round(((i.inLatency || 0) + (g.ctx.outputLatency || g.ctx.baseLatency || 0)) * 1e3) : null,
+    extra = r.p.latencyMs || 0;
+  return l("span", {
+    class: "fine rblat",
+    text:
+      dev == null
+        ? `Each take is corrected by the delay your device reports${extra ? `, plus ${extra} ms` : ""} (turn the mic on to see it).`
+        : `Each take is corrected by ${dev + extra} ms: ${dev} ms your device reports${extra ? ` + ${extra} ms Latency` : ""}.`,
+  });
+}
+// Where each click lands in a recording. clicks: when each was played, in seconds from the start of the recording.
+// Returns the delays (seconds) of the clicks that were clearly heard.
+function rbClickDelays(x, sr, clicks, maxDelay = 0.4) {
+  let out = [];
+  for (let c of clicks) {
+    let a = Math.round(c * sr), b = Math.min(x.length, Math.round((c + maxDelay) * sr));
+    if (a >= b) continue;
+    // the quiet just before the click is the noise floor
+    let q0 = Math.max(0, a - Math.round(0.05 * sr)), noise = 0, peak = 0;
+    for (let j = q0; j < a; j++) noise = Math.max(noise, Math.abs(x[j]));
+    for (let j = a; j < b; j++) peak = Math.max(peak, Math.abs(x[j]));
+    if (peak < 0.01 || peak < noise * 6) continue;
+    let thr = Math.max(noise * 3, peak * 0.3);
+    for (let j = a; j < b; j++) if (Math.abs(x[j]) >= thr) { out.push(j / sr - c); break; }
+  }
+  return out;
+}
+// Median of the clicks heard, if at least 5 agree within 3 ms; otherwise null.
+function rbLatencyFrom(delays) {
+  if (delays.length < 5) return null;
+  let d = delays.slice().sort((a, b) => a - b), m = d[Math.floor(d.length / 2)], near = d.filter((v) => Math.abs(v - m) <= 0.003);
+  return near.length >= 5 ? m : null;
+}
+async function rbMeasureLatency() {
+  if (g.recording) return w("Stop recording first.", "bad");
+  let inp = await g.openInput(r.inputId || "");
+  if (!g.worklet && !(await g.loadRecorder())) return w("This browser can't measure here.", "bad");
+  g.playing && (g.stop(), R("transport")), g.setMonitor(null);
+  let ctx = g.ctx,
+    sr = ctx.sampleRate,
+    node = new AudioWorkletNode(ctx, "rb-recorder", { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 2 }),
+    sink = ctx.createGain(),
+    chunks = [],
+    done,
+    fin = new Promise((f) => (done = f)),
+    burst = ctx.createBuffer(1, Math.round(sr * 0.003), sr);
+  burst.getChannelData(0).forEach((_, k, a) => (a[k] = (k % 2 ? -0.9 : 0.9) * (1 - k / a.length)));
+  (sink.gain.value = 0), inp.src.connect(node).connect(sink).connect(ctx.destination);
+  node.port.onmessage = (m) => (m.data.chunk && chunks.push(m.data.chunk), m.data.done && done());
+  let t0 = ctx.currentTime + 0.3,
+    clicks = Array.from({ length: 8 }, (_, k) => 0.5 + k * 0.45);
+  node.port.postMessage({ cmd: "start", at: t0 });
+  for (let c of clicks) {
+    let s = ctx.createBufferSource();
+    (s.buffer = burst), s.connect(ctx.destination), s.start(t0 + c);
+  }
+  w("Measuring: listening for 8 clicks…");
+  await new Promise((f) => setTimeout(f, (0.3 + clicks[7] + 0.6) * 1e3));
+  node.port.postMessage({ cmd: "stop" }), await Promise.race([fin, new Promise((f) => setTimeout(f, 1500))]);
+  try {
+    inp.src.disconnect(node);
+  } catch {}
+  node.disconnect(), sink.disconnect();
+  let n = chunks.reduce((a, c) => a + c[0].length, 0), pcm = new Float32Array(n), at = 0;
+  for (let c of chunks) pcm.set(c[0], at), (at += c[0].length);
+  let total = rbLatencyFrom(rbClickDelays(pcm, sr, clicks));
+  if (total == null)
+    return w("Couldn't hear the clicks clearly. Unplug headphones, turn the speakers up, keep the room quiet and try again. Latency wasn't changed.", "bad");
+  let dev = (inp.inLatency || 0) + (ctx.outputLatency || ctx.baseLatency || 0),
+    extra = Math.round(O((total - dev) * 1e3, -200, 500));
+  x(() => (r.p.latencyMs = extra), { what: "mixer" });
+  w(`Measured ${Math.round(total * 1e3)} ms from speaker to mic. Your device reports ${Math.round(dev * 1e3)} ms, so Latency is now ${extra} ms. Put your headphones back on to record.`, "ok");
 }
 var Se = null,
   J = null;
