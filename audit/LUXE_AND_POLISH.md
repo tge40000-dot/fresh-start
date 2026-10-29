@@ -96,9 +96,17 @@ new request and nothing for a page's CSP to block. Everything that moves stops w
 | `rb-radio` | Dark Luxury palette, one sound at a time | skipped automatically while a show is live |
 | `rb-daw` | the studio claims the sound when it plays or records | its own `deploy.sh` (run by `deploy-all.sh`) |
 
-**Rollback.** The deploy prints each Worker's previous version and keeps them in `*/deployed.json`; roll back from
-Cloudflare > Workers > the Worker > Deployments. I couldn't read version IDs with the read-only access used here, so
-they aren't listed. `site-images.css` may stay in browsers' caches for up to a few hours after a rollback.
+**Rollback.** Versions to roll back to, from the 28 Oct session summary (check they're still live before deploying;
+`cfworker.py push` refuses if a Worker changed since it was pulled):
+
+| Worker | Live before this (roll back to) |
+| --- | --- |
+| `artist-router` | `286df164` |
+| `rb-command` | `a8486556` |
+| `rb-public-content`, `rb-radio`, `rb-daw` | Not in the summary; the deploy prints and saves each one's previous version (`*/deployed.json`) |
+
+Roll back from Cloudflare > Workers > the Worker > Deployments. `site-images.css` may stay in browsers' caches for up
+to a few hours after a rollback.
 
 ## Files
 
