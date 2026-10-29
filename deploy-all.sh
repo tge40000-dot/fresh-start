@@ -41,6 +41,8 @@ node "$ROOT/workers/rb-daw/test.mjs"
 py "$ROOT/rb-site-updates/patch_ai_speech.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_ai_image.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_ai_limit.py" "$W/relentless-billionaire-api"
+# the owner's AI policy (RB Command > AI limits) on every AI call: public tools, the AI Forge, Autopilot; every call logged
+py "$ROOT/rb-site-updates/patch_ai_policy_api.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_radio.py" "$W/rb-radio"; py "$ROOT/rb-site-updates/patch_radio_flow.py" "$W/rb-radio"
 # one RB sound at a time: the radio steps aside for a video, a beat or the studio in any RB tab on the site
 py "$ROOT/rb-site-updates/patch_radio_onesound.py" "$W/rb-radio"
@@ -84,6 +86,7 @@ py "$ROOT/rb-tools/patch_seo.py" "$W/artist-router" "$W/beatstore" "$W/rb-events
 py "$ROOT/rb-tools/patch_publish_queue.py" "$W/rb-autopilot"
 # the AI Forge's daily mix follows RB TV's watch data (more shorts while shorts hold people best)
 py "$ROOT/rb-tools/patch_idea_mix.py" "$W/rb-autopilot"
+py "$ROOT/rb-site-updates/patch_ai_policy_autopilot.py" "$W/rb-autopilot"; py "$ROOT/rb-site-updates/patch_ai_policy_forge.py" "$W/rb-studio"
 # the baseline security header on the last pages without one (before the guard, so the guard stays outermost)
 EXTRA_SITES="rb-showcase yoshcoastmusic assassin-in-the-room-signal weed-relentless-billionaire"
 py "$ROOT/rb-tools/patch_csp_more.py" $(for s in $EXTRA_SITES; do echo "$W/$s"; done)
@@ -93,6 +96,8 @@ py "$ROOT/rb-tools/patch_resilience.py" "$W/artist-router" "$W/rb-mastering-stud
 for s in $ICON_SITES; do py "$ROOT/rb-tools/patch_icons.py" "$W/$s" >/dev/null; done # the RB icon on the guard's page too
 # Site images (RB Command > Site images): the screen in rb-command, the pictures and per-site CSS from rb-public-content
 py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-command"; py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-public-content"
+# RB Command > AI limits (owner only)
+py "$ROOT/rb-command-updates/patch_ai_policy.py" "$W/rb-command"
 # RB Command > Badges (levels, rewards, achievements, settings) and the Badge desk for the door
 py "$ROOT/rb-command-updates/patch_badges_admin.py" "$W/rb-command"
 # the weekly health report (daily run + Overview)
@@ -128,6 +133,10 @@ node --no-warnings "$T/health.test.mjs" "$W/rb-command"
 node --no-warnings "$T/world-admin.test.mjs" "$W/rb-command"
 node --no-warnings "$ROOT/rb-site-updates/test/list-signup.test.mjs" "$W/rb-radio" "$W/rb-tv"
 node --no-warnings "$ROOT/rb-site-updates/test/ai-limit.test.mjs" "$W/relentless-billionaire-api/script.js"
+node --no-warnings "$ROOT/rb-site-updates/test/ai-policy-api.test.mjs" "$W/relentless-billionaire-api/script.js"
+node --no-warnings "$ROOT/rb-site-updates/test/ai-policy-forge.test.mjs" "$W/rb-studio"
+node --no-warnings "$ROOT/rb-site-updates/test/ai-policy-autopilot.test.mjs" "$W/rb-autopilot" "$W/rb-studio"
+node --no-warnings "$ROOT/rb-command-updates/test/ai-policy.test.mjs" "$W/rb-command"
 node --no-warnings "$ROOT/rb-site-updates/test/radio-tv.test.mjs" "$W/rb-radio" "$W/rb-tv"
 node "$ROOT/rb-site-updates/test/flow.test.mjs" "$W/rb-radio"
 node "$ROOT/rb-site-updates/test/onesound.test.mjs" "$W/rb-radio"
@@ -151,6 +160,7 @@ py "$ROOT/rb-tools/cfworker.py" push rb-public-content "$W/rb-public-content"
 py "$ROOT/rb-tools/cfworker.py" push relentless-billionaire-api "$W/relentless-billionaire-api"
 "$ROOT/workers/rb-daw/deploy.sh"
 py "$ROOT/rb-tools/cfworker.py" push rb-mastering-studio "$W/rb-mastering-studio"
+# Autopilot before the AI Forge: its renders carry the approval the Forge starts asking for
 py "$ROOT/rb-tools/cfworker.py" push rb-autopilot "$W/rb-autopilot"
 CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" push rb-studio "$W/rb-studio"
 py "$ROOT/rb-tools/cfworker.py" push rb-radio-hub "$W/rb-radio-hub"
