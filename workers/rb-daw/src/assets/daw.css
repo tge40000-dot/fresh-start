@@ -926,6 +926,27 @@ select {
   font-size: 12px;
   color: var(--gold2);
 }
+/* RB vocal tools (Prompt C): the comp grid */
+.compwrap {
+  flex-basis: 100%;
+  min-width: 0;
+}
+.comp {
+  display: grid;
+  gap: 3px;
+  align-items: center;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.comp .mini {
+  min-width: 22px;
+  height: 18px;
+  padding: 0;
+}
+.comp .mini[aria-pressed="true"] {
+  background: var(--gold);
+  border-color: var(--gold);
+}
 .txt {
   background: var(--bg);
   border: 1px solid var(--line2);
