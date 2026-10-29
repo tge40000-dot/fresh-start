@@ -10,8 +10,8 @@
     sports4all.relentlessbillionaire.com.
 - **Beats** still live at the beat store, and the site tabs still say Beats. The beat store's "request exclusive
   rights" link (`/store?license=exclusive&beat=…`) still opens the old request form.
-- **Homepage Shop card:** the built-in wording now describes the three houses. The RB admin hub tile id 3 still says
-  "Beats & Apparel" and overrides it until it is updated (needs the owner's OK):
+- **Homepage Shop card:** describes the three houses. RB admin hub tile id 3 (which overrides the built-in wording) was
+  updated with the owner's OK on 29 Oct 2026:
   ```sql
   UPDATE hub_tiles SET subtitle='Apparel', blurb='The Soho Luxury Atelier, Slank Customs and Sports 4 All under one name.', image_url='https://media.relentlessbillionaire.com/atelier/atelier-hero-crop.webp' WHERE id=3;
   ```
@@ -86,7 +86,14 @@ With `--browser`, the whole run goes through Chromium against stand-in AI tools,
 produces a 3-scene film with 2 cut-out characters, 3 backgrounds, 5 voiced lines, a score and titles. The film plays
 with no errors.
 
+## Deployed
+
+29 Oct 2026, artist-router `024ed006` -> **`455c984d`** (code only). Checked live in Chromium at 1440 and 390 px:
+/store, /soho and /create#film load with no console errors and no sideways scroll; the beat store's exclusive-rights
+form still answers at `/store?license=exclusive&beat=…`; the homepage card reads "...Sports 4 All under one name."
+
 ## Rollback
 
-artist-router, from Cloudflare > Workers > artist-router > Deployments: go back to `024ed006`, which is live before
-this change.
+artist-router, from Cloudflare > Workers > artist-router > Deployments: go back to `024ed006`. The hub tile can be put
+back with `UPDATE hub_tiles SET subtitle='Beats & Apparel', blurb='GOT BEATS licensing and Slank Customs apparel — one
+storefront.' WHERE id=3` (and its previous image_url).
