@@ -64,7 +64,8 @@ assert.equal(r.status, 200);
 assert.equal(DB.raw.prepare("SELECT brand FROM shop_inquiries ORDER BY id DESC").get().brand, "atelier");
 
 // the Store's tab and RB admin
-const store = await (await go("https://relentlessbillionaire.com/store")).text();
+// the old storefront (still used by the beat store's exclusive-rights requests) keeps its Atelier tab
+const store = await (await go("https://relentlessbillionaire.com/store?license=exclusive&beat=1")).text();
 assert.match(store, /<a class="btab" href="\/soho"[^>]*>Soho Atelier<small>Varsity &amp; Leather · Manzo Leathers<\/small><\/a>/);
 assert.ok(store.includes(".btab[data-brand]"), "only the two brand tabs switch in place");
 const src = readFileSync(process.argv[2], "utf8");
@@ -91,8 +92,14 @@ if (process.argv.includes("--browser")) {
     await p.evaluate(() => scrollTo(0, 0)); await p.waitForTimeout(900);
     await p.screenshot({ path: `atelier-${vp.width}.png`, fullPage: true });
     await p.getByRole("button", { name: "Leather", exact: true }).click();
+    await p.waitForFunction(() => document.querySelectorAll(".card").length === 1, null, { timeout: 4000 }); // the filter swaps with a view transition
     assert.equal(await p.locator(".card").count(), 1);
+    await p.getByRole("button", { name: "Shop this look" }).first().scrollIntoViewIfNeeded();
+    await p.getByRole("button", { name: "Shop this look" }).first().click();
+    assert.equal(await p.locator("#v-title").textContent(), "Leather Moto Varsity", "the edit's look opens its piece");
+    await p.locator("#view [data-close]").click();
     await p.getByRole("button", { name: "All", exact: true }).click();
+    await p.waitForFunction(() => document.querySelectorAll(".card").length === 9, null, { timeout: 4000 });
     await p.locator(".card").first().getByRole("button", { name: "Add to bag" }).click();
     await p.getByRole("button", { name: "M", exact: true }).click();
     if (vp.width > 500) await p.screenshot({ path: "atelier-view.png" });
