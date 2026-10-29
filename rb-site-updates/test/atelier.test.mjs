@@ -1,5 +1,5 @@
 // Usage: node --no-warnings rb-site-updates/test/atelier.test.mjs <patched artist-router-v14.js> [--browser]
-// The Soho Atelier: the page at /atelier with a strict CSP, the nine pieces as shop products (the seed), requests through
+// The Soho Atelier: the page at /soho (/atelier redirects there) with a strict CSP, the nine pieces as shop products (the seed), requests through
 // the shop's inquiry API, the Store's third tab, RB admin keeping the brand. With --browser, the page itself in
 // Chromium (desktop and phone) against the real Worker and a stand-in database: collection, filters, quick view, size,
 // bag, the request saved, no errors, no sideways scroll.
@@ -27,7 +27,7 @@ assert.ok(rows.every((r) => /Made by Manzo Leathers\.$/.test(r.description) && /
 
 // the page
 const nonces = new Set();
-for (const path of ["/atelier", "/atelier/"]) {
+for (const path of ["/soho", "/soho/"]) {
   const r = await go("https://relentlessbillionaire.com" + path);
   assert.equal(r.status, 200, path);
   const csp = r.headers.get("Content-Security-Policy"), html = await r.text();
@@ -47,8 +47,12 @@ for (const path of ["/atelier", "/atelier/"]) {
   assert.ok(!/treasury|ad revenue|genesis \d+\/\d+|\d+ (genesis )?left\b|\+12\.4%|sponsored/i.test(html.replace(/<(script|style)[\s\S]*?<\/(script|style)>/g, "")), "no invented numbers, scarcity or ads");
 }
 assert.equal(nonces.size, 2);
-assert.equal((await go("https://relentlessbillionaire.com/atelier", { method: "HEAD" })).status, 200);
-assert.equal((await go("https://www.relentlessbillionaire.com/atelier")).status, 200);
+assert.equal((await go("https://relentlessbillionaire.com/soho", { method: "HEAD" })).status, 200);
+assert.equal((await go("https://www.relentlessbillionaire.com/soho")).status, 200);
+for (const old of ["/atelier", "/atelier/", "/atelier?x=1"]) {
+  const r = await go("https://relentlessbillionaire.com" + old, { redirect: "manual" });
+  assert.equal(r.status, 301, old); assert.equal(r.headers.get("Location"), "https://relentlessbillionaire.com/soho" + (old.includes("?") ? "?x=1" : ""));
+}
 
 // the data and a request
 const shop = await (await go("https://relentlessbillionaire.com/api/shop?brand=atelier")).json();
@@ -61,12 +65,12 @@ assert.equal(DB.raw.prepare("SELECT brand FROM shop_inquiries ORDER BY id DESC")
 
 // the Store's tab and RB admin
 const store = await (await go("https://relentlessbillionaire.com/store")).text();
-assert.match(store, /<a class="btab" href="\/atelier"[^>]*>Soho Atelier<small>Varsity &amp; Leather · Manzo Leathers<\/small><\/a>/);
+assert.match(store, /<a class="btab" href="\/soho"[^>]*>Soho Atelier<small>Varsity &amp; Leather · Manzo Leathers<\/small><\/a>/);
 assert.ok(store.includes(".btab[data-brand]"), "only the two brand tabs switch in place");
 const src = readFileSync(process.argv[2], "utf8");
 for (const want of ['<option value="atelier">Soho Atelier \\u2014 Manzo Leathers</option>', "q.brand==='atelier'?'Soho Atelier'", 'b.brand === "slank" || b.brand === "atelier" ? b.brand : "rb"'])
   assert.equal(src.split(want).length - 1, 1, want);
-console.log("Soho Atelier ok: nine pieces seeded once, /atelier with scripts by nonce only, with every link on relentlessbillionaire.com, no invented numbers, requests saved as Atelier, the Store tab, RB admin keeps the brand");
+console.log("Soho Atelier ok: nine pieces seeded once, /soho (and /atelier redirecting) with scripts by nonce only, with every link on relentlessbillionaire.com, no invented numbers, requests saved as Atelier, the Store tab, RB admin keeps the brand");
 
 if (process.argv.includes("--browser")) {
   const { chromium } = await import("/opt/node22/lib/node_modules/playwright/index.mjs");
@@ -74,13 +78,13 @@ if (process.argv.includes("--browser")) {
   for (const vp of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
     const p = await b.newPage({ viewport: vp }); const errs = [];
     p.on("pageerror", (e) => errs.push(e.message)); p.on("console", (m) => m.type() === "error" && errs.push(m.text()));
-    await p.route(/^https:\/\/relentlessbillionaire\.com\/(atelier|api\/shop)/, async (route) => {
+    await p.route(/^https:\/\/relentlessbillionaire\.com\/(soho|api\/shop)/, async (route) => {
       const q = route.request();
       const res = await go(q.url(), { method: q.method(), headers: q.headers(), body: q.method() === "POST" ? q.postData() : undefined });
       const h = {}; res.headers.forEach((v, k) => (h[k] = v));
       await route.fulfill({ status: res.status, headers: h, body: Buffer.from(await res.arrayBuffer()) });
     });
-    await p.goto("https://relentlessbillionaire.com/atelier", { waitUntil: "networkidle" }); await p.waitForTimeout(1200);
+    await p.goto("https://relentlessbillionaire.com/soho", { waitUntil: "networkidle" }); await p.waitForTimeout(1200);
     assert.equal(await p.locator(".card").count(), 9);
     assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "no sideways scroll at " + vp.width);
     for (let y = 0; y < 6000; y += 500) { await p.evaluate((v) => scrollTo(0, v), y); await p.waitForTimeout(120); }

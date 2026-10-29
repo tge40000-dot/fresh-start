@@ -29,7 +29,7 @@ fi
 py "$ROOT/rb-tools/palettes.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_artist_router.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_home_status.py" "$W/artist-router"
 # RB Create at /create; /record and /studio may be framed by their own site; the free AI voice it uses
 py "$ROOT/rb-site-updates/patch_artist_router_create.py" "$W/artist-router"
-# the Soho Luxury Atelier at /atelier (the Genesis jackets, made by Manzo Leathers; pieces live in shop_products, brand atelier)
+# the Soho Luxury Atelier at /soho (/atelier redirects) (the Genesis jackets, made by Manzo Leathers; pieces live in shop_products, brand atelier)
 py "$ROOT/rb-site-updates/patch_atelier.py" "$W/artist-router"
 # gold skeletons (with the words kept for screen readers) for the shop, store, roster and scoreboard loading states
 py "$ROOT/rb-site-updates/patch_loading_states.py" "$W/artist-router"

@@ -1,17 +1,17 @@
-"""The Soho Luxury Atelier at relentlessbillionaire.com/atelier (artist-router, code only).
+"""The Soho Luxury Atelier at relentlessbillionaire.com/soho (artist-router, code only).
 
 Usage: python3 -I patch_atelier.py <pulled artist-router dir>
 
 The Genesis collection (the nine varsity, leather and wool pieces from the old Pages build of the RB shop), manufactured
 by Manzo Leathers, as its own page:
-- the page (rb-site-updates/src/atelier/atelier.html) is embedded and served at /atelier and /atelier/ on the main
+- the page (rb-site-updates/src/atelier/atelier.html) is embedded and served at /soho and /soho/ on the main
   site's hosts with a fresh script nonce and a strict CSP per request (styles may be inline, so the RB Radio bar that
   the Worker adds to every page can style itself: the old shop had its music player at the bottom too; fonts may come
   from the site itself, where Cloudflare's font optimisation serves Google Fonts);
 - the pieces are ordinary shop products with brand "atelier" (shop_products), so prices, pictures and order are edited
   in RB admin > Shop like any other product; requests go through the shop's own /api/shop/inquire and show in RB admin
   > Inquiries labelled "Soho Atelier";
-- The Store (/store) gets a third tab that opens the Atelier;
+- The Store (/store) gets a third tab that opens it, and the page's first address, /atelier, redirects to /soho;
 - RB admin's product form can choose the Atelier brand, and saving an Atelier piece keeps it in the Atelier.
 Nothing is charged on the page: a request is sent and the atelier replies by email. No route, binding or secret changes.
 Running it twice changes nothing; re-running with a newer atelier.html replaces the page.
@@ -66,13 +66,20 @@ def rep(old, new, what):
 
 
 ROUTE_OLD = "    if (path === '/passport' || path === '/passport/') return new Response(passportHTML(),"
+OLD_ROUTE = "    if ((path === '/atelier' || path === '/atelier/') && (host === 'relentlessbillionaire.com' || host === 'www.relentlessbillionaire.com') && (request.method === 'GET' || request.method === 'HEAD')) return rbAtelierPage(request);\n"
+if OLD_ROUTE in s:
+    s = s.replace(OLD_ROUTE, ""); changed.append("old /atelier route")
 rep(ROUTE_OLD,
-    "    if ((path === '/atelier' || path === '/atelier/') && (host === 'relentlessbillionaire.com' || host === 'www.relentlessbillionaire.com') && (request.method === 'GET' || request.method === 'HEAD')) return rbAtelierPage(request);\n" + ROUTE_OLD,
+    "    if ((path === '/soho' || path === '/soho/') && (host === 'relentlessbillionaire.com' || host === 'www.relentlessbillionaire.com') && (request.method === 'GET' || request.method === 'HEAD')) return rbAtelierPage(request);\n"
+    "    if ((path === '/atelier' || path === '/atelier/') && (host === 'relentlessbillionaire.com' || host === 'www.relentlessbillionaire.com')) return Response.redirect('https://relentlessbillionaire.com/soho' + url.search, 301);\n" + ROUTE_OLD,
     "route")
 # The Store: a third tab, a link to the Atelier
+OLD_TAB = '    <a class="btab" href="/atelier" style="text-decoration:none">'
+if OLD_TAB in s:
+    s = s.replace(OLD_TAB, '    <a class="btab" href="/soho" style="text-decoration:none">'); changed.append("store tab to /soho")
 rep('    <button class="btab" data-brand="slank">Slank Customs<small>Custom Apparel &amp; Print</small></button>\n  </div>',
     '    <button class="btab" data-brand="slank">Slank Customs<small>Custom Apparel &amp; Print</small></button>\n'
-    '    <a class="btab" href="/atelier" style="text-decoration:none">Soho Atelier<small>Varsity &amp; Leather \\xB7 Manzo Leathers</small></a>\n  </div>',
+    '    <a class="btab" href="/soho" style="text-decoration:none">Soho Atelier<small>Varsity &amp; Leather \\xB7 Manzo Leathers</small></a>\n  </div>',
     "store tab")
 rep("  document.querySelectorAll('.btab').forEach(function(tab){\n    tab.addEventListener('click', function(){",
     "  document.querySelectorAll('.btab[data-brand]').forEach(function(tab){\n    tab.addEventListener('click', function(){",

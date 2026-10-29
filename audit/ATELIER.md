@@ -1,6 +1,6 @@
 # Soho Luxury Atelier, 29 Oct 2026
 
-**Live at relentlessbillionaire.com/atelier.** It rebuilds the shop from the old Pages build
+**Live at relentlessbillionaire.com/soho** (its first address, /atelier, redirects there). It rebuilds the shop from the old Pages build
 (`0dff6f8d.relentless-billionaire.pages.dev`, which isn't rolled back to or linked anywhere) inside the main site. It
 has the same nine outfits, pictures and prices, with Manzo Leathers credited as the manufacturer.
 
@@ -62,7 +62,7 @@ has the same nine outfits, pictures and prices, with Manzo Leathers credited as 
   run again). Change prices, pictures, wording or order in RB admin > Shop; its brand menu now has "Soho Atelier".
 - **Pictures:** `media.relentlessbillionaire.com/atelier/*.webp` (R2 bucket `relentless-billionaire-media`), in 640 and
   1200 px sizes.
-- **The Store:** `/store` has a third tab, **Soho Atelier**, that opens the page.
+- **The Store:** `/store` has a third tab, **Soho Atelier**, that opens /soho.
 
 ## Checked
 
@@ -86,7 +86,8 @@ artist-router, from Cloudflare > Workers > artist-router > Deployments:
 
 | Version | What it is |
 | --- | --- |
-| `127a2eec` | Live now |
+| `024ed006` | Live now: the page at /soho, /atelier redirecting |
+| `127a2eec` | The page at /atelier |
 | `91aa9f46` | Before the Atelier |
 
 To take the pieces down without a rollback, set them to archived in RB admin > Shop. The rows and pictures are additive.
