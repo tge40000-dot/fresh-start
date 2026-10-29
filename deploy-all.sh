@@ -37,6 +37,7 @@ py "$ROOT/rb-site-updates/patch_embed_create.py" "$W/rb-mastering-studio"
 # RB Studio (rb-daw) is built from workers/rb-daw/src (its source since 18 Oct 2026; the old rb-daw patches are all in it).
 # --check builds it and compares with live: exit 1 just means src/ has changes that are not deployed yet.
 node "$ROOT/workers/rb-daw/test.mjs"
+node "$ROOT/rb-site-updates/test/studio-vocal.test.mjs"   # clean-up, timing, comping, vocal chains (Prompt C)
 "$ROOT/workers/rb-daw/deploy.sh" --check || echo "rb-daw: src/ differs from live (deployed below)"
 py "$ROOT/rb-site-updates/patch_ai_speech.py" "$W/relentless-billionaire-api"
 py "$ROOT/rb-site-updates/patch_ai_image.py" "$W/relentless-billionaire-api"

@@ -1122,6 +1122,84 @@ var RBPRESETS = {
       delSync: "1/8",
     },
   },
+  /* RB vocal chains (Prompt C, 29 Oct 2026): Warm, Radio-Ready and Aggressive. "Clean vocal" is the first built-in. */
+  warm: {
+    label: "Warm vocal",
+    fx: {
+      low: 1,
+      mid: -1,
+      high: 1,
+      comp: 0.5,
+      reverb: 0.22,
+      delay: 0.1,
+      compMode: "smooth",
+      lowCut: !0,
+      lowCutHz: 70,
+      deEss: !0,
+      deEssHz: 6500,
+      deEssDb: -34,
+      drive: !0,
+      driveStyle: "tube",
+      driveAmt: 0.25,
+      driveMix: 0.45,
+      revMode: "room",
+      delSync: "1/4",
+    },
+  },
+  radio_ready: {
+    label: "Radio-Ready vocal",
+    fx: {
+      low: -2,
+      mid: 2,
+      high: 4,
+      comp: 0.75,
+      reverb: 0.12,
+      delay: 0.08,
+      compMode: "punch",
+      lowCut: !0,
+      lowCutHz: 100,
+      air: !0,
+      airDb: 4,
+      deEss: !0,
+      deEssHz: 7e3,
+      deEssDb: -30,
+      drive: !0,
+      driveStyle: "console",
+      driveAmt: 0.2,
+      driveMix: 0.4,
+      gate: !0,
+      gateDb: -55,
+      revMode: "plate",
+      delSync: "1/8",
+    },
+  },
+  aggressive: {
+    label: "Aggressive vocal",
+    fx: {
+      low: -3,
+      mid: 4,
+      high: 3,
+      comp: 0.85,
+      reverb: 0.05,
+      delay: 0.1,
+      compMode: "punch",
+      lowCut: !0,
+      lowCutHz: 130,
+      deEss: !0,
+      deEssHz: 6e3,
+      deEssDb: -28,
+      drive: !0,
+      driveStyle: "tape",
+      driveAmt: 0.6,
+      driveMix: 0.75,
+      double: !0,
+      doubleAmt: 0.45,
+      gate: !0,
+      gateDb: -48,
+      revMode: "room",
+      delSync: "1/16",
+    },
+  },
 };
 function rbPlug(n) {
   let f = n.fx,
@@ -2033,6 +2111,204 @@ function Pt(t) {
   return n;
 }
 var $t = () => new Promise((t) => setTimeout(t, 0));
+/* RB vocal tools begin (Prompt C, 29 Oct 2026): clean-up (noise reduction), timing tighten and take comping. All of it
+   runs on this device and writes a new file; the original take is never changed. The functions here take plain
+   Float32Array channels so they can be checked outside a browser (rb-site-updates/test/studio-vocal.test.mjs). */
+// Noise reduction by spectral subtraction. The noise is learned from the quietest tenth of the take; nothing is learned
+// if the take has no quiet part (the voice would be learned as noise), and nothing is done if it's already quiet.
+async function rbDenoise(ch, sr, amount = 0.5, prog = null) {
+  let N = 2048,
+    H = 512,
+    K = N / 2 + 1,
+    len = ch[0].length,
+    win = qe(N),
+    mono = ch.length === 1 ? ch[0] : (() => {
+      let m = new Float32Array(len);
+      for (let c of ch) for (let i = 0; i < len; i++) m[i] += c[i] / ch.length;
+      return m;
+    })(),
+    frames = Math.ceil((len + N) / H),
+    at = (f) => f * H - N + H, // first sample of frame f (frames overlap the edges)
+    rms = new Float32Array(frames);
+  if (len < sr * 0.5) return { skipped: "short" };
+  for (let f = 0; f < frames; f++) {
+    let s = 0, n = 0;
+    for (let i = Math.max(0, at(f)), e = Math.min(len, at(f) + N); i < e; i++) (s += mono[i] * mono[i]), n++;
+    rms[f] = n ? Math.sqrt(s / n) : 0;
+  }
+  let live = [...rms.keys()].filter((f) => rms[f] > 1e-6 && at(f) >= 0 && at(f) + N <= len).sort((a, b) => rms[a] - rms[b]);
+  if (live.length < 8) return { skipped: "short" };
+  let quiet = live.slice(0, Math.max(5, Math.floor(live.length / 10))),
+    db = (v) => 20 * Math.log10(Math.max(v, 1e-9)),
+    noiseDb = db(quiet.reduce((s, f) => s + rms[f], 0) / quiet.length),
+    medianDb = db(rms[live[Math.floor(live.length / 2)]]);
+  if (noiseDb < -78) return { skipped: "clean", noiseDb };
+  if (medianDb - noiseDb < 10) return { skipped: "noquiet", noiseDb };
+  let re = new Float64Array(N),
+    im = new Float64Array(N),
+    spec = (x, s) => {
+      for (let i = 0; i < N; i++) {
+        let j = s + i;
+        (re[i] = j >= 0 && j < len ? x[j] * win[i] : 0), (im[i] = 0);
+      }
+      Ue(re, im);
+    },
+    noise = new Float64Array(K);
+  for (let f of quiet) {
+    spec(mono, at(f));
+    for (let k = 0; k < K; k++) noise[k] += Math.hypot(re[k], im[k]) / quiet.length;
+  }
+  let alpha = 1 + 1.5 * amount,
+    floor = Math.pow(10, -(6 + 18 * amount) / 20),
+    prev = new Float64Array(K).fill(1),
+    g = new Float64Array(K),
+    gs = new Float64Array(K),
+    out = ch.map(() => new Float32Array(len)),
+    norm = new Float32Array(len),
+    mag = new Float64Array(K),
+    cre = new Float64Array(N),
+    cim = new Float64Array(N);
+  for (let f = 0; f < frames; f++) {
+    let s = at(f);
+    spec(mono, s);
+    for (let k = 0; k < K; k++) mag[k] = Math.hypot(re[k], im[k]);
+    for (let k = 0; k < K; k++) {
+      let v = mag[k] > 1e-12 ? Math.max(floor, 1 - (alpha * noise[k]) / mag[k]) : floor;
+      g[k] = v >= prev[k] ? v : 0.6 * prev[k] + 0.4 * v; // open at once, close gently (less "musical noise")
+    }
+    for (let k = 0; k < K; k++) gs[k] = 0.25 * g[Math.max(0, k - 1)] + 0.5 * g[k] + 0.25 * g[Math.min(K - 1, k + 1)];
+    prev.set(g);
+    for (let c = 0; c < ch.length; c++) {
+      if (ch.length === 1) cre.set(re), cim.set(im);
+      else {
+        for (let i = 0; i < N; i++) {
+          let j = s + i;
+          (cre[i] = j >= 0 && j < len ? ch[c][j] * win[i] : 0), (cim[i] = 0);
+        }
+        Ue(cre, cim);
+      }
+      for (let k = 0; k < K; k++) (cre[k] *= gs[k]), (cim[k] *= gs[k]);
+      for (let k = K; k < N; k++) (cre[k] = cre[N - k]), (cim[k] = -cim[N - k]);
+      for (let i = 0; i < N; i++) cim[i] = -cim[i]; // inverse FFT: conjugate, forward, conjugate, scale
+      Ue(cre, cim);
+      let o = out[c];
+      for (let i = 0; i < N; i++) {
+        let j = s + i;
+        j >= 0 && j < len && ((o[j] += (cre[i] / N) * win[i]), c === 0 && (norm[j] += win[i] * win[i]));
+      }
+    }
+    prog && f % 256 === 0 && (prog(f / frames), await $t());
+  }
+  for (let o of out) for (let i = 0; i < len; i++) o[i] = norm[i] > 1e-6 ? o[i] / norm[i] : 0;
+  let after = 0;
+  for (let f of quiet) {
+    let sm = 0;
+    for (let i = at(f); i < at(f) + N; i++) {
+      let v = 0;
+      for (let o of out) v += o[i] / out.length;
+      sm += v * v;
+    }
+    after += Math.sqrt(sm / N) / quiet.length;
+  }
+  return { out, noiseDb, lowered: noiseDb - db(after) };
+}
+// Phrases: runs of sound, in 5 ms steps, split by gaps of at least 120 ms; blips under 60 ms are ignored.
+function rbPhrases(x, sr) {
+  let W = Math.max(1, Math.round(sr * 0.005)),
+    n = Math.floor(x.length / W),
+    env = new Float32Array(n);
+  for (let w = 0; w < n; w++) {
+    let s = 0;
+    for (let i = w * W; i < (w + 1) * W; i++) s += x[i] * x[i];
+    env[w] = 10 * Math.log10(s / W + 1e-12);
+  }
+  let peak = Math.max(...env),
+    sorted = [...env].sort((a, b) => a - b),
+    floor = Math.max(-100, sorted[Math.floor(sorted.length / 10)] ?? -100), // the room's noise (digital silence counts as -100)
+    thr = Math.max(floor + 12, peak - 40),
+    runs = [];
+  for (let w = 0; w < n; w++)
+    if (env[w] > thr) {
+      let last = runs[runs.length - 1];
+      last && w - last[1] <= 24 ? (last[1] = w + 1) : runs.push([w, w + 1]);
+    }
+  return runs.filter((r) => r[1] - r[0] >= 12).map(([a, b]) => ({ start: a * W, end: Math.min(x.length, b * W) }));
+}
+// Timing tighten: each phrase moves as a whole toward the nearest grid line (beatAt(sample) gives the song beat). A
+// phrase never moves more than half the gap to its neighbours, so phrases never overlap; edges are faded over 5 ms in
+// the quiet between phrases. Inside a phrase nothing is stretched or cut.
+function rbTighten(ch, sr, { beatAt, spb, grid = 0.5, strength = 1, phrases = null }) {
+  let len = ch[0].length,
+    mono = ch.length === 1 ? ch[0] : ch[0].map((v, i) => ch.reduce((s, c) => s + c[i], 0) / ch.length),
+    ph = phrases || rbPhrases(mono, sr),
+    moves = [];
+  for (let i = 0; i < ph.length; i++) {
+    let p = ph[i],
+      b = beatAt(p.start),
+      want = (Math.round(b / grid) * grid - b) * spb * sr * strength,
+      before = i ? p.start - ph[i - 1].end : p.start,
+      after = i < ph.length - 1 ? ph[i + 1].start - p.end : len - p.end,
+      d = Math.round(Math.max(-before / 2, Math.min(after / 2, want)));
+    Math.abs(d) < sr * 0.001 && (d = 0), moves.push(d);
+  }
+  let F = Math.round(sr * 0.005),
+    out = ch.map(() => new Float32Array(len)),
+    bounds = ph.map((p, i) => (i ? Math.round((ph[i - 1].end + p.start) / 2) : 0));
+  if (!ph.length) return { out: ch.map((c) => c.slice()), moves: [] };
+  for (let i = 0; i < ph.length; i++) {
+    let a = bounds[i],
+      e = i < ph.length - 1 ? bounds[i + 1] : len,
+      d = moves[i];
+    for (let c = 0; c < ch.length; c++) {
+      let src = ch[c], o = out[c];
+      for (let j = a; j < e; j++) {
+        let t = j + d;
+        if (t < 0 || t >= len) continue;
+        let fade = Math.min(1, i ? (j - a) / F : 1, i < ph.length - 1 ? (e - j) / F : 1);
+        o[t] += src[j] * fade;
+      }
+    }
+  }
+  return { out, moves: moves.map((d) => (d / sr) * 1e3) };
+}
+// Comping: segment k comes from take picks[k]; where the take changes, a 10 ms equal-power crossfade.
+function rbComp(takes, picks, bounds, sr) {
+  let len = Math.min(...takes.map((t) => t[0].length)),
+    chs = Math.min(...takes.map((t) => t.length)),
+    X = Math.round(sr * 0.01),
+    out = [];
+  for (let c = 0; c < chs; c++) {
+    let o = new Float32Array(len);
+    for (let k = 0; k < bounds.length; k++) {
+      let a = bounds[k], e = k < bounds.length - 1 ? bounds[k + 1] : len;
+      o.set(takes[picks[k]][c].subarray(a, e), a);
+    }
+    for (let k = 1; k < bounds.length; k++) {
+      if (picks[k] === picks[k - 1]) continue;
+      let p = takes[picks[k - 1]][c], n = takes[picks[k]][c], s = Math.max(0, bounds[k] - (X >> 1));
+      for (let j = s; j < Math.min(len, s + X); j++) {
+        let t = ((j - s) / X) * (Math.PI / 2);
+        o[j] = p[j] * Math.cos(t) + n[j] * Math.sin(t);
+      }
+    }
+    out.push(o);
+  }
+  return out;
+}
+// Where the song's bar lines fall in a clip's file (in samples): the comp's segments.
+function rbBars(clip, len, sr, bpm = r.p.bpm, bpb = r.p.beatsPerBar || 4) {
+  let spb = 60 / bpm,
+    b0 = clip.start - clip.audio.offset / spb,
+    out = [0];
+  for (let m = Math.floor(b0 / bpb + 1e-9) + 1; ; m++) {
+    let p = Math.round((m * bpb - b0) * spb * sr);
+    if (p >= len - sr * 0.05) break;
+    p > sr * 0.05 && out.push(p);
+  }
+  // song bar numbers, counting from 1, for the labels
+  return { bounds: out, bars: out.map((p) => Math.floor((b0 + p / sr / spb) / bpb + 1e-6) + 1) };
+}
+/* RB vocal tools end */
 async function Jt(t, e) {
   let a = Math.round(e / 86),
     o = qe(1024),
@@ -2669,25 +2945,29 @@ async function bt() {
 }
 function Je(t, e) {
   let n = X(t);
-  !n ||
-    !n.c.audio.takes ||
-    !n.c.audio.takes.includes(e) ||
-    x(
-      () => {
-        (n.c.audio.fileId = e), delete n.c.audio.tune;
-      },
-      { what: "editor+lanes" },
-    );
+  if (!n || !n.c.audio.takes || !n.c.audio.takes.includes(e)) return;
+  let a = n.c.audio,
+    had = a.fix || a.tune || a.comp,
+    old = [a.fileId, a.tune && a.tune.src, a.fix && a.fix.src, a.comp && a.comp.file].filter((f) => f && !a.takes.includes(f));
+  x(
+    (y) => {
+      a.tune && (a.lastTune = rbTuneOf(a.tune)), a.comp && (a.lastComp = a.comp.picks);
+      (a.fileId = e), delete a.tune, delete a.fix, delete a.comp;
+      for (let f of new Set(old)) ve(y, f, null) || delete y.files[f];
+    },
+    { what: "editor+lanes" },
+  );
+  had && w("Playing a single take. Clean-up and AutoPitch are off for it; their settings are kept for when you apply them again.", "ok");
 }
 function Ze(t) {
   let e = X(t);
   if (!e || !e.c.audio.takes) return;
-  let n = e.c.audio.tune ? e.c.audio.tune.src : e.c.audio.fileId;
+  let n = rbOrig(e.c.audio);
   x(
     (a) => {
       let o = e.c.audio.takes.filter((s) => s !== n && !ve(a, s, e.c));
       for (let s of o) delete a.files[s];
-      delete e.c.audio.takes;
+      delete e.c.audio.takes, delete e.c.audio.comp, delete e.c.audio.lastComp;
     },
     { what: "editor+lanes" },
   );
@@ -2698,7 +2978,10 @@ function ve(t, e, n) {
       if (
         o !== n &&
         o.audio &&
-        (o.audio.fileId === e || (o.audio.takes || []).includes(e) || (o.audio.tune && o.audio.tune.src === e))
+        (o.audio.fileId === e ||
+          (o.audio.takes || []).includes(e) ||
+          (o.audio.tune && o.audio.tune.src === e) ||
+          (o.audio.fix && o.audio.fix.src === e))
       )
         return !0;
   return !1;
@@ -2778,7 +3061,275 @@ function tn(t) {
     },
     { what: "editor+lanes" },
   ),
-    w("AutoPitch off: the original take is back.", "ok");
+    w(e.c.audio.fix ? "AutoPitch off. Clean-up stays on." : "AutoPitch off: the original take is back.", "ok");
+}
+/* RB vocal tools: the clip side (Prompt C). A clip's audio is a chain, each step a file of its own:
+   take (or comp) -> clean-up (audio.fix) -> AutoPitch (audio.tune) -> what plays (audio.fileId).
+   Turning a step off goes back to the file before it; the take itself is never written over. */
+var RBGRID = { "1/8": 0.5, "1/16": 0.25 },
+  rbPicks = new Map(),
+  rbPrev = null;
+function rbOrig(a) {
+  return a.fix ? a.fix.src : a.tune ? a.tune.src : a.fileId;
+}
+var rbTuneOf = (t) => ({ tonic: t.tonic, scale: t.scale, strength: t.strength, speed: t.speed }),
+  rbChans = (b) => Array.from({ length: b.numberOfChannels }, (_, c) => b.getChannelData(c)),
+  rbName = (f) => (r.p.files[f]?.name || "vocal").replace(/\.[a-z0-9]+$/i, "").replace(/ \((cleaned|AutoPitch)\)$/, "");
+async function rbPut(ch, sr, meta) {
+  let b = g.ctx.createBuffer(ch.length, ch[0].length, sr);
+  ch.forEach((c, i) => b.getChannelData(i).set(c));
+  let d = lt(b),
+    u = j("f");
+  return (
+    g.buffers.set(u, b),
+    r.peaks.set(u, st(b, Math.ceil(b.duration * 100))),
+    await F.putAudio(r.p.id, u, d),
+    { id: u, file: { dur: b.duration, sr, ch: ch.length, bytes: d.size, type: "audio/wav", ...meta } }
+  );
+}
+// Clean-up: noise reduction and/or timing on the take (or comp). AutoPitch, if on, is redone on top.
+async function rbFix(id, o) {
+  let n = X(id);
+  if (!n) return;
+  let a = n.c.audio,
+    src = rbOrig(a),
+    b = g.buffers.get(src);
+  if (!b) return w("That recording isn't loaded yet.", "bad");
+  if (!(o.denoise > 0) && !RBGRID[o.timing]) return w("Turn up Noise reduction or pick a timing grid first.", "bad");
+  let t0 = performance.now(),
+    ch = rbChans(b),
+    changed = !1,
+    notes = [];
+  if (o.denoise > 0) {
+    w("Clean-up: learning the noise…");
+    let d = await rbDenoise(ch, b.sampleRate, o.denoise, (p) => w(`Clean-up: ${Math.round(p * 100)}%…`));
+    if (d.skipped === "noquiet" && !RBGRID[o.timing])
+      return w(
+        "Clean-up needs a quiet moment to learn the noise from (half a second before you sing is enough). Nothing was changed.",
+        "bad",
+      );
+    d.skipped === "noquiet"
+      ? notes.push("noise left as is (no quiet moment to learn it from)")
+      : d.skipped === "clean"
+      ? notes.push(`no noise to remove (it's at ${Math.round(d.noiseDb)} dBFS)`)
+      : d.skipped
+        ? notes.push("too short to clean")
+        : ((ch = d.out), (changed = !0), notes.push(`noise was ${Math.round(d.noiseDb)} dBFS, now ${Math.round(d.lowered)} dB lower`));
+  }
+  if (RBGRID[o.timing]) {
+    let spb = 60 / r.p.bpm,
+      sr = b.sampleRate,
+      t = rbTighten(ch, sr, {
+        beatAt: (s) => n.c.start + (s / sr - a.offset) / spb,
+        spb,
+        grid: RBGRID[o.timing],
+        strength: o.strength,
+      }),
+      m = t.moves.filter((v) => v).map(Math.abs);
+    m.length
+      ? ((ch = t.out),
+        (changed = !0),
+        notes.push(
+          `${m.length} of ${t.moves.length} phrases moved toward the ${o.timing} grid, ${Math.round(m.reduce((s, v) => s + v, 0) / m.length)} ms on average (most ${Math.round(Math.max(...m))} ms)`,
+        ))
+      : notes.push(t.moves.length ? `all ${t.moves.length} phrases already on the ${o.timing} grid` : "no phrases found to move");
+  }
+  if (!changed) return w("Nothing to change: " + notes.join("; ") + ".", "ok");
+  let u = await rbPut(ch, b.sampleRate, { name: `${rbName(src)} (cleaned).wav`, cleanedFrom: src }),
+    tune = a.tune ? rbTuneOf(a.tune) : null,
+    old = [a.fix && a.fix.out, a.tune && a.fileId].filter(Boolean),
+    secs = ((performance.now() - t0) / 1e3).toFixed(1);
+  x(
+    (y) => {
+      (y.files[u.id] = u.file), (a.fileId = u.id);
+      a.fix = { src, out: u.id, denoise: o.denoise || 0, timing: RBGRID[o.timing] ? o.timing : "", strength: o.strength, notes: notes.join("; ") };
+      (a.lastFix = { denoise: a.fix.denoise, timing: a.fix.timing, strength: o.strength }), delete a.tune;
+      for (let f of old) f !== src && !ve(y, f, null) && delete y.files[f];
+    },
+    { what: "editor+lanes" },
+  );
+  tune && (await Qe(id, tune));
+  w(`Clean-up on in ${secs} s: ${notes.join("; ")}.${tune ? " AutoPitch redone on top." : ""} The original is kept; Turn off brings it back.`, "ok");
+}
+function rbFixOff(id) {
+  let n = X(id);
+  if (!n || !n.c.audio.fix) return;
+  let a = n.c.audio,
+    tune = a.tune ? rbTuneOf(a.tune) : null,
+    old = [a.fix.out, a.tune && a.fileId].filter(Boolean);
+  x(
+    (y) => {
+      (a.fileId = a.fix.src), delete a.fix, delete a.tune;
+      for (let f of old) ve(y, f, null) || delete y.files[f];
+    },
+    { what: "editor+lanes" },
+  );
+  tune ? Qe(id, tune).then(() => w("Clean-up off: the original take is back, with AutoPitch redone on it.", "ok")) : w("Clean-up off: the original take is back.", "ok");
+}
+// Comp: bar by bar from the loop takes, 10 ms crossfades. Clean-up and AutoPitch, if on, are redone on the comp.
+async function rbBuildComp(id, picks) {
+  let n = X(id);
+  if (!n || !n.c.audio.takes) return;
+  let a = n.c.audio,
+    bufs = a.takes.map((f) => g.buffers.get(f));
+  if (bufs.some((b) => !b)) return w("The takes aren't all loaded yet.", "bad");
+  let sr = bufs[0].sampleRate,
+    { bounds } = rbBars(n.c, Math.min(...bufs.map((b) => b.length)), sr);
+  if (picks.length !== bounds.length) return w("The bars changed (tempo or clip moved). Pick the bars again.", "bad");
+  if (picks.every((p) => p === picks[0])) return Je(id, a.takes[picks[0]]);
+  let ch = rbComp(bufs.map(rbChans), picks, bounds, sr),
+    u = await rbPut(ch, sr, { name: `${n.t.name || "Vocal"} comp.wav`, compOf: a.takes.slice() }),
+    fix = a.fix ? { denoise: a.fix.denoise, timing: a.fix.timing, strength: a.fix.strength } : null,
+    tune = a.tune ? rbTuneOf(a.tune) : null,
+    old = [a.fileId, a.tune && a.tune.src, a.fix && a.fix.src, a.comp && a.comp.file].filter((f) => f && !a.takes.includes(f));
+  x(
+    (y) => {
+      (y.files[u.id] = u.file), (a.fileId = u.id), (a.comp = { picks: picks.slice(), file: u.id }), delete a.fix, delete a.tune;
+      for (let f of new Set(old)) ve(y, f, null) || delete y.files[f];
+    },
+    { what: "editor+lanes" },
+  );
+  fix && (await rbFix(id, fix)), tune && (await Qe(id, tune));
+  w(
+    `Comp built: ${picks.map((p, k) => `bar ${k + 1} take ${p + 1}`).join(", ")}, with 10 ms crossfades.${fix || tune ? " Clean-up and AutoPitch redone on it." : ""} The takes are kept.`,
+    "ok",
+  );
+}
+// Hear one file of the clip on its own (no track effects), to compare the original with the processed version.
+function rbPreview(f, c, btn) {
+  let was = rbPrev && rbPrev.btn;
+  if (rbPrev) {
+    try {
+      rbPrev.src.stop();
+    } catch {}
+    (rbPrev.btn.textContent = rbPrev.label), (rbPrev = null);
+  }
+  if (was === btn) return;
+  let b = g.buffers.get(f);
+  if (!b) return w("That recording isn't loaded yet.", "bad");
+  g.playing && (g.stop(), R("transport")), g.ctx.resume && g.ctx.resume();
+  let s = g.ctx.createBufferSource();
+  (s.buffer = b), s.connect(g.ctx.destination), s.start(0, c.audio.offset, c.audio.dur);
+  let me = (rbPrev = { src: s, btn, label: btn.textContent });
+  (btn.textContent = "■ Stop"),
+    (s.onended = () => {
+      rbPrev === me && ((btn.textContent = me.label), (rbPrev = null));
+    });
+}
+function rbFixPanel(e) {
+  let a = e.audio,
+    f = a.fix,
+    o = { denoise: 0.5, timing: "", strength: 0.8, ...(a.lastFix || {}), ...(f ? { denoise: f.denoise, timing: f.timing, strength: f.strength } : {}) },
+    slide = (lab, k, lo, hi) =>
+      l(
+        "label",
+        { class: "fine tunerow" },
+        lab,
+        l("span", { class: "fine", text: lo }),
+        l("input", {
+          type: "range",
+          min: "0",
+          max: "1",
+          step: "0.05",
+          value: String(o[k]),
+          "aria-label": lab,
+          oninput: (y) => (o[k] = +y.target.value),
+        }),
+        l("span", { class: "fine", text: hi }),
+      ),
+    orig = rbOrig(a),
+    processed = a.fileId !== orig;
+  return l(
+    "div",
+    { class: "tune" },
+    l("h4", { text: "Clean-up & timing" + (f ? " \xB7 on" : "") }),
+    l("p", {
+      class: "fine",
+      text: "Lowers steady noise (hiss, hum, a fan) and can move each sung phrase toward the beat, whole, without stretching it. It runs on this device and makes a new file; the take is never changed.",
+    }),
+    slide("Noise", "denoise", "off", "strong"),
+    l(
+      "div",
+      { class: "row2" },
+      l("span", { class: "fine", text: "Timing" }),
+      l(
+        "select",
+        { "aria-label": "Timing grid", onchange: (y) => (o.timing = y.target.value) },
+        ...[["", "Leave as sung"], ["1/8", "Tighten to 1/8 notes"], ["1/16", "Tighten to 1/16 notes"]].map(([v, t]) =>
+          l("option", { value: v, selected: o.timing === v, text: t }),
+        ),
+      ),
+    ),
+    slide("Tighten", "strength", "a little", "fully"),
+    f ? l("p", { class: "fine", text: f.notes }) : null,
+    l(
+      "div",
+      { class: "row2" },
+      l("button", {
+        class: "btn small gold",
+        type: "button",
+        onclick: (y) => bn(y.target, () => rbFix(e.id, { ...o, denoise: o.denoise > 0.02 ? o.denoise : 0 })),
+        text: f ? "Redo clean-up" : "Apply clean-up",
+      }),
+      f ? l("button", { class: "btn small", type: "button", onclick: () => rbFixOff(e.id), text: "Turn off" }) : null,
+    ),
+    processed
+      ? l(
+          "div",
+          { class: "row2" },
+          l("span", { class: "fine", text: "Compare, dry:" }),
+          l("button", { class: "btn small", type: "button", onclick: (y) => rbPreview(orig, e, y.target), text: "▶ Original" }),
+          l("button", { class: "btn small", type: "button", onclick: (y) => rbPreview(a.fileId, e, y.target), text: "▶ Processed" }),
+        )
+      : null,
+  );
+}
+// The comp grid under the takes: one column per bar of the song, one row per take.
+function rbCompGrid(t) {
+  let e = t.audio,
+    b = g.buffers.get(e.takes[0]);
+  if (!b || e.takes.some((f) => !g.buffers.get(f))) return null;
+  let { bounds, bars } = rbBars(t, Math.min(...e.takes.map((f) => g.buffers.get(f).length)), b.sampleRate);
+  if (bounds.length < 2) return null;
+  let cur = e.takes.indexOf(rbOrig(e)),
+    picks = [rbPicks.get(t.id), e.comp && e.comp.picks, e.lastComp].find((p) => p && p.length === bounds.length && p.every((v) => v < e.takes.length));
+  picks = (picks || bounds.map(() => (cur < 0 ? e.takes.length - 1 : cur))).slice();
+  rbPicks.set(t.id, picks);
+  let cells = [],
+    grid = l(
+      "div",
+      { class: "comp", role: "grid", "aria-label": "Comp: pick a take for each bar" },
+      l("span", { class: "fine", text: "Bar" }),
+      ...bars.map((n) => l("span", { class: "fine", text: String(n) })),
+      ...e.takes.flatMap((f, i) => [
+        l("span", { class: "fine", text: `Take ${i + 1}` }),
+        ...bounds.map((_, k) => {
+          let c = l("button", {
+            class: "mini",
+            type: "button",
+            "aria-pressed": String(picks[k] === i),
+            "aria-label": `Bar ${bars[k]}: take ${i + 1}`,
+            onclick: () => {
+              picks[k] = i;
+              for (let d of cells) d.k === k && d.el.setAttribute("aria-pressed", String(d.i === i));
+            },
+          });
+          return cells.push({ el: c, k, i }), c;
+        }),
+      ]),
+    );
+  grid.style.gridTemplateColumns = `auto repeat(${bounds.length}, minmax(22px, 1fr))`;
+  return l(
+    "div",
+    { class: "compwrap" },
+    l("p", { class: "fine", text: "Comp: pick the best take for each bar, then build. The takes are kept." }),
+    grid,
+    l(
+      "div",
+      { class: "row2" },
+      l("button", { class: "btn small gold", type: "button", onclick: (y) => bn(y.target, () => rbBuildComp(t.id, picks)), text: e.comp ? "Rebuild comp" : "Build comp" }),
+    ),
+  );
 }
 var xe = {
   clean: { label: "Clean vocal", fx: { low: -3, mid: 1, high: 3, comp: 0.5, reverb: 0.15, delay: 0.05 } },
@@ -3712,7 +4263,7 @@ function fa(t, e) {
           l("span", { class: "fine", text: "Sets the song's BPM and key from this audio (use it on beats)." }),
         ),
       ),
-      ga(t, e),
+      l("div", { style: "display:grid;gap:12px;align-content:start" }, ga(t, e), rbFixPanel(e)),
     ),
     l("p", {
       class: "fine",
@@ -3733,11 +4284,11 @@ async function bn(t, e) {
 function ma(t) {
   let e = t.audio;
   if (!e.takes || e.takes.length < 2) return null;
-  let n = e.takes.indexOf(e.tune ? e.tune.src : e.fileId);
+  let n = e.takes.indexOf(rbOrig(e));
   return l(
     "div",
     { class: "takes" },
-    l("b", { text: `Take ${n + 1} of ${e.takes.length}` }),
+    l("b", { text: n < 0 ? `Comp of ${e.takes.length} takes` : `Take ${n + 1} of ${e.takes.length}` }),
     ...e.takes.map((a, o) =>
       l("button", {
         class: "mini",
@@ -3755,14 +4306,15 @@ function ma(t) {
       onclick: () => {
         confirm("Keep this take and delete the others?") && Ze(t.id);
       },
-      text: "Keep this take",
+      text: n < 0 ? "Keep this comp" : "Keep this take",
     }),
+    rbCompGrid(t),
   );
 }
 function ga(t, e) {
   let n = e.audio,
     o = {
-      ...(n.tune || {
+      ...(n.tune || n.lastTune || {
         tonic: r.p.key ? r.p.key.tonic : 0,
         scale: r.p.key ? r.p.key.mode : "major",
         strength: 0.8,
@@ -3977,13 +4529,99 @@ function ba() {
             value: String(r.p.latencyMs || 0),
             title: "Extra recording latency correction in milliseconds. Raise it if recordings land late.",
             style: "width:60px;background:var(--bg);border:1px solid var(--line2);border-radius:5px;color:var(--text)",
-            onchange: (n) => x(() => (r.p.latencyMs = O(+n.target.value || 0, -200, 500)), { what: "none" }),
+            onchange: (n) => x(() => (r.p.latencyMs = O(+n.target.value || 0, -200, 500)), { what: "mixer" }),
           }),
         ),
+        l("button", {
+          class: "mini",
+          type: "button",
+          title: "Plays clicks through your speakers and listens with the mic to measure the delay. Unplug headphones first.",
+          onclick: (n) => bn(n.target, rbMeasureLatency),
+          text: "Measure",
+        }),
+        rbLatencyNote(),
       ),
     ),
     l("div", { class: "mixer" }, t)
   );
+}
+/* RB latency (Prompt C, 29 Oct 2026): what each take is corrected by, and a loopback measurement. */
+// What gets taken off the start of every take: the delay the browser reports for the mic and the speakers, plus the
+// project's own Latency number. Shown under the master strip so it's never a mystery.
+function rbLatencyNote() {
+  let i = g.input,
+    dev = i && g.ctx ? Math.round(((i.inLatency || 0) + (g.ctx.outputLatency || g.ctx.baseLatency || 0)) * 1e3) : null,
+    extra = r.p.latencyMs || 0;
+  return l("span", {
+    class: "fine rblat",
+    text:
+      dev == null
+        ? `Each take is corrected by the delay your device reports${extra ? `, plus ${extra} ms` : ""} (turn the mic on to see it).`
+        : `Each take is corrected by ${dev + extra} ms: ${dev} ms your device reports${extra ? ` + ${extra} ms Latency` : ""}.`,
+  });
+}
+// Where each click lands in a recording. clicks: when each was played, in seconds from the start of the recording.
+// Returns the delays (seconds) of the clicks that were clearly heard.
+function rbClickDelays(x, sr, clicks, maxDelay = 0.4) {
+  let out = [];
+  for (let c of clicks) {
+    let a = Math.round(c * sr), b = Math.min(x.length, Math.round((c + maxDelay) * sr));
+    if (a >= b) continue;
+    // the quiet just before the click is the noise floor
+    let q0 = Math.max(0, a - Math.round(0.05 * sr)), noise = 0, peak = 0;
+    for (let j = q0; j < a; j++) noise = Math.max(noise, Math.abs(x[j]));
+    for (let j = a; j < b; j++) peak = Math.max(peak, Math.abs(x[j]));
+    if (peak < 0.01 || peak < noise * 6) continue;
+    let thr = Math.max(noise * 3, peak * 0.3);
+    for (let j = a; j < b; j++) if (Math.abs(x[j]) >= thr) { out.push(j / sr - c); break; }
+  }
+  return out;
+}
+// Median of the clicks heard, if at least 5 agree within 3 ms; otherwise null.
+function rbLatencyFrom(delays) {
+  if (delays.length < 5) return null;
+  let d = delays.slice().sort((a, b) => a - b), m = d[Math.floor(d.length / 2)], near = d.filter((v) => Math.abs(v - m) <= 0.003);
+  return near.length >= 5 ? m : null;
+}
+async function rbMeasureLatency() {
+  if (g.recording) return w("Stop recording first.", "bad");
+  let inp = await g.openInput(r.inputId || "");
+  if (!g.worklet && !(await g.loadRecorder())) return w("This browser can't measure here.", "bad");
+  g.playing && (g.stop(), R("transport")), g.setMonitor(null);
+  let ctx = g.ctx,
+    sr = ctx.sampleRate,
+    node = new AudioWorkletNode(ctx, "rb-recorder", { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 2 }),
+    sink = ctx.createGain(),
+    chunks = [],
+    done,
+    fin = new Promise((f) => (done = f)),
+    burst = ctx.createBuffer(1, Math.round(sr * 0.003), sr);
+  burst.getChannelData(0).forEach((_, k, a) => (a[k] = (k % 2 ? -0.9 : 0.9) * (1 - k / a.length)));
+  (sink.gain.value = 0), inp.src.connect(node).connect(sink).connect(ctx.destination);
+  node.port.onmessage = (m) => (m.data.chunk && chunks.push(m.data.chunk), m.data.done && done());
+  let t0 = ctx.currentTime + 0.3,
+    clicks = Array.from({ length: 8 }, (_, k) => 0.5 + k * 0.45);
+  node.port.postMessage({ cmd: "start", at: t0 });
+  for (let c of clicks) {
+    let s = ctx.createBufferSource();
+    (s.buffer = burst), s.connect(ctx.destination), s.start(t0 + c);
+  }
+  w("Measuring: listening for 8 clicks…");
+  await new Promise((f) => setTimeout(f, (0.3 + clicks[7] + 0.6) * 1e3));
+  node.port.postMessage({ cmd: "stop" }), await Promise.race([fin, new Promise((f) => setTimeout(f, 1500))]);
+  try {
+    inp.src.disconnect(node);
+  } catch {}
+  node.disconnect(), sink.disconnect();
+  let n = chunks.reduce((a, c) => a + c[0].length, 0), pcm = new Float32Array(n), at = 0;
+  for (let c of chunks) pcm.set(c[0], at), (at += c[0].length);
+  let total = rbLatencyFrom(rbClickDelays(pcm, sr, clicks));
+  if (total == null)
+    return w("Couldn't hear the clicks clearly. Unplug headphones, turn the speakers up, keep the room quiet and try again. Latency wasn't changed.", "bad");
+  let dev = (inp.inLatency || 0) + (ctx.outputLatency || ctx.baseLatency || 0),
+    extra = Math.round(O((total - dev) * 1e3, -200, 500));
+  x(() => (r.p.latencyMs = extra), { what: "mixer" });
+  w(`Measured ${Math.round(total * 1e3)} ms from speaker to mic. Your device reports ${Math.round(dev * 1e3)} ms, so Latency is now ${extra} ms. Put your headphones back on to record.`, "ok");
 }
 var Se = null,
   J = null;
