@@ -196,13 +196,112 @@ function envelope(buf){
   return sm;
 }
 
-/* ------------------------------------------------------------ RB's free AI tools (Workers AI on media.relentlessbillionaire.com), always labelled */
-function aiImage(prompt){
-  return fetch(MEDIA + "/ai/platform/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: prompt }) })
-    .then(function(r){ return r.json().then(function(d){ if (!r.ok || !d.ok) throw new Error((d.error && d.error.message) || (r.status === 429 ? "Wait a little, then try again." : "The image service is busy. Try again.")); return d; }); })
-    .then(function(d){ return fetch(d.asset.url).then(function(r){ return r.blob(); }); })
-    .then(function(b){ return Assets.add(b, "image", "AI · " + prompt.slice(0, 40), { ai: true, prompt: prompt }); });
+/* ------------------------------------------------------------ lip-sync: mouth shapes from the voice (29 Oct 2026)
+   Each line's audio is read once, 60 times a second: loudness says how open the mouth is, the balance of low, middle
+   and high frequencies says which shape (round O and U are low, wide E is high, S and F are hiss with little body,
+   A and I sit between, and a short silence inside a word is pressed lips for M, B and P). It reads sound, not words,
+   so it's a close match, not a phonetic one. Lines without audio get shapes from their letters. */
+var MOUTHS = { X: { w: 0.9, h: 0.03, r: 0, t: 0 }, M: { w: 0.86, h: 0, r: 0, t: 0 }, A: { w: 1, h: 0.82, r: 0.1, t: 0.3 }, I: { w: 0.96, h: 0.45, r: 0, t: 0.5 },
+  E: { w: 1.12, h: 0.34, r: 0, t: 1 }, O: { w: 0.7, h: 0.74, r: 1, t: 0 }, U: { w: 0.54, h: 0.38, r: 1, t: 0 }, S: { w: 1, h: 0.16, r: 0, t: 1 } };
+function fft(re, im){
+  var n = re.length, i, j = 0, k, l, t;
+  for (i = 1; i < n; i++) { var bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+  for (l = 2; l <= n; l <<= 1) { var a = -2 * Math.PI / l, wr = Math.cos(a), wi = Math.sin(a);
+    for (i = 0; i < n; i += l) { var cr = 1, ci = 0; for (k = 0; k < l / 2; k++) { var p = i + k, q = p + l / 2, xr = re[q] * cr - im[q] * ci, xi = re[q] * ci + im[q] * cr; re[q] = re[p] - xr; im[q] = im[p] - xi; re[p] += xr; im[p] += xi; t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t; } } }
 }
+var visCache = {};
+/** The mouth for every 1/60 s of a buffer: [{s: shape, w, h, r, t}] (w, h, r, t smoothed so shapes blend). */
+function visemes(buf, id){
+  if (id && visCache[id]) return visCache[id];
+  var sr = buf.sampleRate, ch = buf.getChannelData(0), hop = Math.floor(sr / 60), N = 1024, n = Math.ceil(buf.length / hop);
+  var win = new Float32Array(N); for (var i = 0; i < N; i++) win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1));
+  var raw = [], peak = 1e-6, re = new Float32Array(N), im = new Float32Array(N), binHz = sr / N;
+  for (var f = 0; f < n; f++) {
+    // loudness over exactly this frame's 1/60 s (so short gaps show); frequencies over a wider window around it
+    var start = f * hop + hop / 2 - N / 2, s2 = 0, e0 = f * hop, e1 = Math.min(buf.length, e0 + hop);
+    for (i = e0; i < e1; i++) s2 += ch[i] * ch[i];
+    for (i = 0; i < N; i++) { var x = ch[start + i] || 0; re[i] = x * win[i]; im[i] = 0; }
+    var rms = Math.sqrt(s2 / Math.max(1, e1 - e0)); if (rms > peak) peak = rms;
+    fft(re, im);
+    var tot = 0, cen = 0, low = 0, high = 0;
+    for (i = 1; i < N / 2; i++) { var mag = Math.sqrt(re[i] * re[i] + im[i] * im[i]), hz = i * binHz; tot += mag; cen += mag * hz; if (hz < 700) low += mag; else if (hz > 3500) high += mag; }
+    raw.push({ rms: rms, cen: tot ? cen / tot : 0, low: tot ? low / tot : 0, high: tot ? high / tot : 0 });
+  }
+  var out = raw.map(function(fr){
+    var r = fr.rms / peak;
+    if (r < 0.07) return "X";
+    if (fr.high > 0.38 && r < 0.55) return "S";
+    if (fr.cen < 1100 && fr.low > 0.45) return r > 0.5 ? "O" : "U";
+    if (fr.cen > 2300) return "E";
+    return r > 0.55 ? "A" : "I";
+  });
+  // a short silence between sounds is the lips pressing (M, B, P), not a pause
+  // (held for at least 2 frames so the closure reads on screen)
+  for (i = 1; i < out.length; i++) if (out[i] === "X" && out[i - 1] !== "X") { var e = i; while (e < out.length && out[e] === "X") e++; if (e < out.length && e - i <= 5) { for (var q = i; q < e; q++) out[q] = "M"; if (e - i < 2) out[e] = "M"; } i = e; }
+  var res = smoothMouths(out, raw.map(function(fr){ return Math.min(1, fr.rms / peak / 0.75); }));
+  if (id) visCache[id] = res;
+  return res;
+}
+/** Shapes from text when a line has no audio, spread over its reading time. */
+function textVisemes(text, dur){
+  var map = { a: "A", e: "E", i: "I", y: "I", o: "O", u: "U", w: "U", m: "M", b: "M", p: "M", f: "S", v: "S", s: "S", z: "S", c: "S", t: "S", d: "S", j: "S", r: "I", l: "I", n: "I", k: "A", g: "A", h: "A", q: "U", x: "S" };
+  var chars = String(text || "").toLowerCase().replace(/[^a-z ,.!?']/g, ""), n = Math.max(1, Math.round(dur * 60)), out = [], amp = [];
+  for (var f = 0; f < n; f++) { var c = chars[Math.floor(f / n * chars.length)] || " "; var sh = map[c] || "X"; out.push(sh); amp.push(sh === "X" || sh === "M" ? 0 : 0.75); }
+  return smoothMouths(out, amp);
+}
+function smoothMouths(shapes, amp){
+  var cur = { w: 0.9, h: 0, r: 0, t: 0 }, res = [];
+  for (var i = 0; i < shapes.length; i++) {
+    var m = MOUTHS[shapes[i]], k = 0.45, open = shapes[i] === "X" || shapes[i] === "M" ? 1 : 0.55 + 0.45 * amp[i];
+    cur = { w: cur.w + (m.w - cur.w) * k, h: cur.h + (m.h * open - cur.h) * (shapes[i] === "M" ? 0.8 : k), r: cur.r + (m.r - cur.r) * k, t: cur.t + (m.t - cur.t) * k };
+    res.push({ s: shapes[i], w: cur.w, h: cur.h, r: cur.r, t: cur.t });
+  }
+  return res;
+}
+/** Draws a mouth centred at (x, y), mw wide, in the shape v. */
+function drawMouth(ctx, x, y, mw, v){
+  var w = mw * v.w * (1 - 0.22 * v.r), h = Math.max(0, mw * 0.62 * v.h), lip = Math.max(1.5, mw * 0.07);
+  ctx.save(); ctx.translate(x, y);
+  if (h < mw * 0.05) { // closed or pressed: one lip line
+    ctx.strokeStyle = "#3A0F14"; ctx.lineWidth = lip * (v.s === "M" ? 1.4 : 1); ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.quadraticCurveTo(0, lip * 0.6, w / 2, 0); ctx.stroke(); ctx.restore(); return;
+  }
+  var rx = w / 2, ry = h / 2, sq = 1 - 0.55 * v.r; // round shapes are less wide at the corners
+  ctx.beginPath(); ctx.moveTo(-rx, 0);
+  ctx.bezierCurveTo(-rx * sq, -ry * 1.15, rx * sq, -ry * 1.15, rx, 0);
+  ctx.bezierCurveTo(rx * sq, ry * 1.25, -rx * sq, ry * 1.25, -rx, 0); ctx.closePath();
+  ctx.fillStyle = "#2A0A0F"; ctx.fill();
+  ctx.save(); ctx.clip();
+  if (v.t > 0.05) { ctx.fillStyle = "rgba(245,240,230," + Math.min(1, v.t + 0.2) + ")"; ctx.fillRect(-rx, -ry * 1.2, rx * 2, Math.max(1.5, ry * 0.42)); if (v.t > 0.7) ctx.fillRect(-rx, ry * 0.85, rx * 2, Math.max(1, ry * 0.3)); }
+  if (v.h > 0.4) { ctx.fillStyle = "#B83A45"; ctx.beginPath(); ctx.ellipse(0, ry * 0.7, rx * 0.55, ry * 0.45, 0, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+  ctx.strokeStyle = "#5A1520"; ctx.lineWidth = lip; ctx.stroke();
+  ctx.restore();
+}
+
+/* ------------------------------------------------------------ switches for the newer Film paths (29 Oct 2026)
+   All on. Any can be turned off in this browser for comparison or if something misbehaves:
+   localStorage.rb_create_flags = '{"visemes":false}'  (visemes: mouth shapes from the voice; cams: dolly, orbit,
+   rack focus and light; hq: 1080p export, frames on the audio clock, evened-out voices and a soft limiter). */
+var FLAGS = (function(){ var f = { visemes: true, cams: true, hq: true }; try { var o = JSON.parse(localStorage.getItem("rb_create_flags") || "{}"); for (var k in f) if (typeof o[k] === "boolean") f[k] = o[k]; } catch (x) {} return f; })();
+
+/* ------------------------------------------------------------ RB's free AI tools (Workers AI on media.relentlessbillionaire.com), always labelled
+   aiService: one way in for every AI picture. The operator's policy (RB Command > AI limits) is applied on the server
+   before any model runs: it may refuse a style, bring the size down, add the house look, or stop a prompt. */
+var LOOKS = [["", "No look"], ["dark-luxury", "Dark Luxury"], ["cinematic-night", "Cinematic Night"], ["hip-hop-editorial", "Hip-Hop Editorial"], ["photoreal", "Photoreal"]];
+var aiService = {
+  /** {prompt, style?, aspect? ("1:1", "16:9", "9:16", "4:3", "3:4"), label?} → the saved asset (with the look used). */
+  image: function(o){
+    var body = { prompt: o.prompt }; if (o.style) body.style = o.style; if (o.aspect) body.aspect = o.aspect;
+    return fetch(MEDIA + "/ai/platform/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function(r){ return r.json().then(function(d){ if (!r.ok || !d.ok) throw new Error((d.error && d.error.message) || (r.status === 429 ? "Wait a little, then try again." : "The image service is busy. Try again.")); return d; }); })
+      .then(function(d){ return fetch(d.asset.url).then(function(r){ return r.blob(); }).then(function(b){
+        return Assets.add(b, "image", (o.label || "AI") + " · " + o.prompt.slice(0, 40), { ai: true, prompt: o.prompt, style: d.style || null, size: d.size || null, model: d.model });
+      }).then(function(a){ a.look = d.style || null; return a; }); });
+  },
+  lookName: function(k){ var l = LOOKS.filter(function(x){ return x[0] === k; })[0]; return l && k ? l[1] : ""; },
+};
+function aiImage(prompt){ return aiService.image({ prompt: prompt }); }
 function aiSpeech(text, lang){
   var go = function(tries){
     return fetch(MEDIA + "/ai/platform/speech", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: text, lang: lang || "en" }) }).then(function(r){
@@ -227,20 +326,46 @@ function pickMime(){
 }
 /* the export's audio destination: recordCanvas builds it, the player connects its output to it */
 var exportDest = null;
+/* With FLAGS.hq, the drawing loop hands each finished frame to the recorder (exportFrame(t), t on the audio clock), so
+   the video has exactly the frames drawn, 30 a second, in step with the sound, instead of whatever the screen showed
+   when the recorder sampled it. Browsers without requestFrame (older Safari) record at a steady 30 fps as before. */
+var exportFrame = null;
 function recordCanvas(canvas, audioNode, dur, run, prog){
   var mime = pickMime(); if (!mime) return Promise.reject(new Error("This browser can't export video. Try Chrome, Edge or Safari."));
   exportDest = ac().createMediaStreamDestination(); if (audioNode) audioNode.connect(exportDest);
-  var stream = new MediaStream(canvas.captureStream(30).getVideoTracks().concat(exportDest.stream.getAudioTracks()));
-  var rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 }), chunks = [];
+  var cap = FLAGS.hq ? canvas.captureStream(0) : canvas.captureStream(30), vt = cap.getVideoTracks()[0];
+  if (FLAGS.hq && !(vt && vt.requestFrame)) { cap = canvas.captureStream(30); vt = cap.getVideoTracks()[0]; }
+  var stream = new MediaStream([vt].concat(exportDest.stream.getAudioTracks()));
+  var big = canvas.width * canvas.height > 1300000;
+  var rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: FLAGS.hq ? (big ? 14000000 : 9000000) : 8000000, audioBitsPerSecond: FLAGS.hq ? 192000 : undefined }), chunks = [];
   rec.ondataavailable = function(e){ if (e.data && e.data.size) chunks.push(e.data); };
   return new Promise(function(res, rej){
-    rec.onstop = function(){ exportDest = null; res(new Blob(chunks, { type: mime.split(";")[0] })); };
+    var failed = null;
+    var onHide = function(){ if (document.hidden && rec.state !== "inactive") { failed = new Error("The export stopped because this tab went into the background. Keep RB Create in front until it finishes, then try again."); rec.stop(); } };
+    document.addEventListener("visibilitychange", onHide);
+    rec.onstop = function(){ exportDest = null; exportFrame = null; document.removeEventListener("visibilitychange", onHide); if (failed) rej(failed); else res(new Blob(chunks, { type: mime.split(";")[0] })); };
     rec.onerror = function(e){ rej(e.error || new Error("Export failed.")); };
+    var last = -1;
+    if (vt.requestFrame) exportFrame = function(t){ if (t - last >= 1 / 30 - 0.002) { last = t; vt.requestFrame(); } prog && prog(Math.min(1, t / dur)); };
     rec.start(250); var t0 = performance.now();
-    var tick = setInterval(function(){ prog && prog(Math.min(1, (performance.now() - t0) / 1000 / dur)); if (rec.state === "inactive") clearInterval(tick); }, 250);
-    try { run(function(){ if (rec.state !== "inactive") rec.stop(); }); } catch (e) { rec.stop(); rej(e); }
+    var tick = vt.requestFrame ? null : setInterval(function(){ prog && prog(Math.min(1, (performance.now() - t0) / 1000 / dur)); if (rec.state === "inactive") clearInterval(tick); }, 250);
+    try { run(function(){ if (tick) clearInterval(tick); if (rec.state !== "inactive") rec.stop(); }); } catch (e) { rec.stop(); rej(e); }
   });
 }
+/** How loud a voice line is (RMS over its sounding parts), for evening lines out. */
+var loudCache = {};
+function voiceLevel(buf, id){
+  if (id && loudCache[id]) return loudCache[id];
+  var ch = buf.getChannelData(0), blk = Math.floor(buf.sampleRate / 20), sum = 0, cnt = 0, peak = 0, rmsAll = [];
+  for (var i = 0; i < ch.length; i += blk) { var s = 0, e = Math.min(ch.length, i + blk); for (var j = i; j < e; j++) { var x = ch[j]; s += x * x; if (x > peak) peak = x; else if (-x > peak) peak = -x; } rmsAll.push(Math.sqrt(s / (e - i))); }
+  var top = rmsAll.slice().sort(function(a, b){ return b - a; })[Math.floor(rmsAll.length * 0.1)] || 0;
+  rmsAll.forEach(function(r){ if (r > top * 0.25) { sum += r * r; cnt++; } });
+  var res = { rms: cnt ? Math.sqrt(sum / cnt) : 0, peak: peak };
+  if (id) loudCache[id] = res;
+  return res;
+}
+/** The gain that brings a line to the same speaking level as the others (never past -1 dBFS peaks). */
+function voiceGain(buf, id){ var l = voiceLevel(buf, id); if (!l.rms) return 1; return Math.max(0.25, Math.min(4, 0.12 / l.rms, 0.89 / (l.peak || 1))); }
 function saveExport(blob, name){
   return Assets.add(blob, "video", name, { export: true }).then(function(a){
     var link = document.createElement("a"); link.href = assetUrl(a); link.download = name.replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") + (blob.type.indexOf("mp4") >= 0 ? ".mp4" : ".webm"); document.body.appendChild(link); link.click(); link.remove();
@@ -459,7 +584,7 @@ function viewVoice(){
       if (bgEl && bgEl.play) { bgEl.currentTime = 0; bgEl.play().catch(function(){}); }
       var t0 = c.currentTime; src.start();
       playing = { src: src, t0: t0, out: out };
-      var loop = function(){ if (!playing) return; var t = c.currentTime - t0; draw(t); timeLabel(t); raf = requestAnimationFrame(loop); };
+      var loop = function(){ if (!playing) return; var t = c.currentTime - t0; draw(t); if (exportFrame) exportFrame(t); timeLabel(t); raf = requestAnimationFrame(loop); };
       raf = requestAnimationFrame(loop);
       src.onended = function(){ playing = null; $("#v-play").textContent = "▶ Play"; analyser = null; onEnd && onEnd(); raf = requestAnimationFrame(idle); };
       $("#v-play").textContent = "■ Stop";
@@ -549,11 +674,15 @@ function wavOf(buf){
 }
 
 /* ------------------------------------------------------------ cartoon & short film */
-var CAMS = [["static", "Still"], ["push", "Slow push in"], ["pull", "Pull out"], ["panl", "Pan left"], ["panr", "Pan right"], ["speaker", "Follow the speaker"], ["shake", "Shake"]];
+var CAMS = [["static", "Still"], ["push", "Slow push in"], ["pull", "Pull out"], ["panl", "Pan left"], ["panr", "Pan right"], ["speaker", "Follow the speaker"], ["shake", "Shake"]]
+  .concat(FLAGS.cams ? [["dolly", "Dolly in"], ["orbit", "Orbit"], ["rack", "Rack focus"], ["light", "Moving light"]] : []);
+var QUALITY = [["720", "720p"], ["1080", "1080p"]];
+/* the export size for each shape at 1080p (the editor draws at the 720p size) */
+var ASPECTS_HQ = { "16:9": [1920, 1080], "9:16": [1080, 1920], "1:1": [1080, 1080] };
 var TRANS = [["cut", "Cut"], ["fade", "Fade from black"], ["flash", "Flash"]];
 function viewFilm(){
   var pid = (location.hash.split("p=")[1] || "").replace(/[^\w]/g, "");
-  var P = { id: uid("p_"), kind: "film", name: "Untitled film", aspect: "16:9", cast: [], scenes: [], music: null, musicVol: 0.5, captions: true };
+  var P = { id: uid("p_"), kind: "film", name: "Untitled film", aspect: "16:9", cast: [], scenes: [], music: null, musicVol: 0.5, captions: true, look: "", quality: FLAGS.hq ? "1080" : "720" };
   var load = pid ? Projects.get(pid).then(function(p){ if (p) P = Object.assign(P, p); }) : Promise.resolve();
   var media = {}, bufs = {}, envs = {}, sel = 0, raf = 0, playing = null, dragging = null, selActor = -1;
   var save = function(){ Projects.put(P).then(function(){ status($("#saved"), "Saved " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })); }); };
@@ -563,7 +692,9 @@ function viewFilm(){
     view.innerHTML = '<div class="work"><div class="side">' +
       '<div class="card"><h2>Film</h2><label class="f">NAME<input type="text" id="f-name" maxlength="80"></label><div class="mt8 f">SHAPE' + seg("aspect", [["16:9", "16:9"], ["9:16", "9:16"], ["1:1", "1:1"]], P.aspect) + '</div>' +
       '<label class="mt8 row small muted"><input type="checkbox" id="f-caps"> Captions with the speaker\'s name</label>' +
-      '<div class="mt8 row"><button class="btn" type="button" id="f-music">Music…</button><span class="small muted" id="f-musicname"></span></div><div class="f">MUSIC VOLUME (drops under speech)<input type="range" id="f-mvol" min="0" max="1" step="0.05"></div></div>' +
+      '<div class="mt8 row"><button class="btn" type="button" id="f-music">Music…</button><span class="small muted" id="f-musicname"></span></div><div class="f">MUSIC VOLUME (drops under speech)<input type="range" id="f-mvol" min="0" max="1" step="0.05"></div>' +
+      '<div class="mt8 f"><span><span class="ai">AI</span> LOOK FOR AI BACKGROUNDS</span>' + seg("look", LOOKS, P.look || "") + '</div>' +
+      (FLAGS.hq ? '<div class="mt8 f">EXPORT' + seg("quality", QUALITY, P.quality || "1080") + '</div>' : "") + '</div>' +
       '<div class="card"><h2>Cast</h2><ul class="list" id="f-cast"></ul><div class="mt10 row"><button class="btn gold" type="button" id="f-addchar">+ Character</button><button class="btn" type="button" id="f-aichar"><span class="ai">AI</span> Draw one</button></div><p class="mt8 note">Upload a picture or clip of each character (PNG with a clear background looks best). Set the mouth so they talk.</p></div>' +
       '<div class="card"><h2>This scene</h2><div class="row"><button class="btn" type="button" id="f-bg">Background…</button><button class="btn" type="button" id="f-aibg"><span class="ai">AI</span> Background</button><input type="color" id="f-bgc" title="Background colour"></div>' +
       '<div class="mt10 f">ON STAGE<div class="row" id="f-onstage"></div></div><p class="note">Drag characters on the picture to place them. Select one to resize or flip it.</p><div class="row" id="f-actorctl" hidden><span class="small muted">Size</span><input class="f1" type="range" id="f-scale" min="0.2" max="2.5" step="0.05"><button class="btn sm" type="button" id="f-flip">Flip</button><button class="btn sm" type="button" id="f-remove">Remove</button></div>' +
@@ -597,6 +728,13 @@ function viewFilm(){
       return Promise.all(ids.filter(Boolean).map(loadMedia));
     };
     var ready = function(el){ return el && (el.naturalWidth || el.videoWidth); };
+    var tvis = {};
+    var mouthTrack = function(L){
+      var l = L.line;
+      if (l.audio && bufs[l.audio]) return visemes(bufs[l.audio], l.audio);
+      var k = (l.text || "") + "|" + L.dur.toFixed(2);
+      return tvis[l.id] && tvis[l.id].k === k ? tvis[l.id].v : (tvis[l.id] = { k: k, v: textVisemes(l.text, L.dur) }).v;
+    };
 
     /* the timeline: each line runs for its audio (or a reading-time estimate), each scene at least its shortest length */
     var lineDur = function(l){ return l.audio && bufs[l.audio] ? bufs[l.audio].duration : Math.max(1.5, (l.text || "").length / 14); };
@@ -614,16 +752,34 @@ function viewFilm(){
     var drawScene = function(ctx, W, H, item, lt, preview){
       var s = item.scene, m = Math.min(W, H);
       ctx.save(); ctx.fillStyle = s.bg.color || "#120E0A"; ctx.fillRect(0, 0, W, H);
-      var speaking = null, openness = 0;
-      item.lines.forEach(function(L){ if (lt >= L.start && lt < L.start + L.dur) { speaking = L; var e = L.line.audio && envs[L.line.audio]; openness = e ? e[Math.min(e.length - 1, Math.floor((lt - L.start) * 60))] : 0.5 + 0.5 * Math.sin((lt - L.start) * 18); } });
-      var prog = Math.min(1, lt / item.dur), z = 1, ox = 0, oy = 0;
+      var speaking = null, openness = 0, mouthV = null;
+      item.lines.forEach(function(L){
+        if (lt >= L.start && lt < L.start + L.dur) {
+          speaking = L; var e = L.line.audio && envs[L.line.audio]; openness = e ? e[Math.min(e.length - 1, Math.floor((lt - L.start) * 60))] : 0.5 + 0.5 * Math.sin((lt - L.start) * 18);
+          if (FLAGS.visemes) { var vs = mouthTrack(L); mouthV = vs[Math.min(vs.length - 1, Math.max(0, Math.floor((lt - L.start) * 60)))]; }
+        }
+      });
+      // camera: the background and the characters are separate layers, so moves can have depth
+      var prog = Math.min(1, lt / item.dur), ez = prog * prog * (3 - 2 * prog), z = 1, ox = 0, oy = 0, cam = null, light = false;
       if (s.camera === "push") z = 1 + 0.12 * prog; else if (s.camera === "pull") z = 1.12 - 0.12 * prog;
       else if (s.camera === "panl") { z = 1.12; ox = (0.5 - prog) * W * 0.1; } else if (s.camera === "panr") { z = 1.12; ox = (prog - 0.5) * W * 0.1; }
       else if (s.camera === "shake") { z = 1.05; ox = Math.sin(lt * 37) * m * 0.006; oy = Math.cos(lt * 29) * m * 0.006; }
       else if (s.camera === "speaker" && speaking) { var a0 = s.actors.filter(function(a){ return a.cast === speaking.line.cast; })[0]; if (a0) { z = 1.25; ox = (0.5 - a0.x) * W * 0.5; oy = (0.55 - a0.y) * H * 0.3; } }
-      ctx.translate(W / 2 + ox, H / 2 + oy); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2);
+      // dolly: the characters come closer faster than the background behind them
+      else if (s.camera === "dolly") cam = { fz: 1 + 0.22 * ez, bz: 1 + 0.07 * ez, fx: 0, bx: 0, fy: -H * 0.02 * ez, by: 0 };
+      // orbit: the characters and the background slide past each other as the camera circles
+      else if (s.camera === "orbit") { var an = (ez - 0.5) * 1.1; cam = { fz: 1.12, bz: 1.16, fx: Math.sin(an) * W * 0.07, bx: -Math.sin(an) * W * 0.05, fy: 0, by: 0 }; }
+      // rack focus: the background is sharp, then focus pulls to the characters
+      else if (s.camera === "rack") { var rk = Math.max(0, Math.min(1, (prog - 0.15) / 0.45)); rk = rk * rk * (3 - 2 * rk); cam = { fz: 1.04 + 0.03 * ez, bz: 1.06, fx: 0, bx: 0, fy: 0, by: 0, bblur: m * 0.009 * rk, fblur: m * 0.009 * (1 - rk) }; }
+      else if (s.camera === "light") { z = 1 + 0.07 * ez; light = true; }
+      if (!cam) cam = { fz: z, bz: z, fx: ox, bx: ox, fy: oy, by: oy };
+      var layer = function(zz, xx, yy){ ctx.translate(W / 2 + xx, H / 2 + yy); ctx.scale(zz, zz); ctx.translate(-W / 2, -H / 2); };
+      var blur = function(px){ if (px > 0.3 && "filter" in ctx) ctx.filter = "blur(" + px.toFixed(1) + "px)"; };
+      ctx.save(); layer(cam.bz, cam.bx, cam.by); blur(cam.bblur || 0);
       var bg = s.bg.asset && media[s.bg.asset];
       if (ready(bg)) { var iw = bg.naturalWidth || bg.videoWidth, ih = bg.naturalHeight || bg.videoHeight, sc = Math.max(W / iw, H / ih); ctx.drawImage(bg, (W - iw * sc) / 2, (H - ih * sc) / 2, iw * sc, ih * sc); }
+      ctx.restore();
+      ctx.save(); layer(cam.fz, cam.fx, cam.fy); blur(cam.fblur || 0);
       s.actors.forEach(function(a, ai){
         var c = castById(a.cast); if (!c) return; var im = media[c.asset]; if (!ready(im)) return;
         var talking = speaking && speaking.line.cast === a.cast, op = talking ? openness : 0;
@@ -634,13 +790,25 @@ function viewFilm(){
         var useOpen = talking && c.mouthAsset && op > 0.32 && ready(media[c.mouthAsset]);
         ctx.drawImage(useOpen ? media[c.mouthAsset] : im, -w / 2, -h, w, h);
         if (talking && !c.mouthAsset && c.mouth) {
-          var mx = (c.mouth.x - 0.5) * w, my = -h + c.mouth.y * h, mw = c.mouth.w * w, mh = Math.max(1, mw * 0.65 * op);
-          ctx.fillStyle = "#2A0C10"; ctx.beginPath(); ctx.ellipse(mx, my, mw / 2, mh / 2, 0, 0, Math.PI * 2); ctx.fill();
-          if (op > 0.35) { ctx.fillStyle = "#B83A45"; ctx.beginPath(); ctx.ellipse(mx, my + mh * 0.22, mw * 0.3, mh * 0.22, 0, 0, Math.PI * 2); ctx.fill(); }
+          var mx = (c.mouth.x - 0.5) * w, my = -h + c.mouth.y * h, mw = c.mouth.w * w;
+          if (mouthV && c.mouthMode !== "simple") drawMouth(ctx, mx, my, mw, mouthV);
+          else {
+            var mh = Math.max(1, mw * 0.65 * op);
+            ctx.fillStyle = "#2A0C10"; ctx.beginPath(); ctx.ellipse(mx, my, mw / 2, mh / 2, 0, 0, Math.PI * 2); ctx.fill();
+            if (op > 0.35) { ctx.fillStyle = "#B83A45"; ctx.beginPath(); ctx.ellipse(mx, my + mh * 0.22, mw * 0.3, mh * 0.22, 0, 0, Math.PI * 2); ctx.fill(); }
+          }
         }
         ctx.restore();
         if (preview && ai === selActor) { ctx.strokeStyle = "#E9CF83"; ctx.lineWidth = 3; ctx.setLineDash([10, 8]); ctx.strokeRect(x - w / 2, y - h, w, h); ctx.setLineDash([]); }
       });
+      ctx.restore();
+      if (light) { // a warm key light crossing the frame, and a soft vignette
+        var lx = W * (0.15 + 0.7 * ez), lg = ctx.createRadialGradient(lx, H * 0.25, 0, lx, H * 0.25, Math.max(W, H) * 0.6);
+        lg.addColorStop(0, "rgba(245,230,200,0.28)"); lg.addColorStop(0.5, "rgba(212,175,55,0.08)"); lg.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.save(); ctx.globalCompositeOperation = "screen"; ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H); ctx.restore();
+        var vg = ctx.createRadialGradient(W / 2, H / 2, m * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75); vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.45)");
+        ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+      }
       ctx.restore();
       if (P.captions && speaking && speaking.line.text) {
         var c2 = castById(speaking.line.cast), name = c2 ? c2.name : "", tx = speaking.line.text;
@@ -659,12 +827,16 @@ function viewFilm(){
 
     /* playback: schedules every line (and the music, ducked under speech) on the audio clock */
     var play = function(fromScene, onlyOne, onEnd){
-      var pl = plan(), c = ac(), outG = c.createGain(); outG.connect(c.destination);
+      var pl = plan(), c = ac(), outG = c.createGain(), bus = outG; outG.connect(c.destination);
+      if (FLAGS.hq) { // a soft limiter on the mix, so loud lines and music never clip
+        var lim = c.createDynamicsCompressor(); lim.threshold.value = -6; lim.knee.value = 4; lim.ratio.value = 12; lim.attack.value = 0.003; lim.release.value = 0.25;
+        bus = c.createGain(); bus.connect(lim); lim.connect(outG);
+      }
       var list = pl.scenes.slice(fromScene, onlyOne ? fromScene + 1 : undefined); if (!list.length) return null;
       var base = list[0].start, total = list[list.length - 1].start + list[list.length - 1].dur - base, t0 = c.currentTime + 0.15, srcs = [];
-      list.forEach(function(it){ it.lines.forEach(function(L){ var b = L.line.audio && bufs[L.line.audio]; if (!b) return; var s = c.createBufferSource(); s.buffer = b; s.connect(outG); s.start(t0 + it.start - base + L.start); srcs.push(s); }); });
+      list.forEach(function(it){ it.lines.forEach(function(L){ var b = L.line.audio && bufs[L.line.audio]; if (!b) return; var s = c.createBufferSource(), vg = c.createGain(); s.buffer = b; vg.gain.value = FLAGS.hq ? voiceGain(b, L.line.audio) : 1; s.connect(vg); vg.connect(bus); s.start(t0 + it.start - base + L.start); srcs.push(s); }); });
       if (P.music && bufs[P.music]) {
-        var ms = c.createBufferSource(), mg = c.createGain(); ms.buffer = bufs[P.music]; ms.loop = true; ms.connect(mg); mg.connect(outG); mg.gain.value = P.musicVol;
+        var ms = c.createBufferSource(), mg = c.createGain(); ms.buffer = bufs[P.music]; ms.loop = true; ms.connect(mg); mg.connect(bus); mg.gain.value = P.musicVol;
         list.forEach(function(it){ it.lines.forEach(function(L){ if (!L.line.audio) return; var a = t0 + it.start - base + L.start; mg.gain.setTargetAtTime(P.musicVol * 0.3, a - 0.1, 0.05); mg.gain.setTargetAtTime(P.musicVol, a + L.dur + 0.1, 0.3); }); });
         mg.gain.setTargetAtTime(0, t0 + total - 1, 0.4); ms.start(t0); ms.stop(t0 + total + 0.2); srcs.push(ms);
       }
@@ -675,6 +847,7 @@ function viewFilm(){
         if (!playing) return; var t = c.currentTime - t0; if (t < 0) t = 0;
         var it = list.filter(function(x){ return t >= x.start - base && t < x.start - base + x.dur; })[0] || list[list.length - 1];
         drawScene(g, cv.width, cv.height, it, t - (it.start - base), false);
+        if (exportFrame) exportFrame(t);
         $("#f-time").textContent = fmt(t) + " / " + fmt(total);
         if (t >= total) { stop(); onEnd && onEnd(); return; }
         raf = requestAnimationFrame(loop);
@@ -687,12 +860,13 @@ function viewFilm(){
     $("#f-play").onclick = function(){ if (playing) stop(); else loadAll().then(function(){ play(0, false); }); };
     $("#f-playscene").onclick = function(){ if (playing) stop(); loadAll().then(function(){ play(sel, true); }); };
     $("#f-export").onclick = function(){
-      var b = this; b.disabled = true; stop();
+      var b = this, hq = FLAGS.hq && P.quality !== "720"; b.disabled = true; stop();
       loadAll().then(function(){
+        if (hq) { var big = ASPECTS_HQ[P.aspect]; cv.width = big[0]; cv.height = big[1]; } // drawn at full size for the file
         var pl = plan();
         return recordCanvas(cv, null, pl.total + 0.4, function(done){ var o = play(0, false, function(){ setTimeout(done, 300); }); if (o && exportDest) o.connect(exportDest); else done(); }, function(p){ status($("#f-xst"), "Exporting… " + Math.round(p * 100) + "%"); });
       }).then(function(blob){ return saveExport(blob, P.name || "RB film"); }).then(function(){ status($("#f-xst"), "Exported and saved to your library."); })
-        .catch(function(e){ status($("#f-xst"), e.message); }).then(function(){ b.disabled = false; });
+        .catch(function(e){ status($("#f-xst"), e.message); }).then(function(){ b.disabled = false; if (hq) size(); });
     };
 
     /* the panels */
@@ -731,21 +905,24 @@ function viewFilm(){
     $("#f-aichar").onclick = function(){
       var pr = prompt("Describe the character (AI image). Example: cartoon Bay Area rapper in a gold chain, full body, plain white background", "Cartoon character, full body, plain white background, ");
       if (!pr) return; status($("#f-st"), "Drawing the character (AI)…");
-      aiImage(pr).then(function(a){ status($("#f-st"), "Character ready."); addChar(a); }).catch(function(e){ status($("#f-st"), e.message); });
+      aiService.image({ prompt: pr, aspect: "3:4", label: "AI character" }).then(function(a){ status($("#f-st"), "Character ready." + (a.look ? " (" + aiService.lookName(a.look) + " look)" : "")); addChar(a); }).catch(function(e){ status($("#f-st"), e.message); });
     };
     var setMouth = function(c){
       Assets.get(c.asset).then(function(a){
         if (!a || a.kind !== "image") { alert("Mouth points work on pictures. For a clip, upload a second picture with the mouth open."); return; }
         var pt = c.mouth || { x: 0.5, y: 0.35, w: 0.12 };
-        dlg.innerHTML = '<h2>Where is ' + esc(c.name) + '\'s mouth?</h2><p class="note">Click the middle of the mouth. While they talk, an animated mouth opens there with the voice. Or give a second picture with the mouth open and RB swaps to it on loud sounds.</p>' +
+        dlg.innerHTML = '<h2>Where is ' + esc(c.name) + '\'s mouth?</h2><p class="note">Click the middle of the mouth. While they talk, an animated mouth moves there with the voice (shapes for A, E, O, M, S… read from the sound). Or give a second picture with the mouth open and RB swaps to it on loud sounds.</p>' +
           '<div class="mouthpick" id="mp"><img alt="" src="' + assetUrl(a) + '"><i id="mpdot"></i></div><div class="mt10 f">MOUTH WIDTH<input type="range" id="mpw" min="0.03" max="0.4" step="0.01"></div>' +
+          (FLAGS.visemes ? '<div class="mt10 f">MOUTH MOVES' + seg("mmode", [["shapes", "Shapes from the voice"], ["simple", "Open and close"]], c.mouthMode === "simple" ? "simple" : "shapes") + '</div>' : "") +
           '<div class="mt12 row"><button class="btn" type="button" id="mp-open">Use a mouth-open picture…</button><span class="f1 sp"></span><button class="btn" type="button" id="mp-x">Cancel</button><button class="btn gold" type="button" id="mp-ok">Done</button></div>';
         var dot = $("#mpdot", dlg), place = function(){ dot.style.left = pt.x * 100 + "%"; dot.style.top = pt.y * 100 + "%"; dot.style.width = dot.style.height = "18px"; };
         $("#mpw", dlg).value = pt.w; place();
         $("#mp", dlg).onclick = function(e){ var r = this.getBoundingClientRect(); pt.x = (e.clientX - r.left) / r.width; pt.y = (e.clientY - r.top) / r.height; place(); };
         $("#mpw", dlg).oninput = function(){ pt.w = +this.value; };
+        var mode = c.mouthMode === "simple" ? "simple" : "shapes", mm = $('[data-seg="mmode"]', dlg);
+        if (mm) mm.onclick = function(e){ var b = e.target.closest("button"); if (!b) return; mode = b.dataset.v; $$("button", mm).forEach(function(x){ x.setAttribute("aria-pressed", String(x === b)); }); };
         $("#mp-x", dlg).onclick = function(){ dlg.close(); };
-        $("#mp-ok", dlg).onclick = function(){ c.mouth = pt; dlg.close(); save(); drawCast(); };
+        $("#mp-ok", dlg).onclick = function(){ c.mouth = pt; c.mouthMode = mode; dlg.close(); save(); drawCast(); };
         $("#mp-open", dlg).onclick = function(){ dlg.close(); pickAsset(["image"], "Pick the mouth-open picture (same size and pose)").then(function(o){ if (o) { c.mouthAsset = o.id; loadMedia(o.id); save(); drawCast(); } }); };
         dlg.showModal();
       });
@@ -787,7 +964,7 @@ function viewFilm(){
         return;
       }
       if (t.id === "f-bg") { pickAsset(["image", "video"], "Pick a background").then(function(a){ if (!a) return; S().bg.asset = a.id; loadMedia(a.id).then(changed); }); return; }
-      if (t.id === "f-aibg") { var pr = prompt("Describe the scene's background (AI image):", "Cartoon city street at night, Oakland, neon gold signs, wide shot"); if (!pr) return; status($("#f-st"), "Drawing the background (AI)…"); aiImage(pr).then(function(a){ S().bg.asset = a.id; return loadMedia(a.id); }).then(function(){ status($("#f-st"), "Background ready."); changed(); }).catch(function(err){ status($("#f-st"), err.message); }); return; }
+      if (t.id === "f-aibg") { var pr = prompt("Describe the scene's background (AI image):", "Cartoon city street at night, Oakland, neon gold signs, wide shot"); if (!pr) return; status($("#f-st"), "Drawing the background (AI)…"); var look = ""; aiService.image({ prompt: pr, style: P.look || null, aspect: P.aspect, label: "AI background" }).then(function(a){ look = a.look; S().bg.asset = a.id; return loadMedia(a.id); }).then(function(){ status($("#f-st"), "Background ready." + (look ? " (" + aiService.lookName(look) + " look)" : "")); changed(); }).catch(function(err){ status($("#f-st"), err.message); }); return; }
       if (t.id === "f-music") { pickAsset(["audio"], "Pick the music").then(function(a){ if (!a) return; P.music = a.id; $("#f-musicname").textContent = a.name; loadMedia(a.id).then(save); }); return; }
     });
     view.addEventListener("input", function(e){
@@ -804,7 +981,7 @@ function viewFilm(){
       if (d.lcast !== undefined) { S().lines[+d.lcast].cast = t.value; changed(); }
       if (t.id === "f-caps") { P.captions = t.checked; save(); }
     });
-    bindSeg(view, function(name, v){ if (name === "aspect") { P.aspect = v; size(); } else S()[name] = v; changed(); });
+    bindSeg(view, function(name, v){ if (name === "aspect") { P.aspect = v; size(); } else if (name === "look" || name === "quality") P[name] = v; else S()[name] = v; changed(); });
 
     /* dragging characters on the stage */
     var pos = function(e){ var r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }; };
