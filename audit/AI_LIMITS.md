@@ -32,6 +32,8 @@ searchable.
 | --- | --- | --- |
 | RB Create (Film pictures, Voice, captions), writing, vision | `relentless-billionaire-api` (`/ai/platform/*`) | Switch, styles, sizes, filters, AI check on pictures, rate limits |
 | Studio lyric and vocal helpers | `relentless-billionaire-api` (`/ai/studio/*`) | Switch, word filters, rate limits; members logged by id |
+| AI FORGE chat and Compose on the studio custom domain | `relentless-studio` (`/ai/studio/generate`, `/ai/studio/compose`) | Switch, word filters; its own daily caps and credits stay; every call logged |
+| Yosh Coast music maker (paid MiniMax model) | `yoshcoastmusic` (`/yoshcoastmusic/api/generate`) | Signed-in admin only; RB's built-in filters on prompt and lyrics. Logged in its own `generation_events`, not here |
 | AI Forge (music, voice, video, pictures, writing) | `rb-studio`, RB account | Switch, styles, sizes and lengths, filters, per-day caps, Autopilot's approval |
 | Autopilot's drafts and ideas | `rb-autopilot` | Switch; every call logged |
 
@@ -69,9 +71,24 @@ The defaults apply as soon as the code is live, before anyone opens the screen:
 - Each Worker re-reads the rules every 30 seconds (the AI Forge: every minute after Autopilot sends them).
 - The AI Forge's log entries show "queued" when a render starts; whether it then succeeded is in the Forge's job
   status, not the log.
-- **Not wired yet** (they call Workers AI outside these paths): `relentless-studio` (two lyric-helper calls),
-  `rb-cloud` (voice, transcription and picture reading), `yoshcoastmusic`, and the CRM's own autopilot replies. They
-  keep working as before and aren't in the log. Each is a small patch with the same module.
+- **Added 29 Oct (pull request #11):**
+  - `relentless-studio`: its two Llama helpers now follow the switch and the word filters and write to the log.
+    Its database binding was already waitlist-db, so nothing new is bound.
+  - `yoshcoastmusic`: its music maker ran a **paid** model (MiniMax music-2.6, through the AI Gateway) for anyone, with
+    no sign-in and no limit. It now needs the site's signed-in admin (its own login, or its admin key), and RB's
+    built-in filters read the prompt and lyrics first. Its five earlier attempts (19â€“30 Aug) all failed, so no one
+    loses a working tool. It has its own database, so the owner's saved changes in RB Command don't reach it: it uses
+    RB's defaults.
+- **`rb-cloud`: wired, waiting on one switch.** It runs cover art, voice-over, transcription, writing, and the
+  picture check behind release uploads.
+  - Every call needs a key (the operator key, RB's internal token, or a member's `rbk_` key), so it isn't open to the
+    public.
+  - The check and the log are now in its code (`patch_ai_policy_cloud.py`), but they only switch on when the Worker has
+    a D1 binding named `DB` pointing at `waitlist-db`. Until then it runs exactly as before; the test checks that.
+  - **To turn it on:** Cloudflare > Workers > rb-cloud > Settings > Bindings > add a D1 database binding, variable `DB`,
+    database `waitlist-db`. Adding a binding is the owner's call, so it wasn't done here.
+- **Correction:** the CRM's autopilot (`relentless-backend`) calls no AI model. Its replies and drafts don't need
+  wiring. It only passes `/cloud/*` through to `rb-cloud`, which is the item above.
 
 ## Deploy
 
@@ -81,7 +98,7 @@ order: `relentless-billionaire-api`, `rb-autopilot`, `rb-studio` (RB account), â
 | Worker | Live and rollback |
 | --- | --- |
 | `rb-command` | `a8486556` per the 28 Oct session summary (roll back to it) |
-| `relentless-billionaire-api`, `rb-autopilot`, `rb-studio` | Not in the session summary. The deploy prints and saves each one's previous version (`*/deployed.json`) |
+| `relentless-billionaire-api`, `rb-autopilot`, `rb-studio`, `relentless-studio`, `yoshcoastmusic`, `rb-cloud` | Not in the session summary. The deploy prints and saves each one's previous version (`*/deployed.json`) |
 
 Roll back from Cloudflare > Workers > the Worker > Deployments. Rolling back RB Command alone just hides the screen; the
 rules saved in `site_settings.ai_policy` stay and are still applied. To switch everything off without a rollback,
