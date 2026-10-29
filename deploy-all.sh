@@ -14,7 +14,17 @@ py() { python3 -I "$@"; }
 
 for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-memberships rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners rb-game rb-showcase yoshcoastmusic assassin-in-the-room-signal weed-relentless-billionaire relentless-studio rb-cloud; do py "$ROOT/rb-tools/cfworker.py" pull "$s" "$W/$s"; done
 # the AI Forge lives in the RB account
-CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" pull rb-studio "$W/rb-studio"
+# rb-public-content: our patches expect its source modules (theme.js, site-images-public.js…). If live is now a single
+# bundle built elsewhere, it is left exactly as it is: nothing patched, tested or uploaded there.
+PUB=rb-public-content
+if [ ! -f "$W/rb-public-content/theme.js" ]; then PUB=""; echo "rb-public-content: live is a bundle built elsewhere ($(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"][:8])' "$W/rb-public-content/manifest.json")); left as it is."; fi
+# If the token can't reach the RB account, the Forge isn't uploaded; FORGE_COPY (a folder with its worker.js, e.g. from
+# the Cloudflare connector) still lets its tests run. Autopilot copes with an unpatched Forge (it retries every 10 minutes).
+FORGE=1
+if ! CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" pull rb-studio "$W/rb-studio" 2>/dev/null; then
+  FORGE=0; echo "rb-studio (AI Forge, RB account): this token can't reach it, so it won't be uploaded."
+  if [ -n "${FORGE_COPY:-}" ]; then mkdir -p "$W/rb-studio" && cp "$FORGE_COPY"/*.js "$W/rb-studio/"; else echo "set FORGE_COPY to test it"; exit 1; fi
+fi
 # artist-router: colours (no-op once live), post links and the ad slot
 py "$ROOT/rb-tools/palettes.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_artist_router.py" "$W/artist-router"; py "$ROOT/rb-site-updates/patch_home_status.py" "$W/artist-router"
 # RB Create at /create; /record and /studio may be framed by their own site; the free AI voice it uses
@@ -48,7 +58,7 @@ py "$ROOT/rb-site-updates/patch_radio.py" "$W/rb-radio"; py "$ROOT/rb-site-updat
 # one RB sound at a time: the radio steps aside for a video, a beat or the studio in any RB tab on the site
 py "$ROOT/rb-site-updates/patch_radio_onesound.py" "$W/rb-radio"
 # every palette restyles all of RB Radio (page, bar, RB Flow, hub pages)
-for s in rb-radio rb-radio-hub rb-public-content rb-command artist-router; do py "$ROOT/rb-site-updates/patch_radio_colours.py" "$W/$s"; done
+for s in rb-radio rb-radio-hub $PUB rb-command artist-router; do py "$ROOT/rb-site-updates/patch_radio_colours.py" "$W/$s"; done
 # AI Forge beats reach the player and RB Radio
 py "$ROOT/rb-site-updates/patch_beat_publish.py" "$W/rb-studio"; py "$ROOT/rb-site-updates/patch_beat_publish.py" "$W/rb-autopilot"
 node --no-warnings "$ROOT/rb-site-updates/test/beat-publish.test.mjs" "$W/rb-autopilot"
@@ -65,9 +75,9 @@ py "$ROOT/rb-site-updates/patch_next_steps.py" "$W/rb-mastering-studio"
 # studio checkout without Stripe Managed Payments (it refused every product without a tax code)
 py "$ROOT/rb-site-updates/patch_studio_checkout.py" "$W/rb-mastering-studio"
 # custom palettes from the builder: every copy of theme.js learns them (consumers are deployed before rb-command)
-for s in rb-public-content artist-router rb-radio rb-command; do py "$ROOT/rb-tools/patch_theme_custom.py" "$W/$s"; done
+for s in $PUB artist-router rb-radio rb-command; do py "$ROOT/rb-tools/patch_theme_custom.py" "$W/$s"; done
 # Dark Luxury lock: the palette and the --lux-* tokens in every copy of theme.js; the hub follows it when it is chosen
-py "$ROOT/rb-tools/patch_luxe_tokens.py" "$W/rb-public-content" "$W/artist-router" "$W/rb-radio" "$W/rb-command"
+py "$ROOT/rb-tools/patch_luxe_tokens.py" ${PUB:+"$W/$PUB"} "$W/artist-router" "$W/rb-radio" "$W/rb-command"
 py "$ROOT/rb-site-updates/patch_hub_tokens.py" "$W/artist-router"
 # rb-command: every patch, in order; each skips what's already there and drops copies an older script added twice
 py "$ROOT/rb-tools/palettes.py" "$W/rb-command"
@@ -97,11 +107,13 @@ py "$ROOT/rb-site-updates/patch_ai_policy_cloud.py" "$W/rb-cloud"
 EXTRA_SITES="rb-showcase yoshcoastmusic assassin-in-the-room-signal weed-relentless-billionaire"
 py "$ROOT/rb-tools/patch_csp_more.py" $(for s in $EXTRA_SITES; do echo "$W/$s"; done)
 # crash guard: a passing database/storage error gets one retry and then a "please try again" page, never an error page
-GUARD_SITES="rb-radio rb-tv rb-memberships beatstore rb-events-page rb-fund-campaign rb-release rb-jobs rb-partners rb-game rb-public-content relentless-hub rb-radio-hub rb-command relentless-billionaire-api rb-autopilot $EXTRA_SITES"
+GUARD_SITES="rb-radio rb-tv rb-memberships beatstore rb-events-page rb-fund-campaign rb-release rb-jobs rb-partners rb-game $PUB relentless-hub rb-radio-hub rb-command relentless-billionaire-api rb-autopilot $EXTRA_SITES"
 py "$ROOT/rb-tools/patch_resilience.py" "$W/artist-router" "$W/rb-mastering-studio" $(for s in $GUARD_SITES; do echo "$W/$s"; done)
 for s in $ICON_SITES; do py "$ROOT/rb-tools/patch_icons.py" "$W/$s" >/dev/null; done # the RB icon on the guard's page too
+# the Site images stylesheet on pages whose styles are allowed by nonce only (RB Create): it was blocked there
+py "$ROOT/rb-tools/patch_site_css_nonce.py" $(for s in $ICON_SITES; do echo "$W/$s"; done)
 # Site images (RB Command > Site images): the screen in rb-command, the pictures and per-site CSS from rb-public-content
-py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-command"; py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-public-content"
+py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-command"; [ -z "$PUB" ] || py "$ROOT/rb-tools/patch_site_images.py" "$W/rb-public-content"
 # RB Command > AI limits (owner only)
 py "$ROOT/rb-command-updates/patch_ai_policy.py" "$W/rb-command"
 # RB Command > Badges (levels, rewards, achievements, settings) and the Badge desk for the door
@@ -113,7 +125,7 @@ py "$ROOT/rb-command-updates/patch_world_admin.py" "$W/rb-command"
 # rb-email: the forwarder replaces Cloudflare's sample
 cp "$ROOT/rb-email/src/index.js" "$W/rb-email/index.js"
 
-for s in rb-public-content artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-studio rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners rb-game $EXTRA_SITES; do for f in "$W/$s"/*.js; do node --check "$f"; done; done
+for s in $PUB artist-router rb-radio rb-tv rb-command rb-email rb-mastering-studio relentless-billionaire-api rb-radio-hub rb-autopilot rb-studio rb-release rb-favicon beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners rb-game $EXTRA_SITES; do for f in "$W/$s"/*.js; do node --check "$f"; done; done
 T="$ROOT/rb-command-updates/test"
 node "$T/no-duplicates.mjs" "$W/rb-command"
 node --no-warnings "$T/palettes.mjs" "$W/rb-command/theme.js" | tail -1
@@ -152,27 +164,27 @@ node "$ROOT/rb-site-updates/test/flow.test.mjs" "$W/rb-radio"
 node "$ROOT/rb-site-updates/test/onesound.test.mjs" "$W/rb-radio"
 node "$ROOT/rb-site-updates/test/studio.test.mjs" "$W/rb-mastering-studio"
 node --no-warnings "$ROOT/rb-site-updates/test/studio-checkout.test.mjs" "$W/rb-mastering-studio"
-node "$ROOT/rb-tools/test/custom-palettes.mjs" "$W/rb-command" "$W/rb-public-content" "$W/rb-radio" "$W/artist-router"
-node "$ROOT/rb-tools/test/luxe-tokens.mjs" "$W/rb-command" "$W/rb-public-content" "$W/rb-radio" "$W/artist-router"
-node --no-warnings "$ROOT/rb-site-updates/test/luxe-motion.test.mjs" "$W/rb-public-content" "$W/artist-router"
+node "$ROOT/rb-tools/test/custom-palettes.mjs" "$W/rb-command" ${PUB:+"$W/$PUB"} "$W/rb-radio" "$W/artist-router"
+node "$ROOT/rb-tools/test/luxe-tokens.mjs" "$W/rb-command" ${PUB:+"$W/$PUB"} "$W/rb-radio" "$W/artist-router"
+[ -z "$PUB" ] || node --no-warnings "$ROOT/rb-site-updates/test/luxe-motion.test.mjs" "$W/rb-public-content" "$W/artist-router"
 node "$ROOT/rb-email/test/test.mjs"
 node --no-warnings "$ROOT/rb-site-updates/test/memberships.test.mjs" "$W/rb-memberships/index.js"
 node --no-warnings "$ROOT/rb-site-updates/test/advertise.test.mjs" "$W/artist-router/artist-router-v14.js" "$W/rb-command"
 node --no-warnings "$T/cover.test.mjs" "$W/rb-command"
-node --no-warnings "$ROOT/rb-site-updates/test/site-images.test.mjs" "$W/rb-command" "$W/rb-public-content" $(for s in $ICON_SITES; do case $s in rb-favicon|rb-command) ;; *) echo "$W/$s";; esac; done)
+[ -z "$PUB" ] || node --no-warnings "$ROOT/rb-site-updates/test/site-images.test.mjs" "$W/rb-command" "$W/rb-public-content" $(for s in $ICON_SITES; do case $s in rb-favicon|rb-command) ;; *) echo "$W/$s";; esac; done)
 node "$ROOT/rb-site-updates/test/tabs.test.mjs" $(for s in $ICON_SITES; do case $s in rb-favicon|rb-command) ;; *) echo "$W/$s";; esac; done)
 node "$ROOT/rb-site-updates/test/icons-copy.test.mjs" "$W/rb-release" $(for s in $ICON_SITES; do [ "$s" = rb-favicon ] || echo "$W/$s"; done)
 
 if [ "${1:-}" != "--deploy" ]; then echo "Checks passed. Patched Workers: $W. Run with --deploy to upload them."; exit 0; fi
 
-py "$ROOT/rb-tools/cfworker.py" push rb-public-content "$W/rb-public-content"
+[ -z "$PUB" ] || py "$ROOT/rb-tools/cfworker.py" push rb-public-content "$W/rb-public-content"
 # what /create calls or frames goes first
 py "$ROOT/rb-tools/cfworker.py" push relentless-billionaire-api "$W/relentless-billionaire-api"
 "$ROOT/workers/rb-daw/deploy.sh"
 py "$ROOT/rb-tools/cfworker.py" push rb-mastering-studio "$W/rb-mastering-studio"
 # Autopilot before the AI Forge: its renders carry the approval the Forge starts asking for
 py "$ROOT/rb-tools/cfworker.py" push rb-autopilot "$W/rb-autopilot"
-CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" push rb-studio "$W/rb-studio"
+[ "$FORGE" = 1 ] && CF_ACCOUNT_ID=b72a2e342f81d93bf047e568374dab0e py "$ROOT/rb-tools/cfworker.py" push rb-studio "$W/rb-studio" || echo "rb-studio: not uploaded (needs a token for the RB account)"
 py "$ROOT/rb-tools/cfworker.py" push rb-radio-hub "$W/rb-radio-hub"
 py "$ROOT/rb-tools/cfworker.py" push rb-memberships "$W/rb-memberships"
 py "$ROOT/rb-tools/cfworker.py" push artist-router "$W/artist-router"
@@ -180,7 +192,9 @@ py "$ROOT/rb-tools/cfworker.py" push artist-router "$W/artist-router"
 for s in rb-favicon rb-release beatstore rb-events-page rb-jobs rb-fund-campaign relentless-hub rb-partners; do py "$ROOT/rb-tools/cfworker.py" push "$s" "$W/$s"; done
 # after artist-router, which serves RB World
 py "$ROOT/rb-tools/cfworker.py" push rb-game "$W/rb-game"
-for s in $EXTRA_SITES relentless-studio rb-cloud; do py "$ROOT/rb-tools/cfworker.py" push "$s" "$W/$s"; done
+# rb-cloud is patched and tested above but not uploaded here: its change only acts once it has a DB binding, and it runs
+# Durable Objects and a container, so upload it on its own when that binding is added (cfworker.py push rb-cloud).
+for s in $EXTRA_SITES relentless-studio; do py "$ROOT/rb-tools/cfworker.py" push "$s" "$W/$s"; done
 if curl -fsS -m 20 https://relentlessbillionaire.com/radio/api/now | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("live") else 1)'; then
   echo "rb-radio: a live show is on air, so it's skipped. Run this again after the show."
 else
