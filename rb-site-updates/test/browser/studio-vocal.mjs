@@ -55,6 +55,11 @@ assert.equal(await p.getByRole('button', { name: 'Build comp' }).count(), 1);
 await p.getByRole('tab', { name: 'Mixer' }).click(); await p.waitForTimeout(300);
 const opts = await p.locator('select option').allTextContents();
 for (const name of ['Clean vocal', 'Warm vocal', 'Radio-Ready vocal', 'Aggressive vocal']) assert.ok(opts.includes(name), name);
+// 7. latency: the note says what each take is corrected by; Measure can't hear clicks through a fake mic, so it says so and changes nothing
+assert.match(await p.locator('.rblat').textContent(), /^Each take is corrected by \d+ ms: \d+ ms your device reports\.$/);
+await p.getByRole('button', { name: 'Measure' }).click();
+console.log(await until(/^(Measured|Couldn't hear the clicks)/, 15000));
+assert.match(await status(), /^Couldn't hear the clicks clearly.*Latency wasn't changed\.$/);
 assert.deepEqual(errs, []);
 await b.close();
 console.log(`studio vocal tools in the browser: ${takes} takes over ${bars} bars, comp built, clean-up on and off, presets listed`);

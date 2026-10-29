@@ -43,7 +43,22 @@ reverb and delay), so every part can still be changed by hand afterwards.
 - Clean-up and AutoPitch, if on, are redone on the new comp.
 - Picking a single take turns them off for it, so auditioning is instant. Their settings are kept for the next Apply.
 
-## Latency and speed
+## Latency: what each take is corrected by
+
+- Under the master strip (Mixer), a line now says exactly how much is taken off the start of every take. For example, "Each take is corrected by 46 ms: 40 ms your device reports + 6 ms Latency". It's the delay the browser reports for the mic and speakers, plus the song's Latency number. Before, that was only visible after a take.
+- **Measure** (next to Latency) works it out for your setup:
+  - it plays 8 clicks through the speakers and listens with the mic;
+  - it takes the middle of the delays it hears;
+  - it sets Latency to whatever the browser's own figure misses.
+- It only sets anything if at least 5 clicks agree within 3 ms. Otherwise it says it couldn't hear them, with what to try, and leaves Latency alone.
+- It needs speakers, not headphones, so the mic can hear the clicks. Recording still works best on headphones.
+- Checked:
+  - the click detection, on a recording with room noise, a lost click and an echo: 37 ms found within half a millisecond;
+  - it refuses when nothing is heard, or when the clicks disagree;
+  - in Chromium, the line shows, and Measure refuses honestly (the test browser's fake mic can't hear its speakers).
+- **Not yet tried** on a real phone or laptop with speakers.
+
+## Speed of the vocal tools
 
 - **Nothing here adds latency to recording or playback.** These are offline renders of a finished take. The live
   chain, monitoring and latency compensation are unchanged.
