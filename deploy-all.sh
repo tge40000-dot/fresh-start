@@ -78,6 +78,8 @@ py "$ROOT/rb-site-updates/patch_studio_plugins.py" "$W/rb-mastering-studio"
 py "$ROOT/rb-site-updates/patch_next_steps.py" "$W/rb-mastering-studio"
 # studio checkout without Stripe Managed Payments (it refused every product without a tax code)
 py "$ROOT/rb-site-updates/patch_studio_checkout.py" "$W/rb-mastering-studio"
+# the studio survives a long wait in the file picker (phones reload the page mid-pick; reads retried)
+py "$ROOT/rb-site-updates/patch_studio_pick.py" "$W/rb-mastering-studio"
 # custom palettes from the builder: every copy of theme.js learns them (consumers are deployed before rb-command)
 for s in $PUB artist-router rb-radio rb-command; do py "$ROOT/rb-tools/patch_theme_custom.py" "$W/$s"; done
 # Dark Luxury lock: the palette and the --lux-* tokens in every copy of theme.js; the hub follows it when it is chosen
@@ -171,6 +173,7 @@ node "$ROOT/rb-site-updates/test/flow.test.mjs" "$W/rb-radio"
 node "$ROOT/rb-site-updates/test/onesound.test.mjs" "$W/rb-radio"
 node "$ROOT/rb-site-updates/test/studio.test.mjs" "$W/rb-mastering-studio"
 node --no-warnings "$ROOT/rb-site-updates/test/studio-checkout.test.mjs" "$W/rb-mastering-studio"
+node --no-warnings "$ROOT/rb-site-updates/test/studio-pick.test.mjs" "$W/rb-mastering-studio"
 node "$ROOT/rb-tools/test/custom-palettes.mjs" "$W/rb-command" ${PUB:+"$W/$PUB"} "$W/rb-radio" "$W/artist-router"
 node "$ROOT/rb-tools/test/luxe-tokens.mjs" "$W/rb-command" ${PUB:+"$W/$PUB"} "$W/rb-radio" "$W/artist-router"
 [ -z "$PUB" ] || node --no-warnings "$ROOT/rb-site-updates/test/luxe-motion.test.mjs" "$W/rb-public-content" "$W/artist-router"
